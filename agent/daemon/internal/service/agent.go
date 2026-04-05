@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"runtime"
 	"time"
 
 	"github.com/gofxq/gaoming/pkg/contracts"
@@ -30,6 +30,16 @@ type Agent struct {
 	bootTime  time.Time
 	hbSeq     int64
 	metricSeq int64
+	sampler   systemSampler
+}
+
+type apiError struct {
+	StatusCode int
+	Status     string
+}
+
+func (e apiError) Error() string {
+	return fmt.Sprintf("unexpected status: %s", e.Status)
 }
 
 func New(cfg Config, logger *slog.Logger) *Agent {
@@ -39,6 +49,7 @@ func New(cfg Config, logger *slog.Logger) *Agent {
 		client:   &http.Client{Timeout: 5 * time.Second},
 		agentID:  ids.New("agent"),
 		bootTime: time.Now().UTC(),
+		sampler:  newSystemSampler(),
 	}
 }
 
@@ -103,17 +114,29 @@ func (a *Agent) sendCycle(ctx context.Context) {
 }
 
 func (a *Agent) pushHeartbeat(ctx context.Context) error {
+	if a.hostUID == "" {
+		if err := a.register(ctx); err != nil {
+			return err
+		}
+	}
+
 	a.hbSeq++
 	payload := contracts.HeartbeatRequest{
 		HostUID: a.hostUID,
 		AgentID: a.agentID,
 		Seq:     a.hbSeq,
 		TS:      time.Now().UTC(),
-		Digest:  a.digest(),
+		Digest:  a.digest(time.Now().UTC()),
 	}
 
 	var resp contracts.HeartbeatResponse
 	if err := a.postJSON(ctx, a.cfg.MasterAPIURL+"/api/v1/agents/heartbeat", payload, &resp); err != nil {
+		var apiErr apiError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+			a.logger.Warn("heartbeat target missing on server, re-registering", "host_uid", a.hostUID)
+			a.hostUID = ""
+			return a.register(ctx)
+		}
 		return err
 	}
 	a.logger.Info("heartbeat sent", "host_uid", a.hostUID, "seq", a.hbSeq)
@@ -123,15 +146,21 @@ func (a *Agent) pushHeartbeat(ctx context.Context) error {
 func (a *Agent) pushMetrics(ctx context.Context) error {
 	a.metricSeq++
 	now := time.Now().UTC()
+	digest := a.digest(now)
 	payload := contracts.PushMetricBatchRequest{
 		HostUID:     a.hostUID,
 		AgentID:     a.agentID,
 		BatchSeq:    a.metricSeq,
 		CollectedAt: now,
 		Points: []contracts.MetricPoint{
-			{Name: "runtime_goroutines", Value: float64(runtime.NumGoroutine()), TS: now},
 			{Name: "runtime_uptime_seconds", Value: time.Since(a.bootTime).Seconds(), TS: now},
 			{Name: "agent_heartbeat_seq", Value: float64(a.hbSeq), TS: now},
+			{Name: "host_cpu_usage_pct", Value: digest.CPUUsagePct, TS: now},
+			{Name: "host_mem_used_pct", Value: digest.MemUsedPct, TS: now},
+			{Name: "host_disk_used_pct", Value: digest.DiskUsedPct, TS: now},
+			{Name: "host_load1", Value: digest.Load1, TS: now},
+			{Name: "host_net_rx_bps", Value: float64(digest.NetRxBPS), TS: now},
+			{Name: "host_net_tx_bps", Value: float64(digest.NetTxBPS), TS: now},
 		},
 	}
 
@@ -143,17 +172,15 @@ func (a *Agent) pushMetrics(ctx context.Context) error {
 	return nil
 }
 
-func (a *Agent) digest() contracts.AgentDigest {
-	var mem runtime.MemStats
-	runtime.ReadMemStats(&mem)
-
+func (a *Agent) digest(now time.Time) contracts.AgentDigest {
+	metrics := a.sampler.Sample(now)
 	return contracts.AgentDigest{
-		CPUUsagePct:        float64((runtime.NumGoroutine() % 100)),
-		MemUsedPct:         float64((mem.Alloc / 1024 / 1024) % 100),
-		DiskUsedPct:        0,
-		Load1:              float64(runtime.NumGoroutine()),
-		NetRxBPS:           0,
-		NetTxBPS:           0,
+		CPUUsagePct:        metrics.CPUUsagePct,
+		MemUsedPct:         metrics.MemUsedPct,
+		DiskUsedPct:        metrics.DiskUsedPct,
+		Load1:              metrics.Load1,
+		NetRxBPS:           metrics.NetRxBPS,
+		NetTxBPS:           metrics.NetTxBPS,
 		QueueDepth:         0,
 		LastMetricBatchSeq: a.metricSeq,
 	}
@@ -178,7 +205,10 @@ func (a *Agent) postJSON(ctx context.Context, url string, payload any, out any) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf("unexpected status: %s", resp.Status)
+		return apiError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+		}
 	}
 
 	return json.NewDecoder(resp.Body).Decode(out)

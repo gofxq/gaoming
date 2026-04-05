@@ -1,13 +1,6 @@
 # Gaoming
 
-一个按 README 设计文档落地的监控系统 monorepo。当前仓库已经补齐：
-
-- 拆分后的设计文档
-- gRPC proto 契约
-- PostgreSQL 初始化脚本
-- 5 个可构建的 Go 进程
-- Docker Compose 本地运行栈
-- 一键构建、启动、测试的 Makefile
+一个监控系统。
 
 ## 文档索引
 
@@ -17,6 +10,7 @@
 - [docs/04-layout.md](/home/u/dev/github.com/gofxq/gaoming/docs/04-layout.md)
 - [docs/05-local-run.md](/home/u/dev/github.com/gofxq/gaoming/docs/05-local-run.md)
 - [docs/06-repository-hygiene.md](/home/u/dev/github.com/gofxq/gaoming/docs/06-repository-hygiene.md)
+- [docs/07-oss-options.md](/home/u/dev/github.com/gofxq/gaoming/docs/07-oss-options.md)
 
 ## 快速开始
 
@@ -33,9 +27,45 @@ Docker 启动：
 ```bash
 make docker-up
 make smoke
+make run-agent
+make smoke-agent
 make docker-ps
 make docker-logs
 make docker-down
+```
+
+如果你只是为了本地测试，推荐默认用这个模式：
+
+- 后端服务走 Docker
+- `agent` 直接运行在宿主机
+
+这样 agent 采到的是宿主机真实数据，而不是容器视角的混合数据。
+
+当前默认上报频率是 `1s`，页面时间窗口支持：
+
+- CPU
+- 内存
+- 磁盘
+- 负载
+- 网络 RX
+- 网络 TX
+
+如果你只是想保留容器里跑 agent 的对比入口：
+
+```bash
+make docker-up-full
+```
+
+前端状态页：
+
+```text
+http://127.0.0.1:8080/
+```
+
+实时推送流：
+
+```text
+http://127.0.0.1:8080/api/v1/stream/hosts
 ```
 
 常用校验：

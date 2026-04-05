@@ -55,6 +55,18 @@ func (s *Service) ListHosts() []state.HostSnapshot {
 	return s.store.ListHosts()
 }
 
+func (s *Service) SubscribeHosts() (string, <-chan []state.HostSnapshot, func()) {
+	return s.store.Subscribe()
+}
+
+func (s *Service) GetHostMetricHistory(hostUID string) map[state.MetricKey][]state.MetricPoint {
+	return s.store.GetMetricHistory(hostUID)
+}
+
+func (s *Service) GetAllHostMetricHistory() map[string]map[state.MetricKey][]state.MetricPoint {
+	return s.store.GetAllMetricHistory()
+}
+
 func (s *Service) GetHost(hostUID string) (state.HostSnapshot, bool) {
 	return s.store.GetHost(hostUID)
 }
@@ -78,4 +90,8 @@ func (s *Service) Health() map[string]any {
 		"status": "ok",
 		"time":   s.clock.Now().Format(time.RFC3339),
 	}
+}
+
+func (s *Service) ReconcileOfflineHosts() int {
+	return s.store.ReconcileOffline(s.clock.Now())
 }

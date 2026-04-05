@@ -1,7 +1,7 @@
 GO ?= go
 DOCKER_COMPOSE ?= docker compose
 
-.PHONY: fmt build test check clean run-master run-ingest run-core run-probe run-agent proto-check proto-lint compose-config docker-up docker-down docker-logs docker-ps smoke
+.PHONY: fmt build test check clean run-master run-ingest run-core run-probe run-agent proto-check proto-lint compose-config docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent
 
 fmt:
 	$(GO) fmt ./...
@@ -50,6 +50,9 @@ compose-config:
 docker-up:
 	$(DOCKER_COMPOSE) up -d --build
 
+docker-up-full:
+	$(DOCKER_COMPOSE) --profile container-agent up -d --build
+
 docker-down:
 	$(DOCKER_COMPOSE) down --remove-orphans
 
@@ -60,4 +63,7 @@ docker-ps:
 	$(DOCKER_COMPOSE) ps
 
 smoke:
-	sh ./scripts/smoke.sh
+	sh ./scripts/smoke-backend.sh
+
+smoke-agent:
+	sh ./scripts/smoke-agent.sh

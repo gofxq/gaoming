@@ -21,7 +21,7 @@ func Load() Config {
 		Region:           env("AGENT_REGION", "local"),
 		Env:              env("AGENT_ENV", "dev"),
 		Role:             env("AGENT_ROLE", "node"),
-		LoopIntervalSec:  envInt("AGENT_LOOP_INTERVAL_SEC", 5),
+		LoopIntervalSec:  envInt("AGENT_LOOP_INTERVAL_SEC", 1),
 	}
 }
 

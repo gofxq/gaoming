@@ -100,6 +100,8 @@ services:
         condition: service_healthy
 
   agent:
+    profiles:
+      - container-agent
     build:
       context: .
       dockerfile: deployments/docker/Dockerfile
@@ -112,7 +114,7 @@ services:
       AGENT_REGION: local-docker
       AGENT_ENV: docker
       AGENT_ROLE: node
-      AGENT_LOOP_INTERVAL_SEC: 5
+      AGENT_LOOP_INTERVAL_SEC: 1
     depends_on:
       master-api:
         condition: service_healthy

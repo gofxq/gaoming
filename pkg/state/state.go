@@ -55,3 +55,19 @@ type HostSnapshot struct {
 	Labels            map[string]string `json:"labels,omitempty"`
 	Version           int64             `json:"version"`
 }
+
+type MetricKey string
+
+const (
+	MetricCPUUsagePct MetricKey = "cpu_usage_pct"
+	MetricMemUsedPct  MetricKey = "mem_used_pct"
+	MetricDiskUsedPct MetricKey = "disk_used_pct"
+	MetricLoad1       MetricKey = "load1"
+	MetricNetRxBPS    MetricKey = "net_rx_bps"
+	MetricNetTxBPS    MetricKey = "net_tx_bps"
+)
+
+type MetricPoint struct {
+	TS    time.Time `json:"ts"`
+	Value float64   `json:"value"`
+}

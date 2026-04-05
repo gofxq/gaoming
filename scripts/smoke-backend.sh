@@ -26,22 +26,7 @@ until curl -fsS "${INGEST_URL}/healthz" >/dev/null 2>&1; do
   sleep 2
 done
 
-echo "waiting for agent registration..."
-i=0
-until curl -fsS "${MASTER_URL}/api/v1/hosts" | grep -q '"host_uid"'; do
-  i=$((i + 1))
-  if [ "$i" -ge 30 ]; then
-    echo "no host registered in time" >&2
-    curl -fsS "${MASTER_URL}/api/v1/hosts" || true
-    exit 1
-  fi
-  sleep 2
-done
-
 echo "checking ingest counters..."
 curl -fsS "${INGEST_URL}/debug/counters"
 echo
-echo "checking host list..."
-curl -fsS "${MASTER_URL}/api/v1/hosts"
-echo
-echo "smoke test passed"
+echo "backend smoke test passed"
