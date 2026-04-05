@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package monitor.v1;
+option go_package = "github.com/gofxq/gaoming/api/gen/go/monitor/v1;monitorv1";
+
+import "google/protobuf/timestamp.proto";
+import "monitor/v1/common.proto";
+
+service AgentControlService {
+  rpc RegisterAgent(RegisterAgentRequest) returns (RegisterAgentResponse);
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+service MetricsIngestService {
+  rpc PushMetricBatch(PushMetricBatchRequest) returns (Ack);
+  rpc PushEventBatch(PushEventBatchRequest) returns (Ack);
+}
+
+message RegisterAgentRequest {
+  HostIdentity host = 1;
+  AgentMetadata agent = 2;
+}
+
+message RegisterAgentResponse {
+  Ack ack = 1;
+  string host_uid = 2;
+  AgentConfig config = 3;
+}
+
+message GetConfigRequest {
+  string host_uid = 1;
+  string agent_id = 2;
+  int64 current_config_version = 3;
+}
+
+message GetConfigResponse {
+  Ack ack = 1;
+  bool changed = 2;
+  AgentConfig config = 3;
+}
+
+message HeartbeatRequest {
+  string host_uid = 1;
+  string agent_id = 2;
+  int64 seq = 3;
+  google.protobuf.Timestamp ts = 4;
+  AgentDigest digest = 5;
+}
+
+message HeartbeatResponse {
+  Ack ack = 1;
+  int32 next_heartbeat_interval_sec = 2;
+  int64 desired_config_version = 3;
+}
+
+message PushMetricBatchRequest {
+  string host_uid = 1;
+  string agent_id = 2;
+  int64 batch_seq = 3;
+  google.protobuf.Timestamp collected_at = 4;
+  repeated MetricPoint points = 5;
+}
+
+message PushEventBatchRequest {
+  string host_uid = 1;
+  string agent_id = 2;
+  int64 batch_seq = 3;
+  repeated EventRecord events = 4;
+}

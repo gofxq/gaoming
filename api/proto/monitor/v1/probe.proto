@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package monitor.v1;
+option go_package = "github.com/gofxq/gaoming/api/gen/go/monitor/v1;monitorv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "monitor/v1/common.proto";
+
+service ProbeCoordinatorService {
+  rpc LeaseProbeJobs(LeaseProbeJobsRequest) returns (LeaseProbeJobsResponse);
+  rpc ReportProbeResults(ReportProbeResultsRequest) returns (Ack);
+}
+
+message LeaseProbeJobsRequest {
+  string worker_id = 1;
+  string region = 2;
+  repeated ProbeType supported_types = 3;
+  int32 max_jobs = 4;
+}
+
+message ProbeJob {
+  int64 job_id = 1;
+  int64 policy_id = 2;
+  int64 target_id = 3;
+  ProbeType type = 4;
+  string target = 5;
+  int32 interval_sec = 6;
+  int32 timeout_ms = 7;
+  int32 retries = 8;
+  string success_rule = 9;
+  google.protobuf.Struct spec = 10;
+  map<string, string> labels = 11;
+}
+
+message LeaseProbeJobsResponse {
+  Ack ack = 1;
+  repeated ProbeJob jobs = 2;
+}
+
+message ProbeResult {
+  int64 job_id = 1;
+  int64 target_id = 2;
+  string worker_id = 3;
+  string region = 4;
+  google.protobuf.Timestamp ts = 5;
+  bool success = 6;
+  int32 latency_ms = 7;
+  int32 status_code = 8;
+  string error_code = 9;
+  string error_msg = 10;
+  google.protobuf.Struct observation = 11;
+}
+
+message ReportProbeResultsRequest {
+  string worker_id = 1;
+  repeated ProbeResult results = 2;
+}

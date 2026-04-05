@@ -16,6 +16,7 @@
 - [docs/03-runtime-flow.md](/home/u/dev/github.com/gofxq/gaoming/docs/03-runtime-flow.md)
 - [docs/04-layout.md](/home/u/dev/github.com/gofxq/gaoming/docs/04-layout.md)
 - [docs/05-local-run.md](/home/u/dev/github.com/gofxq/gaoming/docs/05-local-run.md)
+- [docs/06-repository-hygiene.md](/home/u/dev/github.com/gofxq/gaoming/docs/06-repository-hygiene.md)
 
 ## 快速开始
 
@@ -32,8 +33,16 @@ Docker 启动：
 ```bash
 make docker-up
 make smoke
+make docker-ps
 make docker-logs
 make docker-down
+```
+
+常用校验：
+
+```bash
+make check
+make compose-config
 ```
 
 ## 当前实现范围

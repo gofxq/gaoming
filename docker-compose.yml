@@ -1,0 +1,123 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gaoming-postgres
+    environment:
+      POSTGRES_DB: gaoming
+      POSTGRES_USER: gaoming
+      POSTGRES_PASSWORD: gaoming
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deployments/sql/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gaoming -d gaoming"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: gaoming-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  master-api:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE_PATH: ./services/master-api/cmd/server
+    container_name: gaoming-master-api
+    environment:
+      MASTER_API_HTTP_ADDR: :8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ingest-gateway:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE_PATH: ./services/ingest-gateway/cmd/server
+    container_name: gaoming-ingest-gateway
+    environment:
+      INGEST_GATEWAY_HTTP_ADDR: :8090
+    ports:
+      - "8090:8090"
+    depends_on:
+      master-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/healthz >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core-worker:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE_PATH: ./services/core-worker/cmd/worker
+    container_name: gaoming-core-worker
+    environment:
+      CORE_WORKER_LOOP_INTERVAL_SEC: 15
+    depends_on:
+      master-api:
+        condition: service_healthy
+      ingest-gateway:
+        condition: service_healthy
+
+  probe-worker:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE_PATH: ./services/probe-worker/cmd/worker
+    container_name: gaoming-probe-worker
+    environment:
+      PROBE_TARGET_URL: http://master-api:8080/healthz
+      PROBE_REPORT_URL: http://ingest-gateway:8090/api/v1/probes
+      PROBE_REGION: local-docker
+      PROBE_INTERVAL_SEC: 10
+    depends_on:
+      master-api:
+        condition: service_healthy
+      ingest-gateway:
+        condition: service_healthy
+
+  agent:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE_PATH: ./agent/daemon/cmd/agent
+    container_name: gaoming-agent
+    environment:
+      MASTER_API_URL: http://master-api:8080
+      INGEST_GATEWAY_URL: http://ingest-gateway:8090
+      AGENT_REGION: local-docker
+      AGENT_ENV: docker
+      AGENT_ROLE: node
+      AGENT_LOOP_INTERVAL_SEC: 5
+    depends_on:
+      master-api:
+        condition: service_healthy
+      ingest-gateway:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

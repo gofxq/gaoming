@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package monitor.v1;
+option go_package = "github.com/gofxq/gaoming/api/gen/go/monitor/v1;monitorv1";
+
+import "google/protobuf/timestamp.proto";
+import "monitor/v1/common.proto";
+
+service OpsService {
+  rpc CreateMaintenanceWindow(CreateMaintenanceWindowRequest) returns (MaintenanceWindow);
+  rpc AckAlert(AckAlertRequest) returns (Ack);
+}
+
+message CreateMaintenanceWindowRequest {
+  string title = 1;
+  string scope_type = 2;
+  string scope_ref = 3;
+  google.protobuf.Timestamp start_at = 4;
+  google.protobuf.Timestamp end_at = 5;
+  string created_by = 6;
+  string reason = 7;
+}
+
+message MaintenanceWindow {
+  int64 id = 1;
+  string title = 2;
+  string scope_type = 3;
+  string scope_ref = 4;
+  google.protobuf.Timestamp start_at = 5;
+  google.protobuf.Timestamp end_at = 6;
+  string created_by = 7;
+  string reason = 8;
+}
+
+message AckAlertRequest {
+  int64 alert_id = 1;
+  string acked_by = 2;
+}

@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package monitor.v1;
+option go_package = "github.com/gofxq/gaoming/api/gen/go/monitor/v1;monitorv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+enum State {
+  STATE_UNSPECIFIED = 0;
+  STATE_UP = 1;
+  STATE_WARNING = 2;
+  STATE_CRITICAL = 3;
+  STATE_OFFLINE = 4;
+  STATE_MAINTENANCE = 5;
+  STATE_DISABLED = 6;
+}
+
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_INFO = 1;
+  SEVERITY_WARN = 2;
+  SEVERITY_ERROR = 3;
+  SEVERITY_FATAL = 4;
+}
+
+enum ProbeType {
+  PROBE_TYPE_UNSPECIFIED = 0;
+  PROBE_TYPE_ICMP = 1;
+  PROBE_TYPE_TCP = 2;
+  PROBE_TYPE_HTTP = 3;
+  PROBE_TYPE_GRPC = 4;
+  PROBE_TYPE_DNS = 5;
+}
+
+message Ack {
+  string request_id = 1;
+  int32 code = 2;
+  string message = 3;
+  google.protobuf.Timestamp server_time = 4;
+}
+
+message HostIdentity {
+  string host_uid = 1;
+  string hostname = 2;
+  string primary_ip = 3;
+  repeated string ips = 4;
+  string os_type = 5;
+  string arch = 6;
+  string region = 7;
+  string az = 8;
+  string env = 9;
+  string role = 10;
+  map<string, string> labels = 11;
+}
+
+message AgentMetadata {
+  string agent_id = 1;
+  string version = 2;
+  repeated string capabilities = 3;
+  google.protobuf.Timestamp boot_time = 4;
+}
+
+message PluginConfig {
+  string name = 1;
+  bool enabled = 2;
+  google.protobuf.Struct spec = 3;
+}
+
+message AgentConfig {
+  int64 config_version = 1;
+  int32 heartbeat_interval_sec = 2;
+  int32 metric_interval_sec = 3;
+  repeated PluginConfig plugins = 4;
+  map<string, string> static_labels = 5;
+}
+
+message MetricPoint {
+  string name = 1;
+  double value = 2;
+  google.protobuf.Timestamp ts = 3;
+  map<string, string> labels = 4;
+}
+
+message EventRecord {
+  string type = 1;
+  Severity severity = 2;
+  string message = 3;
+  google.protobuf.Timestamp ts = 4;
+  map<string, string> attrs = 5;
+}
+
+message AgentDigest {
+  double cpu_usage_pct = 1;
+  double mem_used_pct = 2;
+  double disk_used_pct = 3;
+  double load1 = 4;
+  int64 net_rx_bps = 5;
+  int64 net_tx_bps = 6;
+  int64 queue_depth = 7;
+  int64 last_metric_batch_seq = 8;
+}
+
+message AlertBrief {
+  int64 alert_id = 1;
+  string summary = 2;
+  Severity severity = 3;
+  google.protobuf.Timestamp fired_at = 4;
+}
+
+message HostStatus {
+  string host_uid = 1;
+  string hostname = 2;
+  string primary_ip = 3;
+  string group_id = 4;
+  State agent_state = 5;
+  State reachability_state = 6;
+  State service_state = 7;
+  State overall_state = 8;
+
+  double cpu_usage_pct = 9;
+  double mem_used_pct = 10;
+  double disk_used_pct = 11;
+  double load1 = 12;
+  int64 net_rx_bps = 13;
+  int64 net_tx_bps = 14;
+
+  google.protobuf.Timestamp last_agent_seen_at = 15;
+  google.protobuf.Timestamp last_metric_at = 16;
+  google.protobuf.Timestamp last_probe_at = 17;
+  int32 open_alert_count = 18;
+  map<string, string> labels = 19;
+  repeated AlertBrief alerts = 20;
+  int64 version = 21;
+}

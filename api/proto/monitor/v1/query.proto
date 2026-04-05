@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package monitor.v1;
+option go_package = "github.com/gofxq/gaoming/api/gen/go/monitor/v1;monitorv1";
+
+import "monitor/v1/common.proto";
+
+service StatusQueryService {
+  rpc GetHostStatus(GetHostStatusRequest) returns (HostStatus);
+  rpc ListHosts(ListHostsRequest) returns (ListHostsResponse);
+  rpc WatchHostStatus(WatchHostStatusRequest) returns (stream HostStatusEvent);
+}
+
+message GetHostStatusRequest {
+  string host_uid = 1;
+}
+
+message ListHostsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string keyword = 3;
+  string group_id = 4;
+  State overall_state = 5;
+  map<string, string> labels = 6;
+}
+
+message ListHostsResponse {
+  repeated HostStatus items = 1;
+  string next_page_token = 2;
+}
+
+message WatchHostStatusRequest {
+  repeated string host_uids = 1;
+  string group_id = 2;
+  map<string, string> labels = 3;
+}
+
+message HostStatusEvent {
+  enum ChangeType {
+    CHANGE_TYPE_UNSPECIFIED = 0;
+    CHANGE_TYPE_UPSERT = 1;
+    CHANGE_TYPE_DELETE = 2;
+  }
+
+  ChangeType change_type = 1;
+  HostStatus status = 2;
+}
