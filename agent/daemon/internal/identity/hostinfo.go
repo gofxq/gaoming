@@ -1,9 +1,13 @@
 package identity
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
 	"os"
 	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/gofxq/gaoming/pkg/contracts"
 )
@@ -20,7 +24,10 @@ func Discover(region string, env string, role string) contracts.HostIdentity {
 		primaryIP = ips[0]
 	}
 
+	hostUID := stableHostUID(hostname, primaryIP, machineID(), listMACs())
+
 	return contracts.HostIdentity{
+		HostUID:   hostUID,
 		Hostname:  hostname,
 		PrimaryIP: primaryIP,
 		IPs:       ips,
@@ -53,4 +60,66 @@ func listIPs() []string {
 		}
 	}
 	return ips
+}
+
+func listMACs() []string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+
+	macs := make([]string, 0, len(ifaces))
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if len(iface.HardwareAddr) == 0 {
+			continue
+		}
+		macs = append(macs, strings.ToLower(iface.HardwareAddr.String()))
+	}
+	sort.Strings(macs)
+	return macs
+}
+
+func machineID() string {
+	paths := []string{
+		"/etc/machine-id",
+		"/var/lib/dbus/machine-id",
+	}
+	for _, path := range paths {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		id := strings.TrimSpace(string(body))
+		if id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func stableHostUID(hostname string, primaryIP string, machineID string, macs []string) string {
+	parts := make([]string, 0, 5+len(macs))
+	if machineID != "" {
+		parts = append(parts, "machine-id="+machineID)
+	}
+	for _, mac := range macs {
+		parts = append(parts, "mac="+mac)
+	}
+
+	// Keep weaker fallbacks only for environments where machine-level IDs are unavailable.
+	if len(parts) == 0 {
+		if hostname != "" {
+			parts = append(parts, "hostname="+hostname)
+		}
+		if primaryIP != "" {
+			parts = append(parts, "primary-ip="+primaryIP)
+		}
+		parts = append(parts, "os="+runtime.GOOS, "arch="+runtime.GOARCH)
+	}
+
+	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	return "host-" + hex.EncodeToString(sum[:8])
 }

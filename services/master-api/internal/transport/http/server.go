@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/httpx"
-	"github.com/gofxq/gaoming/services/master-api/internal/repository/memory"
+	"github.com/gofxq/gaoming/services/master-api/internal/repository"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 )
 
@@ -49,7 +49,13 @@ func (s *Server) handleRegisterAgent(w nethttp.ResponseWriter, r *nethttp.Reques
 		return
 	}
 
-	httpx.WriteJSON(w, nethttp.StatusOK, s.svc.RegisterAgent(req))
+	resp, err := s.svc.RegisterAgent(r.Context(), req)
+	if err != nil {
+		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httpx.WriteJSON(w, nethttp.StatusOK, resp)
 }
 
 func (s *Server) handleHeartbeat(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -64,9 +70,9 @@ func (s *Server) handleHeartbeat(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	resp, err := s.svc.Heartbeat(req)
+	resp, err := s.svc.Heartbeat(r.Context(), req)
 	if err != nil {
-		if errors.Is(err, memory.ErrHostNotFound) {
+		if errors.Is(err, repository.ErrHostNotFound) {
 			httpx.Error(w, nethttp.StatusNotFound, err.Error())
 			return
 		}
@@ -83,9 +89,13 @@ func (s *Server) handleListHosts(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, nethttp.StatusOK, map[string]any{
-		"items": s.svc.ListHosts(),
-	})
+	items, err := s.svc.ListHosts(r.Context())
+	if err != nil {
+		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httpx.WriteJSON(w, nethttp.StatusOK, map[string]any{"items": items})
 }
 
 func (s *Server) handleGetHost(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -100,7 +110,11 @@ func (s *Server) handleGetHost(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	host, ok := s.svc.GetHost(hostUID)
+	host, ok, err := s.svc.GetHost(r.Context(), hostUID)
+	if err != nil {
+		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		return
+	}
 	if !ok {
 		httpx.Error(w, nethttp.StatusNotFound, "host not found")
 		return
@@ -121,7 +135,13 @@ func (s *Server) handleCreateMaintenance(w nethttp.ResponseWriter, r *nethttp.Re
 		return
 	}
 
-	httpx.WriteJSON(w, nethttp.StatusCreated, s.svc.CreateMaintenance(req))
+	resp, err := s.svc.CreateMaintenance(r.Context(), req)
+	if err != nil {
+		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httpx.WriteJSON(w, nethttp.StatusCreated, resp)
 }
 
 func (s *Server) handleAckAlert(w nethttp.ResponseWriter, r *nethttp.Request) {
@@ -143,5 +163,11 @@ func (s *Server) handleAckAlert(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, nethttp.StatusOK, s.svc.AckAlert(alertID, req))
+	resp, err := s.svc.AckAlert(r.Context(), alertID, req)
+	if err != nil {
+		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httpx.WriteJSON(w, nethttp.StatusOK, resp)
 }

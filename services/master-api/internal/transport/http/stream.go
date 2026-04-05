@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
-	"sort"
 	"time"
 
 	"github.com/gofxq/gaoming/pkg/state"
+	"github.com/gofxq/gaoming/services/master-api/internal/service"
 )
 
 type hostSyncPayload struct {
@@ -44,85 +44,80 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	_, updates, cancel := s.svc.SubscribeHosts()
-	defer cancel()
+	items, err := s.svc.ListHosts(r.Context())
+	if err != nil {
+		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
+		return
+	}
+	histories, err := s.svc.GetAllHostMetricHistory(r.Context(), hostUIDs(items))
+	if err != nil {
+		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
+		return
+	}
+	updates, err := s.svc.SubscribeHostEvents(r.Context())
+	if err != nil {
+		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
+		return
+	}
 
-	lastVersions := make(map[string]int64)
 	heartbeat := time.NewTicker(20 * time.Second)
 	defer heartbeat.Stop()
+
+	now := time.Now().UTC()
+	payload, err := json.Marshal(hostSyncPayload{
+		Items:      items,
+		Histories:  histories,
+		ServerTime: now,
+	})
+	if err == nil {
+		if _, err := fmt.Fprintf(w, "event: sync\ndata: %s\n\n", payload); err != nil {
+			return
+		}
+		flusher.Flush()
+	}
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case items, ok := <-updates:
+		case event, ok := <-updates:
 			if !ok {
 				return
 			}
 
 			now := time.Now().UTC()
-			if len(lastVersions) == 0 {
-				payload, err := json.Marshal(hostSyncPayload{
-					Items:      items,
-					Histories:  s.svc.GetAllHostMetricHistory(),
+			switch event.Type {
+			case service.HostEventDelete:
+				payload, err := json.Marshal(hostDeletePayload{
+					HostUID:    event.HostUID,
 					ServerTime: now,
 				})
 				if err != nil {
 					continue
 				}
-
-				if _, err := fmt.Fprintf(w, "event: sync\ndata: %s\n\n", payload); err != nil {
+				if _, err := fmt.Fprintf(w, "event: host_delete\ndata: %s\n\n", payload); err != nil {
 					return
 				}
-				lastVersions = versionsByHost(items)
-				flusher.Flush()
-				continue
-			}
-
-			currentVersions := versionsByHost(items)
-			sorted := append([]state.HostSnapshot(nil), items...)
-			sort.Slice(sorted, func(i, j int) bool {
-				return sorted[i].HostUID < sorted[j].HostUID
-			})
-
-			for _, item := range sorted {
-				if lastVersions[item.HostUID] == item.Version {
+			case service.HostEventUpsert:
+				if event.Snapshot == nil {
 					continue
 				}
-
+				history, err := s.svc.GetHostMetricHistory(r.Context(), event.Snapshot.HostUID)
+				if err != nil {
+					continue
+				}
 				payload, err := json.Marshal(hostUpsertPayload{
-					Item:       item,
-					History:    s.svc.GetHostMetricHistory(item.HostUID),
+					Item:       *event.Snapshot,
+					History:    history,
 					ServerTime: now,
 				})
 				if err != nil {
 					continue
 				}
-
 				if _, err := fmt.Fprintf(w, "event: host_upsert\ndata: %s\n\n", payload); err != nil {
 					return
 				}
 			}
-
-			for hostUID := range lastVersions {
-				if _, ok := currentVersions[hostUID]; ok {
-					continue
-				}
-
-				payload, err := json.Marshal(hostDeletePayload{
-					HostUID:    hostUID,
-					ServerTime: now,
-				})
-				if err != nil {
-					continue
-				}
-
-				if _, err := fmt.Fprintf(w, "event: host_delete\ndata: %s\n\n", payload); err != nil {
-					return
-				}
-			}
-
-			lastVersions = currentVersions
 			flusher.Flush()
 		case <-heartbeat.C:
 			if _, err := fmt.Fprint(w, ": keep-alive\n\n"); err != nil {
@@ -133,10 +128,10 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 	}
 }
 
-func versionsByHost(items []state.HostSnapshot) map[string]int64 {
-	result := make(map[string]int64, len(items))
+func hostUIDs(items []state.HostSnapshot) []string {
+	result := make([]string, 0, len(items))
 	for _, item := range items {
-		result[item.HostUID] = item.Version
+		result = append(result, item.HostUID)
 	}
 	return result
 }

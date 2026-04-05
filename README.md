@@ -1,6 +1,57 @@
 # Gaoming
 
+
 一个监控系统。
+
+
+```mermaid
+flowchart LR
+    %% ===== External =====
+    Agent["Agent"]
+    UI["Web UI / Dashboard"]
+
+    %% ===== Control Plane =====
+    subgraph ControlPlane["master-api (控制 + 状态)"]
+        Master["Master API - 注册/心跳 - 主机状态 - SSE 推送"]
+    end
+
+    %% ===== Ingest Layer =====
+    subgraph IngestLayer["ingest-gateway (数据接入)"]
+        Ingest["Ingest Gateway - metrics/events/probes 接收 - ack"]
+    end
+
+    %% ===== Compute Layer =====
+    subgraph ComputeLayer["core-worker (后台计算)"]
+        Core["Core Worker - 状态计算 - 告警 - 调度"]
+    end
+
+    %% ===== Probe =====
+    subgraph ProbeLayer["probe-worker (主动探测)"]
+        Probe["Probe Worker - HTTP 探测 - 延迟/可用性"]
+    end
+
+    %% ===== Flows =====
+    Agent -->|注册/心跳| Master
+    Agent -->|指标上报| Ingest
+    Master -->|SSE| UI
+    Probe -->|探测结果| Ingest
+    Ingest -->|数据流| Core
+    Master -->|状态数据| Core
+    Core -->|计算结果| Master
+
+    %% ===== Styles =====
+    classDef control fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#0d47a1;
+    classDef ingest fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1b5e20;
+    classDef compute fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c;
+    classDef probe fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#e65100;
+    classDef external fill:#eeeeee,stroke:#757575,stroke-width:1px,color:#212121;
+
+    class Master control;
+    class Ingest ingest;
+    class Core compute;
+    class Probe probe;
+    class Agent,UI external;
+```
 
 ## 文档索引
 
@@ -12,6 +63,8 @@
 - [docs/05-local-run.md](/home/u/dev/github.com/gofxq/gaoming/docs/05-local-run.md)
 - [docs/06-repository-hygiene.md](/home/u/dev/github.com/gofxq/gaoming/docs/06-repository-hygiene.md)
 - [docs/07-oss-options.md](/home/u/dev/github.com/gofxq/gaoming/docs/07-oss-options.md)
+- [docs/08-persistence-runtime.md](/home/u/dev/github.com/gofxq/gaoming/docs/08-persistence-runtime.md)
+- [docs/99-status-roadmap.md](/home/u/dev/github.com/gofxq/gaoming/docs/99-status-roadmap.md)
 
 ## 快速开始
 
@@ -87,5 +140,7 @@ make compose-config
 - `core-worker`：合并后的后台 worker 占位。
 - `probe-worker`：周期性 HTTP 探测并上报结果。
 - `agent`：自动注册、上报 heartbeat 和 metric batch。
+
+当前版本里，`master-api` 负责主机当前状态和页面输出，`ingest-gateway` 负责写入接入，`probe-worker` 负责主动探测，`core-worker` 仍是后续状态引擎、告警引擎和调度逻辑的预留位置。
 
 README 原始的大型设计内容已经拆分到 `docs/` 中继续维护。

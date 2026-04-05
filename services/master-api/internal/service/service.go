@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"time"
@@ -9,21 +10,44 @@ import (
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/ids"
 	"github.com/gofxq/gaoming/pkg/state"
-	"github.com/gofxq/gaoming/services/master-api/internal/repository/memory"
+	"github.com/gofxq/gaoming/services/master-api/internal/repository"
 )
 
 type Service struct {
-	store  *memory.Store
-	clock  clock.Clock
-	logger *slog.Logger
+	hostStore   repository.HostStateStore
+	metricStore repository.MetricWindowStore
+	opsStore    repository.OperationsStore
+	eventBus    repository.EventBus
+	clock       clock.Clock
+	logger      *slog.Logger
 }
 
-func New(store *memory.Store, clk clock.Clock, logger *slog.Logger) *Service {
-	return &Service{store: store, clock: clk, logger: logger}
+type HostEvent = repository.HostEvent
+
+const (
+	HostEventUpsert = repository.HostEventUpsert
+	HostEventDelete = repository.HostEventDelete
+)
+
+func New(hostStore repository.HostStateStore, metricStore repository.MetricWindowStore, opsStore repository.OperationsStore, eventBus repository.EventBus, clk clock.Clock, logger *slog.Logger) *Service {
+	return &Service{
+		hostStore:   hostStore,
+		metricStore: metricStore,
+		opsStore:    opsStore,
+		eventBus:    eventBus,
+		clock:       clk,
+		logger:      logger,
+	}
 }
 
-func (s *Service) RegisterAgent(req contracts.RegisterAgentRequest) contracts.RegisterAgentResponse {
-	snapshot, config := s.store.RegisterAgent(req, s.clock.Now())
+func (s *Service) RegisterAgent(ctx context.Context, req contracts.RegisterAgentRequest) (contracts.RegisterAgentResponse, error) {
+	snapshot, config, err := s.hostStore.RegisterAgent(ctx, req, s.clock.Now())
+	if err != nil {
+		return contracts.RegisterAgentResponse{}, err
+	}
+	if err := s.eventBus.PublishHostUpsert(ctx, snapshot); err != nil {
+		return contracts.RegisterAgentResponse{}, err
+	}
 	s.logger.Info("agent registered", "host_uid", snapshot.HostUID, "hostname", snapshot.Hostname)
 
 	return contracts.RegisterAgentResponse{
@@ -31,15 +55,21 @@ func (s *Service) RegisterAgent(req contracts.RegisterAgentRequest) contracts.Re
 		Message:   "registered",
 		HostUID:   snapshot.HostUID,
 		Config:    config,
-	}
+	}, nil
 }
 
-func (s *Service) Heartbeat(req contracts.HeartbeatRequest) (contracts.HeartbeatResponse, error) {
-	_, config, err := s.store.Heartbeat(req, s.clock.Now())
+func (s *Service) Heartbeat(ctx context.Context, req contracts.HeartbeatRequest) (contracts.HeartbeatResponse, error) {
+	snapshot, config, err := s.hostStore.Heartbeat(ctx, req, s.clock.Now())
 	if err != nil {
-		if errors.Is(err, memory.ErrHostNotFound) {
+		if errors.Is(err, repository.ErrHostNotFound) {
 			return contracts.HeartbeatResponse{}, err
 		}
+		return contracts.HeartbeatResponse{}, err
+	}
+	if err := s.metricStore.AppendHeartbeatMetrics(ctx, req.HostUID, s.clock.Now(), req.Digest); err != nil {
+		return contracts.HeartbeatResponse{}, err
+	}
+	if err := s.eventBus.PublishHostUpsert(ctx, snapshot); err != nil {
 		return contracts.HeartbeatResponse{}, err
 	}
 
@@ -51,38 +81,40 @@ func (s *Service) Heartbeat(req contracts.HeartbeatRequest) (contracts.Heartbeat
 	}, nil
 }
 
-func (s *Service) ListHosts() []state.HostSnapshot {
-	return s.store.ListHosts()
+func (s *Service) ListHosts(ctx context.Context) ([]state.HostSnapshot, error) {
+	return s.hostStore.ListHosts(ctx)
 }
 
-func (s *Service) SubscribeHosts() (string, <-chan []state.HostSnapshot, func()) {
-	return s.store.Subscribe()
+func (s *Service) SubscribeHostEvents(ctx context.Context) (<-chan HostEvent, error) {
+	return s.eventBus.SubscribeHostEvents(ctx)
 }
 
-func (s *Service) GetHostMetricHistory(hostUID string) map[state.MetricKey][]state.MetricPoint {
-	return s.store.GetMetricHistory(hostUID)
+func (s *Service) GetHostMetricHistory(ctx context.Context, hostUID string) (map[state.MetricKey][]state.MetricPoint, error) {
+	return s.metricStore.GetHostMetricHistory(ctx, hostUID)
 }
 
-func (s *Service) GetAllHostMetricHistory() map[string]map[state.MetricKey][]state.MetricPoint {
-	return s.store.GetAllMetricHistory()
+func (s *Service) GetAllHostMetricHistory(ctx context.Context, hostUIDs []string) (map[string]map[state.MetricKey][]state.MetricPoint, error) {
+	return s.metricStore.GetAllHostMetricHistory(ctx, hostUIDs)
 }
 
-func (s *Service) GetHost(hostUID string) (state.HostSnapshot, bool) {
-	return s.store.GetHost(hostUID)
+func (s *Service) GetHost(ctx context.Context, hostUID string) (state.HostSnapshot, bool, error) {
+	return s.hostStore.GetHost(ctx, hostUID)
 }
 
-func (s *Service) CreateMaintenance(req contracts.CreateMaintenanceWindowRequest) any {
-	return s.store.CreateMaintenance(req)
+func (s *Service) CreateMaintenance(ctx context.Context, req contracts.CreateMaintenanceWindowRequest) (repository.MaintenanceWindow, error) {
+	return s.opsStore.CreateMaintenance(ctx, req)
 }
 
-func (s *Service) AckAlert(alertID string, req contracts.AckAlertRequest) contracts.AckResponse {
-	s.store.AckAlert(alertID, req.AckedBy)
+func (s *Service) AckAlert(ctx context.Context, alertID string, req contracts.AckAlertRequest) (contracts.AckResponse, error) {
+	if err := s.opsStore.AckAlert(ctx, alertID, req.AckedBy, s.clock.Now()); err != nil {
+		return contracts.AckResponse{}, err
+	}
 	return contracts.AckResponse{
 		RequestID:  ids.New("req"),
 		Code:       0,
 		Message:    "acknowledged",
 		ServerTime: s.clock.Now(),
-	}
+	}, nil
 }
 
 func (s *Service) Health() map[string]any {
@@ -92,6 +124,15 @@ func (s *Service) Health() map[string]any {
 	}
 }
 
-func (s *Service) ReconcileOfflineHosts() int {
-	return s.store.ReconcileOffline(s.clock.Now())
+func (s *Service) ReconcileOfflineHosts(ctx context.Context) (int, error) {
+	changed, err := s.hostStore.ReconcileOffline(ctx, s.clock.Now())
+	if err != nil {
+		return 0, err
+	}
+	for _, snapshot := range changed {
+		if err := s.eventBus.PublishHostUpsert(ctx, snapshot); err != nil {
+			return 0, err
+		}
+	}
+	return len(changed), nil
 }

@@ -1,6 +1,6 @@
 ARG GO_VERSION=1.25.8
 
-FROM golang:${GO_VERSION}-alpine AS build
+FROM golang:${GO_VERSION} AS build
 ARG SERVICE_PATH
 WORKDIR /src
 

@@ -115,6 +115,8 @@ create table host_status_current (
     cpu_usage_pct           numeric(6,2),
     mem_used_pct            numeric(6,2),
     disk_used_pct           numeric(6,2),
+    disk_read_bps           bigint,
+    disk_write_bps          bigint,
     load1                   numeric(8,2),
     net_rx_bps              bigint,
     net_tx_bps              bigint,
