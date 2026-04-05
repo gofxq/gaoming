@@ -11,7 +11,7 @@ import (
 func TestRegisterAndHeartbeat(t *testing.T) {
 	store := NewStore()
 
-	snapshot, config := store.RegisterAgent(contracts.RegisterAgentRequest{
+	snapshot, config, tenantCode := store.RegisterAgent(contracts.RegisterAgentRequest{
 		Host: contracts.HostIdentity{
 			Hostname:  "node-1",
 			PrimaryIP: "10.0.0.1",
@@ -23,6 +23,9 @@ func TestRegisterAndHeartbeat(t *testing.T) {
 	}
 	if config.HeartbeatIntervalSec == 0 {
 		t.Fatal("expected default heartbeat interval")
+	}
+	if tenantCode == "" {
+		t.Fatal("expected tenant code to be assigned")
 	}
 
 	updated, _, err := store.Heartbeat(contracts.HeartbeatRequest{
@@ -50,7 +53,7 @@ func TestSubscribeGetsSnapshots(t *testing.T) {
 		t.Fatalf("expected empty initial snapshot, got %d items", len(initial))
 	}
 
-	snapshot, _ := store.RegisterAgent(contracts.RegisterAgentRequest{
+	snapshot, _, _ := store.RegisterAgent(contracts.RegisterAgentRequest{
 		Host: contracts.HostIdentity{
 			Hostname:  "node-2",
 			PrimaryIP: "10.0.0.2",
@@ -74,7 +77,7 @@ func TestHeartbeatStoresMetricHistory(t *testing.T) {
 	store := NewStore()
 	now := time.Now().UTC()
 
-	snapshot, _ := store.RegisterAgent(contracts.RegisterAgentRequest{
+	snapshot, _, _ := store.RegisterAgent(contracts.RegisterAgentRequest{
 		Host: contracts.HostIdentity{
 			Hostname:  "node-3",
 			PrimaryIP: "10.0.0.3",
@@ -115,7 +118,7 @@ func TestReconcileOfflineMarksHostOffline(t *testing.T) {
 	store := NewStore()
 	now := time.Now().UTC()
 
-	snapshot, _ := store.RegisterAgent(contracts.RegisterAgentRequest{
+	snapshot, _, _ := store.RegisterAgent(contracts.RegisterAgentRequest{
 		Host: contracts.HostIdentity{
 			Hostname:  "node-4",
 			PrimaryIP: "10.0.0.4",

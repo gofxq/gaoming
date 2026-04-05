@@ -18,12 +18,16 @@ func New() *App {
 	cfg := config.Load()
 	logger := logx.New("agent")
 	host := identity.Discover(cfg.Region, cfg.Env, cfg.Role)
+	host.TenantCode = cfg.TenantCode
 
 	agent := service.New(service.Config{
 		MasterAPIURL:     cfg.MasterAPIURL,
 		IngestGatewayURL: cfg.IngestGatewayURL,
 		LoopInterval:     time.Duration(cfg.LoopIntervalSec) * time.Second,
 		Host:             host,
+		PersistTenant: func(tenantCode string) error {
+			return config.SaveTenant(cfg.ConfigPath, tenantCode)
+		},
 	}, logger)
 
 	return &App{agent: agent}

@@ -41,7 +41,7 @@ func New(hostStore repository.HostStateStore, metricStore repository.MetricWindo
 }
 
 func (s *Service) RegisterAgent(ctx context.Context, req contracts.RegisterAgentRequest) (contracts.RegisterAgentResponse, error) {
-	snapshot, config, err := s.hostStore.RegisterAgent(ctx, req, s.clock.Now())
+	snapshot, config, tenantCode, err := s.hostStore.RegisterAgent(ctx, req, s.clock.Now())
 	if err != nil {
 		return contracts.RegisterAgentResponse{}, err
 	}
@@ -51,10 +51,11 @@ func (s *Service) RegisterAgent(ctx context.Context, req contracts.RegisterAgent
 	s.logger.Info("agent registered", "host_uid", snapshot.HostUID, "hostname", snapshot.Hostname)
 
 	return contracts.RegisterAgentResponse{
-		RequestID: ids.New("req"),
-		Message:   "registered",
-		HostUID:   snapshot.HostUID,
-		Config:    config,
+		RequestID:  ids.New("req"),
+		Message:    "registered",
+		HostUID:    snapshot.HostUID,
+		TenantCode: tenantCode,
+		Config:     config,
 	}, nil
 }
 

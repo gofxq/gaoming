@@ -47,12 +47,16 @@ func NewStore() *Store {
 	}
 }
 
-func (s *Store) RegisterAgent(req contracts.RegisterAgentRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig) {
+func (s *Store) RegisterAgent(req contracts.RegisterAgentRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, string) {
 	s.mu.Lock()
 
 	hostUID := req.Host.HostUID
 	if hostUID == "" {
 		hostUID = ids.New("host")
+	}
+	tenantCode := req.Host.TenantCode
+	if tenantCode == "" {
+		tenantCode = ids.New("tenant")
 	}
 
 	config := contracts.AgentConfig{
@@ -82,7 +86,7 @@ func (s *Store) RegisterAgent(req contracts.RegisterAgentRequest, now time.Time)
 	watchers, items := s.snapshotWatchersLocked()
 	s.mu.Unlock()
 	s.broadcast(watchers, items)
-	return snapshot, config
+	return snapshot, config, tenantCode
 }
 
 func (s *Store) Heartbeat(req contracts.HeartbeatRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, error) {

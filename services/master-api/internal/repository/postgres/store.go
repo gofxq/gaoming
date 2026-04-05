@@ -29,8 +29,8 @@ type Config struct {
 }
 
 type Store struct {
-	db       *pgxpool.Pool
-	tenantID int64
+	db              *pgxpool.Pool
+	defaultTenantID int64
 }
 
 type querier interface {
@@ -61,13 +61,13 @@ RETURNING id
 		return nil, fmt.Errorf("ensure tenant: %w", err)
 	}
 
-	return &Store{db: db, tenantID: tenantID}, nil
+	return &Store{db: db, defaultTenantID: tenantID}, nil
 }
 
-func (s *Store) RegisterAgent(ctx context.Context, req contracts.RegisterAgentRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, error) {
+func (s *Store) RegisterAgent(ctx context.Context, req contracts.RegisterAgentRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, string, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return state.HostSnapshot{}, contracts.AgentConfig{}, err
+		return state.HostSnapshot{}, contracts.AgentConfig{}, "", err
 	}
 	defer tx.Rollback(ctx)
 
@@ -75,35 +75,39 @@ func (s *Store) RegisterAgent(ctx context.Context, req contracts.RegisterAgentRe
 	if hostUID == "" {
 		hostUID = ids.New("host")
 	}
-
-	hostID, err := s.upsertHost(ctx, tx, hostUID, req, now)
+	tenantID, tenantCode, err := s.resolveTenant(ctx, tx, req.Host.TenantCode)
 	if err != nil {
-		return state.HostSnapshot{}, contracts.AgentConfig{}, err
+		return state.HostSnapshot{}, contracts.AgentConfig{}, "", err
+	}
+
+	hostID, err := s.upsertHost(ctx, tx, tenantID, hostUID, req, now)
+	if err != nil {
+		return state.HostSnapshot{}, contracts.AgentConfig{}, "", err
 	}
 	if err := s.replaceLabels(ctx, tx, hostID, req.Host.Labels); err != nil {
-		return state.HostSnapshot{}, contracts.AgentConfig{}, err
+		return state.HostSnapshot{}, contracts.AgentConfig{}, "", err
 	}
 
 	cfg, err := s.upsertAgentInstance(ctx, tx, hostID, req, now)
 	if err != nil {
-		return state.HostSnapshot{}, contracts.AgentConfig{}, err
+		return state.HostSnapshot{}, contracts.AgentConfig{}, "", err
 	}
 	if err := s.upsertRegisteredStatus(ctx, tx, hostID, now); err != nil {
-		return state.HostSnapshot{}, contracts.AgentConfig{}, err
+		return state.HostSnapshot{}, contracts.AgentConfig{}, "", err
 	}
 
 	snapshot, ok, err := s.getHostByUID(ctx, tx, hostUID)
 	if err != nil {
-		return state.HostSnapshot{}, contracts.AgentConfig{}, err
+		return state.HostSnapshot{}, contracts.AgentConfig{}, "", err
 	}
 	if !ok {
-		return state.HostSnapshot{}, contracts.AgentConfig{}, repository.ErrHostNotFound
+		return state.HostSnapshot{}, contracts.AgentConfig{}, "", repository.ErrHostNotFound
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return state.HostSnapshot{}, contracts.AgentConfig{}, err
+		return state.HostSnapshot{}, contracts.AgentConfig{}, "", err
 	}
-	return snapshot, cfg, nil
+	return snapshot, cfg, tenantCode, nil
 }
 
 func (s *Store) Heartbeat(ctx context.Context, req contracts.HeartbeatRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, error) {
@@ -148,7 +152,7 @@ WHERE host_id = $4 AND agent_id = $5
 }
 
 func (s *Store) ListHosts(ctx context.Context) ([]state.HostSnapshot, error) {
-	return s.listHosts(ctx, s.db, "", s.tenantID)
+	return s.listHosts(ctx, s.db, "", nil)
 }
 
 func (s *Store) GetHost(ctx context.Context, hostUID string) (state.HostSnapshot, bool, error) {
@@ -160,12 +164,11 @@ func (s *Store) ReconcileOffline(ctx context.Context, now time.Time) ([]state.Ho
 SELECT h.host_uid
 FROM hosts h
 JOIN host_status_current hsc ON hsc.host_id = h.id
-WHERE h.tenant_id = $1
-  AND hsc.last_agent_seen_at IS NOT NULL
-  AND hsc.last_agent_seen_at < $2
-  AND NOT (hsc.agent_state = $3 AND hsc.overall_state = $3)
+WHERE hsc.last_agent_seen_at IS NOT NULL
+  AND hsc.last_agent_seen_at < $1
+  AND NOT (hsc.agent_state = $2 AND hsc.overall_state = $2)
 ORDER BY h.host_uid
-`, s.tenantID, now.Add(-15*time.Second), int(state.Offline))
+`, now.Add(-15*time.Second), int(state.Offline))
 	if err != nil {
 		return nil, err
 	}
@@ -202,9 +205,9 @@ SET agent_state = $1,
 	version = version + 1,
 	updated_at = $2
 WHERE host_id = (
-	SELECT id FROM hosts WHERE tenant_id = $3 AND host_uid = $4
+	SELECT id FROM hosts WHERE host_uid = $3
 )
-`, int(state.Offline), now, s.tenantID, hostUID); err != nil {
+`, int(state.Offline), now, hostUID); err != nil {
 			return nil, err
 		}
 		snapshot, ok, err := s.getHostByUID(ctx, tx, hostUID)
@@ -230,7 +233,7 @@ INSERT INTO maintenance_windows (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), true)
 RETURNING id
-`, s.tenantID, req.Title, req.ScopeType, req.ScopeRef, req.StartAt, req.EndAt, req.CreatedBy, req.Reason).Scan(&id); err != nil {
+`, s.defaultTenantID, req.Title, req.ScopeType, req.ScopeRef, req.StartAt, req.EndAt, req.CreatedBy, req.Reason).Scan(&id); err != nil {
 		return repository.MaintenanceWindow{}, err
 	}
 
@@ -253,7 +256,7 @@ UPDATE alert_events
 SET acked_by = $1,
 	acked_at = $2
 WHERE id = $3 AND tenant_id = $4
-`, ackedBy, now, id, s.tenantID); err != nil {
+`, ackedBy, now, id, s.defaultTenantID); err != nil {
 			return err
 		}
 		return nil
@@ -264,11 +267,29 @@ UPDATE alert_events
 SET acked_by = $1,
 	acked_at = $2
 WHERE fingerprint = $3 AND tenant_id = $4
-`, ackedBy, now, alertID, s.tenantID)
+`, ackedBy, now, alertID, s.defaultTenantID)
 	return err
 }
 
-func (s *Store) upsertHost(ctx context.Context, q querier, hostUID string, req contracts.RegisterAgentRequest, now time.Time) (int64, error) {
+func (s *Store) resolveTenant(ctx context.Context, q querier, tenantCode string) (int64, string, error) {
+	if tenantCode == "" {
+		tenantCode = ids.New("tenant")
+	}
+
+	var tenantID int64
+	if err := q.QueryRow(ctx, `
+INSERT INTO tenants (tenant_code, name, status)
+VALUES ($1, $2, 1)
+ON CONFLICT (tenant_code) DO UPDATE SET
+	updated_at = now()
+RETURNING id
+`, tenantCode, tenantCode).Scan(&tenantID); err != nil {
+		return 0, "", err
+	}
+	return tenantID, tenantCode, nil
+}
+
+func (s *Store) upsertHost(ctx context.Context, q querier, tenantID int64, hostUID string, req contracts.RegisterAgentRequest, now time.Time) (int64, error) {
 	var hostID int64
 	err := q.QueryRow(ctx, `
 INSERT INTO hosts (
@@ -280,6 +301,7 @@ VALUES (
 	$11, $12, $12, $12
 )
 ON CONFLICT (host_uid) DO UPDATE SET
+	tenant_id = EXCLUDED.tenant_id,
 	hostname = EXCLUDED.hostname,
 	primary_ip = EXCLUDED.primary_ip,
 	os_type = EXCLUDED.os_type,
@@ -292,7 +314,7 @@ ON CONFLICT (host_uid) DO UPDATE SET
 	last_register_at = EXCLUDED.last_register_at,
 	updated_at = EXCLUDED.updated_at
 RETURNING id
-`, s.tenantID, hostUID, req.Host.Hostname, req.Host.PrimaryIP, req.Host.OSType, req.Host.Arch, req.Host.Region, req.Host.AZ, req.Host.Env, req.Host.Role, int(state.Up), now).Scan(&hostID)
+`, tenantID, hostUID, req.Host.Hostname, req.Host.PrimaryIP, req.Host.OSType, req.Host.Arch, req.Host.Region, req.Host.AZ, req.Host.Env, req.Host.Role, int(state.Up), now).Scan(&hostID)
 	return hostID, err
 }
 
@@ -376,12 +398,20 @@ SELECT h.id, ai.config_version, ai.heartbeat_interval_sec, ai.metric_interval_se
 FROM hosts h
 JOIN agent_instances ai ON ai.host_id = h.id
 WHERE h.tenant_id = $1 AND h.host_uid = $2 AND ai.agent_id = $3
-`, s.tenantID, hostUID, agentID).Scan(&hostID, &cfg.ConfigVersion, &cfg.HeartbeatIntervalSec, &cfg.MetricIntervalSec)
+`, s.defaultTenantID, hostUID, agentID).Scan(&hostID, &cfg.ConfigVersion, &cfg.HeartbeatIntervalSec, &cfg.MetricIntervalSec)
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			return 0, contracts.AgentConfig{}, repository.ErrHostNotFound
+		err = q.QueryRow(ctx, `
+SELECT h.id, ai.config_version, ai.heartbeat_interval_sec, ai.metric_interval_sec
+FROM hosts h
+JOIN agent_instances ai ON ai.host_id = h.id
+WHERE h.host_uid = $1 AND ai.agent_id = $2
+`, hostUID, agentID).Scan(&hostID, &cfg.ConfigVersion, &cfg.HeartbeatIntervalSec, &cfg.MetricIntervalSec)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return 0, contracts.AgentConfig{}, repository.ErrHostNotFound
+			}
+			return 0, contracts.AgentConfig{}, err
 		}
-		return 0, contracts.AgentConfig{}, err
 	}
 	return hostID, cfg, nil
 }
@@ -420,7 +450,7 @@ ON CONFLICT (host_id) DO UPDATE SET
 }
 
 func (s *Store) getHostByUID(ctx context.Context, q querier, hostUID string) (state.HostSnapshot, bool, error) {
-	items, err := s.listHosts(ctx, q, " AND h.host_uid = $2", s.tenantID, hostUID)
+	items, err := s.listHosts(ctx, q, " WHERE h.host_uid = $1", []any{hostUID})
 	if err != nil {
 		return state.HostSnapshot{}, false, err
 	}
@@ -430,7 +460,10 @@ func (s *Store) getHostByUID(ctx context.Context, q querier, hostUID string) (st
 	return items[0], true, nil
 }
 
-func (s *Store) listHosts(ctx context.Context, q querier, suffix string, args ...any) ([]state.HostSnapshot, error) {
+func (s *Store) listHosts(ctx context.Context, q querier, whereClause string, args []any) ([]state.HostSnapshot, error) {
+	if whereClause == "" {
+		whereClause = ""
+	}
 	query := `
 SELECT
 	h.host_uid,
@@ -460,7 +493,7 @@ SELECT
 	COALESCE(hsc.version, 0)
 FROM hosts h
 LEFT JOIN host_status_current hsc ON hsc.host_id = h.id
-WHERE h.tenant_id = $1` + suffix + `
+` + whereClause + `
 ORDER BY h.host_uid
 `
 	rows, err := q.Query(ctx, query, args...)

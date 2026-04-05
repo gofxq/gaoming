@@ -10,17 +10,18 @@ type AgentConfig struct {
 }
 
 type HostIdentity struct {
-	HostUID   string            `json:"host_uid,omitempty"`
-	Hostname  string            `json:"hostname"`
-	PrimaryIP string            `json:"primary_ip"`
-	IPs       []string          `json:"ips,omitempty"`
-	OSType    string            `json:"os_type"`
-	Arch      string            `json:"arch"`
-	Region    string            `json:"region"`
-	AZ        string            `json:"az,omitempty"`
-	Env       string            `json:"env,omitempty"`
-	Role      string            `json:"role,omitempty"`
-	Labels    map[string]string `json:"labels,omitempty"`
+	HostUID    string            `json:"host_uid,omitempty"`
+	TenantCode string            `json:"tenant_code,omitempty"`
+	Hostname   string            `json:"hostname"`
+	PrimaryIP  string            `json:"primary_ip"`
+	IPs        []string          `json:"ips,omitempty"`
+	OSType     string            `json:"os_type"`
+	Arch       string            `json:"arch"`
+	Region     string            `json:"region"`
+	AZ         string            `json:"az,omitempty"`
+	Env        string            `json:"env,omitempty"`
+	Role       string            `json:"role,omitempty"`
+	Labels     map[string]string `json:"labels,omitempty"`
 }
 
 type AgentMetadata struct {
@@ -49,10 +50,11 @@ type RegisterAgentRequest struct {
 }
 
 type RegisterAgentResponse struct {
-	RequestID string      `json:"request_id"`
-	Message   string      `json:"message"`
-	HostUID   string      `json:"host_uid"`
-	Config    AgentConfig `json:"config"`
+	RequestID  string      `json:"request_id"`
+	Message    string      `json:"message"`
+	HostUID    string      `json:"host_uid"`
+	TenantCode string      `json:"tenant_code"`
+	Config     AgentConfig `json:"config"`
 }
 
 type HeartbeatRequest struct {

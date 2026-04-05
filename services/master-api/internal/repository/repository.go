@@ -36,7 +36,7 @@ type HostEvent struct {
 }
 
 type HostStateStore interface {
-	RegisterAgent(ctx context.Context, req contracts.RegisterAgentRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, error)
+	RegisterAgent(ctx context.Context, req contracts.RegisterAgentRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, string, error)
 	Heartbeat(ctx context.Context, req contracts.HeartbeatRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, error)
 	ListHosts(ctx context.Context) ([]state.HostSnapshot, error)
 	GetHost(ctx context.Context, hostUID string) (state.HostSnapshot, bool, error)

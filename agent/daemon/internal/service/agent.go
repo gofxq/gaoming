@@ -19,6 +19,7 @@ type Config struct {
 	IngestGatewayURL string
 	LoopInterval     time.Duration
 	Host             contracts.HostIdentity
+	PersistTenant    func(string) error
 }
 
 type Agent struct {
@@ -100,7 +101,15 @@ func (a *Agent) register(ctx context.Context) error {
 	}
 
 	a.hostUID = resp.HostUID
-	a.logger.Info("agent registered", "host_uid", a.hostUID)
+	if resp.TenantCode != "" && resp.TenantCode != a.cfg.Host.TenantCode {
+		if a.cfg.PersistTenant != nil {
+			if err := a.cfg.PersistTenant(resp.TenantCode); err != nil {
+				return fmt.Errorf("persist tenant: %w", err)
+			}
+		}
+		a.cfg.Host.TenantCode = resp.TenantCode
+	}
+	a.logger.Info("agent registered", "host_uid", a.hostUID, "tenant_code", a.cfg.Host.TenantCode)
 	return nil
 }
 
