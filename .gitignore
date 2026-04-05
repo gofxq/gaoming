@@ -15,6 +15,7 @@ api/gen/
 .env
 .env.local
 .env.*.local
+agent-config.yaml
 
 .idea/
 .vscode/
@@ -24,3 +25,6 @@ api/gen/
 .DS_Store
 
 docker-compose.override.yml
+deployments/deploy-remote.local.env
+deployments/deploy-agent.local.env
+agent-config.yaml

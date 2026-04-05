@@ -3,6 +3,7 @@ ARG GO_VERSION=1.25.8
 FROM golang:${GO_VERSION} AS build
 ARG SERVICE_PATH
 WORKDIR /src
+ENV GOPROXY=https://goproxy.cn,direct
 
 COPY go.mod go.work Makefile buf.yaml buf.gen.yaml ./
 COPY api ./api

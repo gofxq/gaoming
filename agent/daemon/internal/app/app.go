@@ -14,8 +14,11 @@ type App struct {
 	agent *service.Agent
 }
 
-func New() *App {
-	cfg := config.Load()
+func New() (*App, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
 	logger := logx.New("agent")
 	host := identity.Discover(cfg.Region, cfg.Env, cfg.Role)
 	host.TenantCode = cfg.TenantCode
@@ -30,7 +33,7 @@ func New() *App {
 		},
 	}, logger)
 
-	return &App{agent: agent}
+	return &App{agent: agent}, nil
 }
 
 func (a *App) Run(ctx context.Context) error {

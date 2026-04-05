@@ -1,7 +1,7 @@
 GO ?= go
 DOCKER_COMPOSE ?= docker compose
 
-.PHONY: fmt build test check clean run-master run-ingest run-core run-probe run-agent proto-check proto-lint compose-config docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent
+.PHONY: fmt build test check clean run-master run-ingest run-core run-probe run-agent proto-check proto-lint compose-config docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent deploy-agent-service install-agent-local-service
 
 fmt:
 	$(GO) fmt ./...
@@ -67,3 +67,11 @@ smoke:
 
 smoke-agent:
 	sh ./scripts/smoke-agent.sh
+
+deploy-agent-service:
+	sh ./deployments/deploy-agent-service.sh
+
+install-agent-local-service:
+	mkdir -p .tmp
+	$(GO) build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
+	sh ./deployments/install-agent-local.sh --bin ./.tmp/gaoming-agent

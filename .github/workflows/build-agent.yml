@@ -1,0 +1,68 @@
+name: build-agent
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - ".github/workflows/build-agent.yml"
+      - "agent/**"
+      - "pkg/**"
+      - "go.mod"
+      - "go.sum"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-agent:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Linux agent archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          for arch in amd64 arm64; do
+            out_dir="dist/gaoming-agent_linux_${arch}"
+            mkdir -p "${out_dir}"
+            CGO_ENABLED=0 GOOS=linux GOARCH="${arch}" go build \
+              -trimpath \
+              -ldflags="-s -w" \
+              -o "${out_dir}/gaoming-agent" \
+              ./agent/daemon/cmd/agent
+            tar -C "${out_dir}" -czf "dist/gaoming-agent_linux_${arch}.tar.gz" gaoming-agent
+            rm -rf "${out_dir}"
+          done
+
+          sha256sum dist/gaoming-agent_linux_*.tar.gz > dist/checksums.txt
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gaoming-agent-linux
+          path: dist/*
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/gaoming-agent_linux_amd64.tar.gz
+            dist/gaoming-agent_linux_arm64.tar.gz
+            dist/checksums.txt
+          generate_release_notes: true

@@ -1,10 +1,12 @@
 package config
 
 import (
-	"encoding/json"
+	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -18,88 +20,236 @@ type Config struct {
 	LoopIntervalSec  int
 }
 
-func Load() Config {
-	configPath := env("AGENT_CONFIG_PATH", defaultConfigPath())
-	state := loadState(configPath)
-	tenantCode := env("AGENT_TENANT", state.TenantCode)
-
-	return Config{
-		MasterAPIURL:     env("MASTER_API_URL", "http://127.0.0.1:8080"),
-		IngestGatewayURL: env("INGEST_GATEWAY_URL", "http://127.0.0.1:8090"),
-		Region:           env("AGENT_REGION", "local"),
-		Env:              env("AGENT_ENV", "dev"),
-		Role:             env("AGENT_ROLE", "node"),
-		TenantCode:       tenantCode,
-		ConfigPath:       configPath,
-		LoopIntervalSec:  envInt("AGENT_LOOP_INTERVAL_SEC", 1),
+func Load() (Config, error) {
+	configPath := os.Getenv("AGENT_CONFIG_PATH")
+	if configPath == "" {
+		configPath = defaultConfigPath()
 	}
+
+	fileState := loadConfigFile(configPath)
+	envFile := loadDotEnv(defaultEnvPath())
+	fileState.MasterAPIURL = normalizeLegacyURL(fileState.MasterAPIURL, "MASTER_API_URL", "MASTER_API_HTTP_ADDR", envFile)
+	fileState.IngestGatewayURL = normalizeLegacyURL(fileState.IngestGatewayURL, "INGEST_GATEWAY_URL", "INGEST_GATEWAY_HTTP_ADDR", envFile)
+
+	cfg := Config{
+		MasterAPIURL:     strings.TrimRight(valueString([]string{"MASTER_API_URL"}, envFile, fileState.MasterAPIURL, "http://127.0.0.1:8080"), "/"),
+		IngestGatewayURL: strings.TrimRight(valueString([]string{"INGEST_GATEWAY_URL"}, envFile, fileState.IngestGatewayURL, "http://127.0.0.1:8090"), "/"),
+		Region:           valueString([]string{"AGENT_REGION"}, envFile, fileState.Region, "local"),
+		Env:              valueString([]string{"AGENT_ENV"}, envFile, fileState.Env, "dev"),
+		Role:             valueString([]string{"AGENT_ROLE"}, envFile, fileState.Role, "node"),
+		TenantCode:       valueString([]string{"AGENT_TENANT"}, envFile, fileState.TenantCode, ""),
+		ConfigPath:       configPath,
+		LoopIntervalSec:  valueInt("AGENT_LOOP_INTERVAL_SEC", envFile, fileState.LoopIntervalSec, 1),
+	}
+
+	if err := Save(cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
-type persistedState struct {
-	TenantCode string `json:"tenant_code,omitempty"`
+type persistedConfig struct {
+	MasterAPIURL     string
+	IngestGatewayURL string
+	Region           string
+	Env              string
+	Role             string
+	TenantCode       string
+	LoopIntervalSec  int
 }
 
-func SaveTenant(path string, tenantCode string) error {
-	if path == "" || tenantCode == "" {
+func Save(cfg Config) error {
+	if cfg.ConfigPath == "" {
 		return nil
 	}
 
-	state := loadState(path)
-	state.TenantCode = tenantCode
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cfg.ConfigPath), 0o755); err != nil {
 		return err
 	}
 
-	body, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	body = append(body, '\n')
-	return os.WriteFile(path, body, 0o600)
+	body := renderConfigFile(persistedConfig{
+		MasterAPIURL:     cfg.MasterAPIURL,
+		IngestGatewayURL: cfg.IngestGatewayURL,
+		Region:           cfg.Region,
+		Env:              cfg.Env,
+		Role:             cfg.Role,
+		TenantCode:       cfg.TenantCode,
+		LoopIntervalSec:  cfg.LoopIntervalSec,
+	})
+	return os.WriteFile(cfg.ConfigPath, []byte(body), 0o600)
 }
 
-func loadState(path string) persistedState {
+func SaveTenant(path string, tenantCode string) error {
 	if path == "" {
-		return persistedState{}
+		return nil
 	}
 
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return persistedState{}
+	state := loadConfigFile(path)
+	state.TenantCode = tenantCode
+	cfg := Config{
+		MasterAPIURL:     state.MasterAPIURL,
+		IngestGatewayURL: state.IngestGatewayURL,
+		Region:           state.Region,
+		Env:              state.Env,
+		Role:             state.Role,
+		TenantCode:       state.TenantCode,
+		ConfigPath:       path,
+		LoopIntervalSec:  state.LoopIntervalSec,
 	}
-
-	var state persistedState
-	if err := json.Unmarshal(body, &state); err != nil {
-		return persistedState{}
-	}
-	return state
+	return Save(cfg)
 }
 
 func defaultConfigPath() string {
-	dir, err := os.UserConfigDir()
-	if err != nil || dir == "" {
-		return ".gaoming-agent.json"
+	wd, err := os.Getwd()
+	if err != nil || wd == "" {
+		return "agent-config.yaml"
 	}
-	return filepath.Join(dir, "gaoming", "agent.json")
+	return filepath.Join(wd, "agent-config.yaml")
 }
 
-func env(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+func defaultEnvPath() string {
+	wd, err := os.Getwd()
+	if err != nil || wd == "" {
+		return ".env"
+	}
+	return filepath.Join(wd, ".env")
+}
+
+func loadConfigFile(path string) persistedConfig {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return persistedConfig{}
+	}
+
+	var cfg persistedConfig
+	scanner := bufio.NewScanner(strings.NewReader(string(body)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := splitKeyValue(line)
+		if !ok {
+			continue
+		}
+		switch key {
+		case "master_api_url":
+			cfg.MasterAPIURL = value
+		case "ingest_gateway_url":
+			cfg.IngestGatewayURL = value
+		case "region":
+			cfg.Region = value
+		case "env":
+			cfg.Env = value
+		case "role":
+			cfg.Role = value
+		case "tenant_code":
+			cfg.TenantCode = value
+		case "loop_interval_sec":
+			if parsed, err := strconv.Atoi(value); err == nil {
+				cfg.LoopIntervalSec = parsed
+			}
+		}
+	}
+	return cfg
+}
+
+func loadDotEnv(path string) map[string]string {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	values := make(map[string]string)
+	scanner := bufio.NewScanner(strings.NewReader(string(body)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := splitKeyValue(line)
+		if !ok {
+			continue
+		}
+		values[key] = value
+	}
+	return values
+}
+
+func splitKeyValue(line string) (string, string, bool) {
+	line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+	idx := strings.IndexAny(line, "=:")
+	if idx <= 0 {
+		return "", "", false
+	}
+	key := strings.TrimSpace(line[:idx])
+	value := strings.TrimSpace(line[idx+1:])
+	value = strings.Trim(value, `"'`)
+	return key, value, true
+}
+
+func valueString(keys []string, envFile map[string]string, fileValue string, fallback string) string {
+	for _, key := range keys {
+		if value := os.Getenv(key); value != "" {
+			return value
+		}
+		if value := envFile[key]; value != "" {
+			return value
+		}
+	}
+	if fileValue != "" {
+		return fileValue
 	}
 	return fallback
 }
 
-func envInt(key string, fallback int) int {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
+func valueInt(key string, envFile map[string]string, fileValue int, fallback int) int {
+	if value := os.Getenv(key); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			return parsed
+		}
 	}
+	if value := envFile[key]; value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			return parsed
+		}
+	}
+	if fileValue != 0 {
+		return fileValue
+	}
+	return fallback
+}
 
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return fallback
+func renderConfigFile(cfg persistedConfig) string {
+	var b strings.Builder
+	writeYAMLString(&b, "master_api_url", cfg.MasterAPIURL)
+	writeYAMLString(&b, "ingest_gateway_url", cfg.IngestGatewayURL)
+	writeYAMLString(&b, "region", cfg.Region)
+	writeYAMLString(&b, "env", cfg.Env)
+	writeYAMLString(&b, "role", cfg.Role)
+	writeYAMLString(&b, "tenant_code", cfg.TenantCode)
+	fmt.Fprintf(&b, "loop_interval_sec: %d\n", cfg.LoopIntervalSec)
+	return b.String()
+}
+
+func writeYAMLString(b *strings.Builder, key string, value string) {
+	fmt.Fprintf(b, "%s: %s\n", key, strconv.Quote(value))
+}
+
+func normalizeLegacyURL(fileValue string, urlKey string, httpAddrKey string, envFile map[string]string) string {
+	fileValue = strings.TrimRight(fileValue, "/")
+	if fileValue == "" {
+		return ""
 	}
-	return parsed
+	if os.Getenv(urlKey) != "" || envFile[urlKey] != "" {
+		return fileValue
+	}
+	legacy := strings.TrimRight(os.Getenv(httpAddrKey), "/")
+	if legacy == "" {
+		legacy = strings.TrimRight(envFile[httpAddrKey], "/")
+	}
+	if fileValue == legacy {
+		return ""
+	}
+	return fileValue
 }

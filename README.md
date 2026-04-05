@@ -131,6 +131,67 @@ make check
 make compose-config
 ```
 
+## Agent 发布与安装
+
+仓库增加了 GitHub Actions 工作流 [build-agent.yml](/home/u/dev/github.com/gofxq/gaoming/.github/workflows/build-agent.yml)，会自动编译 Linux `amd64` / `arm64` 的 agent。
+
+- 推送到 `main` 时会产出 workflow artifact。
+- 推送 `v*` tag 时会同时发布 release 资产：
+  - `gaoming-agent_linux_amd64.tar.gz`
+  - `gaoming-agent_linux_arm64.tar.gz`
+  - `checksums.txt`
+
+Linux 机器上一键安装为 `systemd` 服务：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.sh | \
+sudo sh -s -- \
+  --master-url https://your-master-api \
+  --ingest-url https://your-ingest-gateway \
+  --region prod \
+  --env prod \
+  --role node
+```
+
+安装脚本是 [install-agent.sh](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent.sh)，默认会：
+
+- 从 GitHub Releases 下载最新 agent 包
+- 安装到 `/opt/gaoming-agent`
+- 写入 `/opt/gaoming-agent/agent-config.yaml`
+- 注册 `gaoming-agent.service`
+- 执行 `systemctl enable --now gaoming-agent`
+
+如果需要指定版本：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.sh | \
+sudo VERSION=v0.1.0 sh -s -- \
+  --master-url https://your-master-api \
+  --ingest-url https://your-ingest-gateway
+```
+
+如果你是在 agent 所在机器上直接拉了仓库代码，希望用本地最新代码重新编译并更新 service，可以用 [install-agent-local.sh](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent-local.sh)：
+
+```bash
+go build -o ./gaoming-agent ./agent/daemon/cmd/agent
+bash ./deployments/install-agent-local.sh --bin ./gaoming-agent
+```
+
+这个脚本会：
+
+- 读取你通过 `--bin` 指定的二进制文件
+- 直接读取当前目录的 `agent-config.yaml`
+- 覆盖安装 `/opt/gaoming-agent/gaoming-agent`
+- 覆盖安装 `/opt/gaoming-agent/agent-config.yaml`
+- 需要时自动使用 `sudo` 安装和重启 service
+- 执行 `systemctl restart gaoming-agent`
+
+因此后续代码更新后，重新 `go build` 一次，再重复执行同一个安装命令就能完成本地升级。也可以直接用：
+
+```bash
+make install-agent-local-service
+```
+
 ## 当前实现范围
 
 当前版本优先让项目“完整跑起来”，因此先实现：
