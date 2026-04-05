@@ -133,7 +133,7 @@
 
     .panel-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+      grid-template-columns: minmax(300px, 1.5fr) minmax(160px, 0.5fr);
       gap: 18px;
       margin-bottom: 20px;
     }
@@ -229,37 +229,88 @@
       padding: 0 20px 20px;
     }
 
-    .chart-stats {
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .metric-panel {
+      display: grid;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .metric-panel-head {
       display: flex;
-      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+    }
+
+    .metric-panel-head strong {
+      font-size: 12px;
+    }
+
+    .metric-panel-head span {
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .metric-panel-body {
+      display: grid;
+      grid-template-columns: 80px minmax(0, 1fr);
       gap: 10px;
-      margin-bottom: 16px;
+      align-items: stretch;
+    }
+
+    .chart-stats {
+      display: grid;
+      width: 100%;
+      grid-template-columns: 1fr;
+      gap: 6px;
     }
 
     .chart-stat {
       display: grid;
-      gap: 4px;
-      min-width: 110px;
-      padding: 12px 14px;
-      border-radius: 18px;
+      gap: 2px;
+      align-content: center;
+      min-height: 34px;
+      padding: 6px 8px;
+      border-radius: 12px;
       border: 1px solid var(--line);
       background: rgba(255, 255, 255, 0.72);
     }
 
     .chart-stat strong {
-      font-size: 20px;
+      font-size: 15px;
       line-height: 1;
     }
 
     .chart-stat small {
       color: var(--muted);
-      font-size: 12px;
+      font-size: 10px;
     }
 
     .chart-frame {
       position: relative;
       height: 280px;
       border-radius: 22px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(15, 118, 110, 0.08), transparent 60%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 250, 245, 0.8));
+      overflow: hidden;
+    }
+
+    .mini-chart-frame {
+      position: relative;
+      border-radius: 2px;
       border: 1px solid var(--line);
       background:
         linear-gradient(180deg, rgba(15, 118, 110, 0.08), transparent 60%),
@@ -445,6 +496,10 @@
       .panel-grid {
         grid-template-columns: 1fr;
       }
+
+      .chart-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 720px) {
@@ -472,6 +527,14 @@
         padding: 0 16px 16px;
       }
 
+      .metric-panel-body {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-stats {
+        grid-template-columns: 1fr;
+      }
+
       th, td {
         padding: 14px 12px;
       }
@@ -484,12 +547,13 @@
       <span class="eyebrow">Live Board</span>
       <h1>所有 Agent 的实时状态</h1>
       <div class="hero-copy">
-        页面通过 SSE 订阅增量事件。首次连接收到全量同步，之后只接收发生变化的 host 更新；agent 默认每秒上报一次，同时为每个 host 保留最近 1 小时的 CPU、内存、磁盘、负载、网络历史，并按时间窗口展示。
+        页面通过 SSE 订阅增量事件。首次连接收到全量同步，之后只接收发生变化的 host 更新；agent 默认每秒上报一次，同时为每个 host 保留最近 1 小时的 CPU、内存、磁盘、负载、网络历史，并在同一个时间窗口里同时展示所有类型数据。
       </div>
       <div class="hero-meta">
         <span class="meta-pill">推送模式 <strong>SSE 增量</strong></span>
         <span class="meta-pill">数据源 <strong>/api/v1/stream/hosts</strong></span>
         <span class="meta-pill" id="stream-state">连接状态: 连接中</span>
+        <span class="meta-pill" id="pause-state">视图状态: 实时</span>
         <span class="meta-pill" id="last-updated">最近刷新: --</span>
       </div>
     </section>
@@ -500,22 +564,21 @@
       <section class="card">
         <div class="card-head">
           <div>
-            <h2 class="card-title">最近负载窗口</h2>
-            <div class="card-subtitle">选择 agent 和时间窗口，查看最近一段时间内的 load1 变化</div>
+            <h2 class="card-title">最近指标窗口</h2>
+            <div class="card-subtitle">选择 agent 和时间窗口，同时查看 CPU、内存、磁盘、负载、网络 RX、网络 TX 的历史变化</div>
           </div>
         </div>
         <div class="control-row">
           <div class="window-group" id="window-buttons"></div>
           <select class="selector" id="host-selector"></select>
-          <select class="selector" id="metric-selector"></select>
           <label class="toggle">
             <input type="checkbox" id="online-only-toggle">
             只看在线 Agent
           </label>
+          <button class="chip" type="button" id="pause-toggle">暂停更新</button>
         </div>
         <div class="chart-wrap">
-          <div class="chart-stats" id="chart-stats"></div>
-          <div class="chart-frame" id="chart-frame"></div>
+          <div class="chart-grid" id="chart-grid"></div>
         </div>
       </section>
 
@@ -540,12 +603,16 @@
             <small>时间窗口</small>
           </div>
           <div class="chart-stat">
-            <strong id="selected-metric-value">负载</strong>
-            <small>指标类型</small>
+            <strong id="visible-metrics-value">6</strong>
+            <small>展示指标数</small>
           </div>
           <div class="chart-stat">
             <strong id="selected-points-value">0</strong>
-            <small>窗口内点数</small>
+            <small>窗口内总点数</small>
+          </div>
+          <div class="chart-stat">
+            <strong id="pending-event-count">0</strong>
+            <small>暂停期间积压</small>
           </div>
         </div>
       </section>
@@ -626,7 +693,11 @@
     let selectedHostUID = "";
     let streamEventCount = 0;
     let onlineOnly = false;
-    let selectedMetricKey = "load1";
+    let paused = false;
+    let pendingEventCount = 0;
+    let pendingSyncPayload = null;
+    let pendingOps = new Map();
+    let latestPendingServerTime = "";
 
     function formatPercent(value) {
       return `${Number(value || 0).toFixed(1)}%`;
@@ -759,6 +830,18 @@
       document.getElementById("stream-state").textContent = `连接状态: ${text}`;
     }
 
+    function updatePauseState() {
+      const button = document.getElementById("pause-toggle");
+      const state = document.getElementById("pause-state");
+      button.textContent = paused ? "恢复更新" : "暂停更新";
+      button.classList.toggle("active", paused);
+      state.textContent = `视图状态: ${paused ? "已暂停" : "实时"}`;
+    }
+
+    function updatePendingCount() {
+      document.getElementById("pending-event-count").textContent = String(pendingEventCount);
+    }
+
     function renderWindowButtons() {
       document.getElementById("window-buttons").innerHTML = windowOptions.map(option => `
         <button class="chip ${option.seconds === selectedWindowSec ? "active" : ""}" data-window="${option.seconds}">
@@ -770,7 +853,7 @@
         button.addEventListener("click", () => {
           selectedWindowSec = Number(button.dataset.window);
           renderWindowButtons();
-          renderLoadChart();
+          renderMetricPanels();
         });
       });
     }
@@ -803,15 +886,6 @@
       `).join("");
     }
 
-    function renderMetricSelector() {
-      const selector = document.getElementById("metric-selector");
-      selector.innerHTML = metricOptions.map(option => `
-        <option value="${option.key}" ${option.key === selectedMetricKey ? "selected" : ""}>
-          ${option.label}
-        </option>
-      `).join("");
-    }
-
     function currentWindowLabel() {
       const found = windowOptions.find(option => option.seconds === selectedWindowSec);
       return found ? found.label : `${selectedWindowSec}s`;
@@ -824,61 +898,23 @@
         .replaceAll(">", "&gt;");
     }
 
-    function renderLoadChart() {
-      ensureSelectedHost();
-      const frame = document.getElementById("chart-frame");
-      const selected = agents.get(selectedHostUID);
-      const hostHistory = histories.get(selectedHostUID) || {};
-      const history = hostHistory[selectedMetricKey] || [];
-      const meta = metricMeta(selectedMetricKey);
-      const now = Date.now();
-      const cutoff = now - selectedWindowSec * 1000;
-      const points = history
+    function getWindowPoints(hostUID, metricKey) {
+      const hostHistory = histories.get(hostUID) || {};
+      const history = hostHistory[metricKey] || [];
+      const cutoff = Date.now() - selectedWindowSec * 1000;
+      return history
         .map(point => ({ ts: new Date(point.ts).getTime(), value: Number(point.value || 0) }))
         .filter(point => Number.isFinite(point.ts) && point.ts >= cutoff)
         .sort((a, b) => a.ts - b.ts);
+    }
 
-      document.getElementById("selected-host-value").textContent = selected ? (selected.hostname || selected.host_uid) : "--";
-      document.getElementById("selected-window-value").textContent = currentWindowLabel();
-      document.getElementById("selected-metric-value").textContent = meta.label;
-      document.getElementById("selected-points-value").textContent = String(points.length);
-
-      if (!selected) {
-        document.getElementById("chart-stats").innerHTML = "";
-        frame.innerHTML = `<div class="chart-empty">当前还没有可展示的 Agent 指标数据</div>`;
-        return;
-      }
-
-      const latest = points.length ? points[points.length - 1].value : meta.source(selected);
-      const max = points.length ? Math.max(...points.map(point => point.value)) : latest;
-      const avg = points.length ? points.reduce((sum, point) => sum + point.value, 0) / points.length : latest;
-
-      document.getElementById("chart-stats").innerHTML = `
-        <div class="chart-stat">
-          <strong>${formatMetricValue(selectedMetricKey, latest)}</strong>
-          <small>当前${meta.label}</small>
-        </div>
-        <div class="chart-stat">
-          <strong>${formatMetricValue(selectedMetricKey, max)}</strong>
-          <small>窗口峰值</small>
-        </div>
-        <div class="chart-stat">
-          <strong>${formatMetricValue(selectedMetricKey, avg)}</strong>
-          <small>窗口均值</small>
-        </div>
-      `;
-
-      if (!points.length) {
-        frame.innerHTML = `<div class="chart-empty">${escapePoints(currentWindowLabel())} 内还没有该 Agent 的 ${escapePoints(meta.label)} 样本</div>`;
-        return;
-      }
-
-      const width = 860;
-      const height = 280;
-      const padLeft = 36;
-      const padRight = 16;
-      const padTop = 18;
-      const padBottom = 28;
+    function buildChartSVG(points, meta) {
+      const width = 520;
+      const height = 180;
+      const padLeft = 34;
+      const padRight = 12;
+      const padTop = 14;
+      const padBottom = 24;
       const plotWidth = width - padLeft - padRight;
       const plotHeight = height - padTop - padBottom;
       const minTs = points[0].ts;
@@ -887,33 +923,87 @@
       const maxValue = Math.max(1, ...points.map(point => point.value)) * 1.15;
       const rangeTs = Math.max(1, maxTs - minTs);
       const rangeValue = Math.max(1, maxValue - minValue);
-
       const linePoints = points.map(point => {
         const x = padLeft + ((point.ts - minTs) / rangeTs) * plotWidth;
         const y = padTop + (1 - ((point.value - minValue) / rangeValue)) * plotHeight;
         return `${x.toFixed(2)},${y.toFixed(2)}`;
       }).join(" ");
-
-      const areaPath = `M ${padLeft} ${padTop + plotHeight} L ${linePoints.replaceAll(" ", " L ")} L ${padLeft + ((points[points.length - 1].ts - minTs) / rangeTs) * plotWidth} ${padTop + plotHeight} Z`;
-      const yTicks = [0, 0.33, 0.66, 1].map(factor => {
+      const endX = padLeft + ((points[points.length - 1].ts - minTs) / rangeTs) * plotWidth;
+      const areaPath = `M ${padLeft} ${padTop + plotHeight} L ${linePoints.replaceAll(" ", " L ")} L ${endX} ${padTop + plotHeight} Z`;
+      const yTicks = [0, 0.5, 1].map(factor => {
         const value = minValue + (maxValue - minValue) * factor;
         const y = padTop + (1 - factor) * plotHeight;
         return { value, y };
       });
 
-      frame.innerHTML = `
-        <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="Load history chart">
+      return `
+        <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="${escapePoints(meta.label)} history chart">
           ${yTicks.map(tick => `
             <line class="grid-line" x1="${padLeft}" y1="${tick.y}" x2="${width - padRight}" y2="${tick.y}"></line>
-            <text class="axis-label" x="${padLeft - 6}" y="${tick.y - 4}" text-anchor="end">${tick.value.toFixed(1)}</text>
+            <text class="axis-label" x="${padLeft - 6}" y="${tick.y - 4}" text-anchor="end">${escapePoints(formatMetricValue(meta.key, tick.value))}</text>
           `).join("")}
           <path class="area" d="${areaPath}"></path>
           <polyline class="line" points="${linePoints}"></polyline>
-          <text class="axis-label" x="${padLeft}" y="${height - 8}">${new Date(minTs).toLocaleTimeString()}</text>
-          <text class="axis-label" x="${width - padRight}" y="${height - 8}" text-anchor="end">${new Date(maxTs).toLocaleTimeString()}</text>
-          <text class="axis-label" x="${width - padRight}" y="${padTop + 12}" text-anchor="end">${meta.label}</text>
+          <text class="axis-label" x="${padLeft}" y="${height - 8}">${escapePoints(new Date(minTs).toLocaleTimeString())}</text>
+          <text class="axis-label" x="${width - padRight}" y="${height - 8}" text-anchor="end">${escapePoints(new Date(maxTs).toLocaleTimeString())}</text>
+          <text class="axis-label" x="${width - padRight}" y="${padTop + 10}" text-anchor="end">${escapePoints(meta.label)}</text>
         </svg>
       `;
+    }
+
+    function renderMetricPanels() {
+      ensureSelectedHost();
+      const frame = document.getElementById("chart-grid");
+      const selected = agents.get(selectedHostUID);
+
+      document.getElementById("selected-host-value").textContent = selected ? (selected.hostname || selected.host_uid) : "--";
+      document.getElementById("selected-window-value").textContent = currentWindowLabel();
+      document.getElementById("visible-metrics-value").textContent = String(metricOptions.length);
+
+      if (!selected) {
+        document.getElementById("selected-points-value").textContent = "0";
+        frame.innerHTML = `<div class="chart-frame"><div class="chart-empty">当前还没有可展示的 Agent 指标数据</div></div>`;
+        return;
+      }
+
+      let totalPoints = 0;
+      frame.innerHTML = metricOptions.map(meta => {
+        const points = getWindowPoints(selectedHostUID, meta.key);
+        totalPoints += points.length;
+        const latest = points.length ? points[points.length - 1].value : meta.source(selected);
+        const peak = points.length ? Math.max(...points.map(point => point.value)) : latest;
+        const avg = points.length ? points.reduce((sum, point) => sum + point.value, 0) / points.length : latest;
+        const chart = points.length
+          ? buildChartSVG(points, meta)
+          : `<div class="chart-empty">${escapePoints(currentWindowLabel())} 内还没有 ${escapePoints(meta.label)} 样本</div>`;
+
+        return `
+          <article class="metric-panel">
+            <div class="metric-panel-head">
+              <strong>${meta.label}</strong>
+              <span>${currentWindowLabel()}</span>
+            </div>
+            <div class="metric-panel-body">
+              <div class="chart-stats">
+                <div class="chart-stat">
+                  <strong>${formatMetricValue(meta.key, latest)}</strong>
+                  <small>当前值</small>
+                </div>
+                <div class="chart-stat">
+                  <strong>${formatMetricValue(meta.key, peak)}</strong>
+                  <small>窗口峰值</small>
+                </div>
+                <div class="chart-stat">
+                  <strong>${formatMetricValue(meta.key, avg)}</strong>
+                  <small>窗口均值</small>
+                </div>
+              </div>
+              <div class="mini-chart-frame">${chart}</div>
+            </div>
+          </article>
+        `;
+      }).join("");
+      document.getElementById("selected-points-value").textContent = String(totalPoints);
     }
 
     function renderAll(serverTime) {
@@ -922,8 +1012,7 @@
       renderSummary(allItems);
       renderTable(items);
       renderHostSelector();
-      renderMetricSelector();
-      renderLoadChart();
+      renderMetricPanels();
       if (serverTime) {
         document.getElementById("last-updated").textContent = `最近刷新: ${new Date(serverTime).toLocaleTimeString()}`;
       }
@@ -932,43 +1021,41 @@
     function attachSelectorListener() {
       document.getElementById("host-selector").addEventListener("change", event => {
         selectedHostUID = event.target.value;
-        renderLoadChart();
-      });
-
-      document.getElementById("metric-selector").addEventListener("change", event => {
-        selectedMetricKey = event.target.value;
-        renderLoadChart();
+        renderMetricPanels();
       });
 
       document.getElementById("online-only-toggle").addEventListener("change", event => {
         onlineOnly = event.target.checked;
         renderAll();
       });
+
+      document.getElementById("pause-toggle").addEventListener("click", () => {
+        paused = !paused;
+        updatePauseState();
+        updateConnectionState(paused ? "已连接，视图已暂停" : "实时推送中");
+        if (!paused) {
+          flushPendingEvents();
+        }
+      });
     }
 
-    function applySync(payload) {
+    function loadSyncPayload(payload) {
       agents.clear();
       histories.clear();
       (payload.items || []).forEach(item => agents.set(item.host_uid, item));
       Object.entries(payload.histories || {}).forEach(([hostUID, metricHistory]) => histories.set(hostUID, metricHistory || {}));
-      streamEventCount += 1;
-      document.getElementById("stream-event-count").textContent = String(streamEventCount);
-      renderAll(payload.server_time);
     }
 
-    function applyHostUpsert(payload) {
+    function mutateHostUpsert(payload) {
       if (!payload.item || !payload.item.host_uid) {
         return;
       }
 
       agents.set(payload.item.host_uid, payload.item);
       histories.set(payload.item.host_uid, payload.history || {});
-      streamEventCount += 1;
-      document.getElementById("stream-event-count").textContent = String(streamEventCount);
-      renderAll(payload.server_time);
     }
 
-    function applyHostDelete(payload) {
+    function mutateHostDelete(payload) {
       if (!payload.host_uid) {
         return;
       }
@@ -978,9 +1065,83 @@
       if (selectedHostUID === payload.host_uid) {
         selectedHostUID = "";
       }
+    }
+
+    function applySync(payload) {
+      loadSyncPayload(payload);
+      renderAll(payload.server_time);
+    }
+
+    function applyHostUpsert(payload) {
+      mutateHostUpsert(payload);
+      renderAll(payload.server_time);
+    }
+
+    function applyHostDelete(payload) {
+      mutateHostDelete(payload);
+      renderAll(payload.server_time);
+    }
+
+    function queuePendingEvent(type, payload) {
+      pendingEventCount += 1;
+      updatePendingCount();
+      latestPendingServerTime = payload.server_time || latestPendingServerTime;
+
+      if (type === "sync") {
+        pendingSyncPayload = payload;
+        pendingOps = new Map();
+        return;
+      }
+
+      const hostUID = type === "host_upsert" ? payload.item && payload.item.host_uid : payload.host_uid;
+      if (!hostUID) {
+        return;
+      }
+      pendingOps.set(hostUID, { type, payload });
+    }
+
+    function flushPendingEvents() {
+      if (pendingSyncPayload) {
+        loadSyncPayload(pendingSyncPayload);
+      }
+
+      pendingOps.forEach(operation => {
+        if (operation.type === "host_upsert") {
+          mutateHostUpsert(operation.payload);
+          return;
+        }
+        mutateHostDelete(operation.payload);
+      });
+
+      if (pendingSyncPayload || pendingOps.size) {
+        renderAll(latestPendingServerTime || (pendingSyncPayload && pendingSyncPayload.server_time) || "");
+      }
+
+      pendingEventCount = 0;
+      pendingSyncPayload = null;
+      pendingOps = new Map();
+      latestPendingServerTime = "";
+      updatePendingCount();
+    }
+
+    function processStreamEvent(type, payload) {
       streamEventCount += 1;
       document.getElementById("stream-event-count").textContent = String(streamEventCount);
-      renderAll(payload.server_time);
+
+      if (paused) {
+        queuePendingEvent(type, payload);
+        return;
+      }
+
+      if (type === "sync") {
+        applySync(payload);
+        return;
+      }
+      if (type === "host_upsert") {
+        applyHostUpsert(payload);
+        return;
+      }
+      applyHostDelete(payload);
     }
 
     function connectStream() {
@@ -991,18 +1152,18 @@
       });
 
       stream.addEventListener("sync", event => {
-        updateConnectionState("实时推送中");
-        applySync(JSON.parse(event.data));
+        updateConnectionState(paused ? "已连接，视图已暂停" : "实时推送中");
+        processStreamEvent("sync", JSON.parse(event.data));
       });
 
       stream.addEventListener("host_upsert", event => {
-        updateConnectionState("实时推送中");
-        applyHostUpsert(JSON.parse(event.data));
+        updateConnectionState(paused ? "已连接，视图已暂停" : "实时推送中");
+        processStreamEvent("host_upsert", JSON.parse(event.data));
       });
 
       stream.addEventListener("host_delete", event => {
-        updateConnectionState("实时推送中");
-        applyHostDelete(JSON.parse(event.data));
+        updateConnectionState(paused ? "已连接，视图已暂停" : "实时推送中");
+        processStreamEvent("host_delete", JSON.parse(event.data));
       });
 
       stream.addEventListener("error", () => {
@@ -1011,6 +1172,8 @@
     }
 
     renderWindowButtons();
+    updatePauseState();
+    updatePendingCount();
     attachSelectorListener();
     connectStream();
   </script>

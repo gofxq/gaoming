@@ -49,7 +49,7 @@ curl http://127.0.0.1:8090/debug/counters
 http://127.0.0.1:8080/
 ```
 
-页面会通过 SSE 接收 `sync / host_upsert / host_delete` 增量事件，实时展示所有 agent 的状态，并支持按时间窗口查看最近一段时间内的负载曲线。
+页面会通过 SSE 接收 `sync / host_upsert / host_delete` 增量事件，实时展示所有 agent 的状态，并支持按时间窗口同时查看 CPU、内存、磁盘、负载、网络 RX、网络 TX 的历史曲线。
 
 默认行为：
 
@@ -70,6 +70,6 @@ http://127.0.0.1:8080/api/v1/stream/hosts
 - 数据库初始化 SQL 会在 PostgreSQL 容器第一次启动时自动执行。
 - 默认 `docker-up` 不会启动容器里的 agent，避免把宿主机测试流程和容器内 agent 混在一起。
 - 当前最推荐的测试方式是宿主机直接运行 `make run-agent`，这样看到的 CPU、内存、负载、网络更接近真实宿主机数据。
-- 宿主机 agent 默认每秒上报一次，页面时间窗口支持 CPU、内存、磁盘、负载、网络 RX、网络 TX。
+- 宿主机 agent 默认每秒上报一次，页面会在同一个时间窗口内同时展示 CPU、内存、磁盘、负载、网络 RX、网络 TX。
 - 当前 `master-api` 还没有把状态写入 PostgreSQL/Redis，首版先保证服务、容器、注册与上报链路全部可跑。
 - 如果要继续向 README 的完整设计演进，下一步是把 `master-api` 和 `core-worker` 的内存存储替换成 PG/Redis/MQ。
