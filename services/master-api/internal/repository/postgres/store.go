@@ -75,7 +75,7 @@ func (s *Store) RegisterAgent(ctx context.Context, req contracts.RegisterAgentRe
 	if hostUID == "" {
 		hostUID = ids.New("host")
 	}
-	tenantID, tenantCode, err := s.resolveTenant(ctx, tx, req.Host.TenantCode)
+	tenantID, tenantCode, err := s.resolveTenantForRegister(ctx, tx, hostUID, req.Host.TenantCode)
 	if err != nil {
 		return state.HostSnapshot{}, contracts.AgentConfig{}, "", err
 	}
@@ -271,7 +271,16 @@ WHERE fingerprint = $3 AND tenant_id = $4
 	return err
 }
 
-func (s *Store) resolveTenant(ctx context.Context, q querier, tenantCode string) (int64, string, error) {
+func (s *Store) resolveTenantForRegister(ctx context.Context, q querier, hostUID string, tenantCode string) (int64, string, error) {
+	if tenantCode == "" {
+		existingTenantCode, err := s.lookupTenantCodeByHostUID(ctx, q, hostUID)
+		if err != nil {
+			return 0, "", err
+		}
+		if existingTenantCode != "" {
+			tenantCode = existingTenantCode
+		}
+	}
 	if tenantCode == "" {
 		tenantCode = ids.New("tenant")
 	}
@@ -287,6 +296,23 @@ RETURNING id
 		return 0, "", err
 	}
 	return tenantID, tenantCode, nil
+}
+
+func (s *Store) lookupTenantCodeByHostUID(ctx context.Context, q querier, hostUID string) (string, error) {
+	var tenantCode string
+	err := q.QueryRow(ctx, `
+SELECT t.tenant_code
+FROM hosts h
+JOIN tenants t ON t.id = h.tenant_id
+WHERE h.host_uid = $1
+`, hostUID).Scan(&tenantCode)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return "", nil
+		}
+		return "", err
+	}
+	return tenantCode, nil
 }
 
 func (s *Store) upsertHost(ctx context.Context, q querier, tenantID int64, hostUID string, req contracts.RegisterAgentRequest, now time.Time) (int64, error) {

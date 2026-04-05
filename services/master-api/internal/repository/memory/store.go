@@ -30,6 +30,7 @@ type MaintenanceWindow struct {
 type Store struct {
 	mu          sync.RWMutex
 	hosts       map[string]state.HostSnapshot
+	hostTenants map[string]string
 	histories   map[string]map[state.MetricKey][]state.MetricPoint
 	configs     map[string]contracts.AgentConfig
 	maintenance []MaintenanceWindow
@@ -39,11 +40,12 @@ type Store struct {
 
 func NewStore() *Store {
 	return &Store{
-		hosts:     make(map[string]state.HostSnapshot),
-		histories: make(map[string]map[state.MetricKey][]state.MetricPoint),
-		configs:   make(map[string]contracts.AgentConfig),
-		alertAcks: make(map[string]string),
-		watchers:  make(map[string]chan []state.HostSnapshot),
+		hosts:       make(map[string]state.HostSnapshot),
+		hostTenants: make(map[string]string),
+		histories:   make(map[string]map[state.MetricKey][]state.MetricPoint),
+		configs:     make(map[string]contracts.AgentConfig),
+		alertAcks:   make(map[string]string),
+		watchers:    make(map[string]chan []state.HostSnapshot),
 	}
 }
 
@@ -55,6 +57,11 @@ func (s *Store) RegisterAgent(req contracts.RegisterAgentRequest, now time.Time)
 		hostUID = ids.New("host")
 	}
 	tenantCode := req.Host.TenantCode
+	if tenantCode == "" {
+		if existing := s.hostTenants[hostUID]; existing != "" {
+			tenantCode = existing
+		}
+	}
 	if tenantCode == "" {
 		tenantCode = ids.New("tenant")
 	}
@@ -79,6 +86,7 @@ func (s *Store) RegisterAgent(req contracts.RegisterAgentRequest, now time.Time)
 	snapshot.Version++
 
 	s.hosts[hostUID] = snapshot
+	s.hostTenants[hostUID] = tenantCode
 	if _, ok := s.histories[hostUID]; !ok {
 		s.histories[hostUID] = make(map[state.MetricKey][]state.MetricPoint)
 	}
