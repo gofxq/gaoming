@@ -155,12 +155,6 @@ func (a *Agent) pushHeartbeat(ctx context.Context, now time.Time, digest contrac
 	return nil
 }
 
-func (a *Agent) pushMetrics(ctx context.Context) error {
-	now := time.Now().UTC()
-	digest := a.digest(now)
-	return a.pushMetricsWithDigest(ctx, now, digest)
-}
-
 func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest contracts.AgentDigest) error {
 	a.metricSeq++
 	payload := contracts.PushMetricBatchRequest{

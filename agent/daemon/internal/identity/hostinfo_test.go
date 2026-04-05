@@ -5,13 +5,11 @@ import "testing"
 func TestStableHostUIDIsDeterministic(t *testing.T) {
 	got1 := stableHostUID(
 		"node-a",
-		"10.0.0.10",
 		"machine-123",
 		[]string{"00:11:22:33:44:55", "66:77:88:99:aa:bb"},
 	)
 	got2 := stableHostUID(
 		"node-a",
-		"10.0.0.10",
 		"machine-123",
 		[]string{"00:11:22:33:44:55", "66:77:88:99:aa:bb"},
 	)
@@ -27,13 +25,11 @@ func TestStableHostUIDIsDeterministic(t *testing.T) {
 func TestStableHostUIDChangesWithFingerprint(t *testing.T) {
 	got1 := stableHostUID(
 		"node-a",
-		"10.0.0.10",
 		"machine-123",
 		[]string{"00:11:22:33:44:55"},
 	)
 	got2 := stableHostUID(
 		"node-a",
-		"10.0.0.10",
 		"machine-456",
 		[]string{"00:11:22:33:44:55"},
 	)
@@ -44,7 +40,7 @@ func TestStableHostUIDChangesWithFingerprint(t *testing.T) {
 }
 
 func TestStableHostUIDFallsBackWithoutMachineIDOrMAC(t *testing.T) {
-	got := stableHostUID("node-a", "10.0.0.10", "", nil)
+	got := stableHostUID("node-a", "", nil)
 	if got == "" {
 		t.Fatal("expected fallback host uid")
 	}

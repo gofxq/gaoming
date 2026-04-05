@@ -24,7 +24,7 @@ func Discover(region string, env string, role string) contracts.HostIdentity {
 		primaryIP = ips[0]
 	}
 
-	hostUID := stableHostUID(hostname, primaryIP, machineID(), listMACs())
+	hostUID := stableHostUID(hostname, machineID(), listMACs())
 
 	return contracts.HostIdentity{
 		HostUID:   hostUID,
@@ -100,7 +100,7 @@ func machineID() string {
 	return ""
 }
 
-func stableHostUID(hostname string, primaryIP string, machineID string, macs []string) string {
+func stableHostUID(hostname string, machineID string, macs []string) string {
 	parts := make([]string, 0, 5+len(macs))
 	if machineID != "" {
 		parts = append(parts, "machine-id="+machineID)
@@ -113,9 +113,6 @@ func stableHostUID(hostname string, primaryIP string, machineID string, macs []s
 	if len(parts) == 0 {
 		if hostname != "" {
 			parts = append(parts, "hostname="+hostname)
-		}
-		if primaryIP != "" {
-			parts = append(parts, "primary-ip="+primaryIP)
 		}
 		parts = append(parts, "os="+runtime.GOOS, "arch="+runtime.GOARCH)
 	}

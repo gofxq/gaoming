@@ -6,6 +6,8 @@ services:
       POSTGRES_DB: gaoming
       POSTGRES_USER: gaoming
       POSTGRES_PASSWORD: gaoming
+    ports:
+      - "35432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deployments/sql/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
@@ -18,6 +20,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: gaoming-redis
+    ports:
+      - "36379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
