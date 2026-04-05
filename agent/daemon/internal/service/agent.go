@@ -105,15 +105,18 @@ func (a *Agent) register(ctx context.Context) error {
 }
 
 func (a *Agent) sendCycle(ctx context.Context) {
-	if err := a.pushMetrics(ctx); err != nil {
+	now := time.Now().UTC()
+	digest := a.digest(now)
+
+	if err := a.pushMetricsWithDigest(ctx, now, digest); err != nil {
 		a.logger.Error("push metrics failed", "error", err)
 	}
-	if err := a.pushHeartbeat(ctx); err != nil {
+	if err := a.pushHeartbeat(ctx, now, digest); err != nil {
 		a.logger.Error("push heartbeat failed", "error", err)
 	}
 }
 
-func (a *Agent) pushHeartbeat(ctx context.Context) error {
+func (a *Agent) pushHeartbeat(ctx context.Context, now time.Time, digest contracts.AgentDigest) error {
 	if a.hostUID == "" {
 		if err := a.register(ctx); err != nil {
 			return err
@@ -125,8 +128,8 @@ func (a *Agent) pushHeartbeat(ctx context.Context) error {
 		HostUID: a.hostUID,
 		AgentID: a.agentID,
 		Seq:     a.hbSeq,
-		TS:      time.Now().UTC(),
-		Digest:  a.digest(time.Now().UTC()),
+		TS:      now,
+		Digest:  digest,
 	}
 
 	var resp contracts.HeartbeatResponse
@@ -144,9 +147,13 @@ func (a *Agent) pushHeartbeat(ctx context.Context) error {
 }
 
 func (a *Agent) pushMetrics(ctx context.Context) error {
-	a.metricSeq++
 	now := time.Now().UTC()
 	digest := a.digest(now)
+	return a.pushMetricsWithDigest(ctx, now, digest)
+}
+
+func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest contracts.AgentDigest) error {
+	a.metricSeq++
 	payload := contracts.PushMetricBatchRequest{
 		HostUID:     a.hostUID,
 		AgentID:     a.agentID,
@@ -158,6 +165,8 @@ func (a *Agent) pushMetrics(ctx context.Context) error {
 			{Name: "host_cpu_usage_pct", Value: digest.CPUUsagePct, TS: now},
 			{Name: "host_mem_used_pct", Value: digest.MemUsedPct, TS: now},
 			{Name: "host_disk_used_pct", Value: digest.DiskUsedPct, TS: now},
+			{Name: "host_disk_read_bps", Value: float64(digest.DiskReadBPS), TS: now},
+			{Name: "host_disk_write_bps", Value: float64(digest.DiskWriteBPS), TS: now},
 			{Name: "host_load1", Value: digest.Load1, TS: now},
 			{Name: "host_net_rx_bps", Value: float64(digest.NetRxBPS), TS: now},
 			{Name: "host_net_tx_bps", Value: float64(digest.NetTxBPS), TS: now},
@@ -178,6 +187,8 @@ func (a *Agent) digest(now time.Time) contracts.AgentDigest {
 		CPUUsagePct:        metrics.CPUUsagePct,
 		MemUsedPct:         metrics.MemUsedPct,
 		DiskUsedPct:        metrics.DiskUsedPct,
+		DiskReadBPS:        metrics.DiskReadBPS,
+		DiskWriteBPS:       metrics.DiskWriteBPS,
 		Load1:              metrics.Load1,
 		NetRxBPS:           metrics.NetRxBPS,
 		NetTxBPS:           metrics.NetTxBPS,

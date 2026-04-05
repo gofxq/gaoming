@@ -547,7 +547,7 @@
       <span class="eyebrow">Live Board</span>
       <h1>所有 Agent 的实时状态</h1>
       <div class="hero-copy">
-        页面通过 SSE 订阅增量事件。首次连接收到全量同步，之后只接收发生变化的 host 更新；agent 默认每秒上报一次，同时为每个 host 保留最近 1 小时的 CPU、内存、磁盘、负载、网络历史，并在同一个时间窗口里同时展示所有类型数据。
+        页面通过 SSE 订阅增量事件。首次连接收到全量同步，之后只接收发生变化的 host 更新；agent 默认每秒上报一次，同时为每个 host 保留最近 1 小时的 CPU、内存、磁盘用量、磁盘读写、负载、网络历史，并在同一个时间窗口里同时展示所有类型数据。
       </div>
       <div class="hero-meta">
         <span class="meta-pill">推送模式 <strong>SSE 增量</strong></span>
@@ -565,7 +565,7 @@
         <div class="card-head">
           <div>
             <h2 class="card-title">最近指标窗口</h2>
-            <div class="card-subtitle">选择 agent 和时间窗口，同时查看 CPU、内存、磁盘、负载、网络 RX、网络 TX 的历史变化</div>
+            <div class="card-subtitle">选择 agent 和时间窗口，同时查看 CPU、内存、磁盘用量、磁盘读写、负载、网络 RX、网络 TX 的历史变化</div>
           </div>
         </div>
         <div class="control-row">
@@ -681,7 +681,9 @@
     const metricOptions = [
       { key: "cpu_usage_pct", label: "CPU", unit: "%", source: item => Number(item.cpu_usage_pct || 0) },
       { key: "mem_used_pct", label: "内存", unit: "%", source: item => Number(item.mem_used_pct || 0) },
-      { key: "disk_used_pct", label: "磁盘", unit: "%", source: item => Number(item.disk_used_pct || 0) },
+      { key: "disk_used_pct", label: "磁盘用量", unit: "%", source: item => Number(item.disk_used_pct || 0) },
+      { key: "disk_read_bps", label: "磁盘读", unit: "B/s", source: item => Number(item.disk_read_bps || 0) },
+      { key: "disk_write_bps", label: "磁盘写", unit: "B/s", source: item => Number(item.disk_write_bps || 0) },
       { key: "load1", label: "负载", unit: "", source: item => Number(item.load1 || 0) },
       { key: "net_rx_bps", label: "网络 RX", unit: "B/s", source: item => Number(item.net_rx_bps || 0) },
       { key: "net_tx_bps", label: "网络 TX", unit: "B/s", source: item => Number(item.net_tx_bps || 0) }
@@ -721,6 +723,8 @@
         case "mem_used_pct":
         case "disk_used_pct":
           return formatPercent(num);
+        case "disk_read_bps":
+        case "disk_write_bps":
         case "net_rx_bps":
         case "net_tx_bps":
           return formatBps(num);

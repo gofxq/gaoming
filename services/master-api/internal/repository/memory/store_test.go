@@ -70,7 +70,7 @@ func TestSubscribeGetsSnapshots(t *testing.T) {
 	}
 }
 
-func TestHeartbeatStoresLoadHistory(t *testing.T) {
+func TestHeartbeatStoresMetricHistory(t *testing.T) {
 	store := NewStore()
 	now := time.Now().UTC()
 
@@ -84,7 +84,9 @@ func TestHeartbeatStoresLoadHistory(t *testing.T) {
 	_, _, err := store.Heartbeat(contracts.HeartbeatRequest{
 		HostUID: snapshot.HostUID,
 		Digest: contracts.AgentDigest{
-			Load1: 2.5,
+			Load1:        2.5,
+			DiskReadBPS:  1024,
+			DiskWriteBPS: 2048,
 		},
 	}, now.Add(5*time.Second))
 	if err != nil {
@@ -98,6 +100,14 @@ func TestHeartbeatStoresLoadHistory(t *testing.T) {
 	}
 	if loadPoints[0].Value != 2.5 {
 		t.Fatalf("expected load value 2.5, got %v", loadPoints[0].Value)
+	}
+
+	readPoints := history[state.MetricDiskReadBPS]
+	if len(readPoints) != 1 {
+		t.Fatalf("expected one disk read sample, got %d", len(readPoints))
+	}
+	if readPoints[0].Value != 1024 {
+		t.Fatalf("expected disk read value 1024, got %v", readPoints[0].Value)
 	}
 }
 

@@ -34,6 +34,8 @@ type AgentDigest struct {
 	CPUUsagePct        float64 `json:"cpu_usage_pct"`
 	MemUsedPct         float64 `json:"mem_used_pct"`
 	DiskUsedPct        float64 `json:"disk_used_pct"`
+	DiskReadBPS        int64   `json:"disk_read_bps"`
+	DiskWriteBPS       int64   `json:"disk_write_bps"`
 	Load1              float64 `json:"load1"`
 	NetRxBPS           int64   `json:"net_rx_bps"`
 	NetTxBPS           int64   `json:"net_tx_bps"`

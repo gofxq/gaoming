@@ -99,6 +99,8 @@ func (s *Store) Heartbeat(req contracts.HeartbeatRequest, now time.Time) (state.
 	snapshot.CPUUsagePct = req.Digest.CPUUsagePct
 	snapshot.MemUsedPct = req.Digest.MemUsedPct
 	snapshot.DiskUsedPct = req.Digest.DiskUsedPct
+	snapshot.DiskReadBPS = req.Digest.DiskReadBPS
+	snapshot.DiskWriteBPS = req.Digest.DiskWriteBPS
 	snapshot.Load1 = req.Digest.Load1
 	snapshot.NetRxBPS = req.Digest.NetRxBPS
 	snapshot.NetTxBPS = req.Digest.NetTxBPS
@@ -110,6 +112,8 @@ func (s *Store) Heartbeat(req contracts.HeartbeatRequest, now time.Time) (state.
 	s.recordMetricLocked(req.HostUID, state.MetricCPUUsagePct, now, snapshot.CPUUsagePct)
 	s.recordMetricLocked(req.HostUID, state.MetricMemUsedPct, now, snapshot.MemUsedPct)
 	s.recordMetricLocked(req.HostUID, state.MetricDiskUsedPct, now, snapshot.DiskUsedPct)
+	s.recordMetricLocked(req.HostUID, state.MetricDiskReadBPS, now, float64(snapshot.DiskReadBPS))
+	s.recordMetricLocked(req.HostUID, state.MetricDiskWriteBPS, now, float64(snapshot.DiskWriteBPS))
 	s.recordMetricLocked(req.HostUID, state.MetricLoad1, now, snapshot.Load1)
 	s.recordMetricLocked(req.HostUID, state.MetricNetRxBPS, now, float64(snapshot.NetRxBPS))
 	s.recordMetricLocked(req.HostUID, state.MetricNetTxBPS, now, float64(snapshot.NetTxBPS))
