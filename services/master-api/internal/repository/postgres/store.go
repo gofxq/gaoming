@@ -446,32 +446,45 @@ func (s *Store) upsertHeartbeatStatus(ctx context.Context, q querier, hostID int
 	_, err := q.Exec(ctx, `
 INSERT INTO host_status_current (
 	host_id, agent_state, reachability_state, service_state, overall_state,
-	cpu_usage_pct, mem_used_pct, disk_used_pct, disk_read_bps, disk_write_bps,
-	load1, net_rx_bps, net_tx_bps, last_agent_seen_at, last_metric_at, version, updated_at
+	cpu_usage_pct, mem_used_pct, mem_available_bytes, swap_used_pct, disk_used_pct,
+	disk_free_bytes, disk_inodes_used_pct, disk_read_bps, disk_write_bps, disk_read_iops,
+	disk_write_iops, load1, net_rx_bps, net_tx_bps, net_rx_packets_ps, net_tx_packets_ps,
+	last_agent_seen_at, last_metric_at, version, updated_at
 )
 VALUES (
 	$1, $2, $3, $4, $5,
 	$6, $7, $8, $9, $10,
-	$11, $12, $13, $14, $14, 1, $14
+	$11, $12, $13, $14, $15,
+	$16, $17, $18, $19, $20, $21,
+	$22, $22, 1, $22
 )
 ON CONFLICT (host_id) DO UPDATE SET
 	agent_state = EXCLUDED.agent_state,
 	overall_state = EXCLUDED.overall_state,
 	cpu_usage_pct = EXCLUDED.cpu_usage_pct,
 	mem_used_pct = EXCLUDED.mem_used_pct,
+	mem_available_bytes = EXCLUDED.mem_available_bytes,
+	swap_used_pct = EXCLUDED.swap_used_pct,
 	disk_used_pct = EXCLUDED.disk_used_pct,
+	disk_free_bytes = EXCLUDED.disk_free_bytes,
+	disk_inodes_used_pct = EXCLUDED.disk_inodes_used_pct,
 	disk_read_bps = EXCLUDED.disk_read_bps,
 	disk_write_bps = EXCLUDED.disk_write_bps,
+	disk_read_iops = EXCLUDED.disk_read_iops,
+	disk_write_iops = EXCLUDED.disk_write_iops,
 	load1 = EXCLUDED.load1,
 	net_rx_bps = EXCLUDED.net_rx_bps,
 	net_tx_bps = EXCLUDED.net_tx_bps,
+	net_rx_packets_ps = EXCLUDED.net_rx_packets_ps,
+	net_tx_packets_ps = EXCLUDED.net_tx_packets_ps,
 	last_agent_seen_at = EXCLUDED.last_agent_seen_at,
 	last_metric_at = EXCLUDED.last_metric_at,
 	version = host_status_current.version + 1,
 	updated_at = EXCLUDED.updated_at
 `, hostID, int(state.Up), int(state.Unknown), int(state.Unknown), int(state.Up),
-		req.Digest.CPUUsagePct, req.Digest.MemUsedPct, req.Digest.DiskUsedPct, req.Digest.DiskReadBPS, req.Digest.DiskWriteBPS,
-		req.Digest.Load1, req.Digest.NetRxBPS, req.Digest.NetTxBPS, now)
+		req.Digest.CPUUsagePct, req.Digest.MemUsedPct, req.Digest.MemAvailableBytes, req.Digest.SwapUsedPct, req.Digest.DiskUsedPct,
+		req.Digest.DiskFreeBytes, req.Digest.DiskInodesUsedPct, req.Digest.DiskReadBPS, req.Digest.DiskWriteBPS, req.Digest.DiskReadIOPS,
+		req.Digest.DiskWriteIOPS, req.Digest.Load1, req.Digest.NetRxBPS, req.Digest.NetTxBPS, req.Digest.NetRxPacketsPS, req.Digest.NetTxPacketsPS, now)
 	return err
 }
 
@@ -501,12 +514,20 @@ SELECT
 	COALESCE(hsc.overall_state, 0),
 	COALESCE(hsc.cpu_usage_pct::float8, 0),
 	COALESCE(hsc.mem_used_pct::float8, 0),
+	COALESCE(hsc.mem_available_bytes, 0),
+	COALESCE(hsc.swap_used_pct::float8, 0),
 	COALESCE(hsc.disk_used_pct::float8, 0),
+	COALESCE(hsc.disk_free_bytes, 0),
+	COALESCE(hsc.disk_inodes_used_pct::float8, 0),
 	COALESCE(hsc.disk_read_bps, 0),
 	COALESCE(hsc.disk_write_bps, 0),
+	COALESCE(hsc.disk_read_iops, 0),
+	COALESCE(hsc.disk_write_iops, 0),
 	COALESCE(hsc.load1::float8, 0),
 	COALESCE(hsc.net_rx_bps, 0),
 	COALESCE(hsc.net_tx_bps, 0),
+	COALESCE(hsc.net_rx_packets_ps, 0),
+	COALESCE(hsc.net_tx_packets_ps, 0),
 	hsc.last_agent_seen_at,
 	hsc.last_metric_at,
 	hsc.last_probe_at,
@@ -563,12 +584,20 @@ func scanSnapshot(rows pgx.Rows) (state.HostSnapshot, error) {
 		&overallState,
 		&item.CPUUsagePct,
 		&item.MemUsedPct,
+		&item.MemAvailableBytes,
+		&item.SwapUsedPct,
 		&item.DiskUsedPct,
+		&item.DiskFreeBytes,
+		&item.DiskInodesUsedPct,
 		&item.DiskReadBPS,
 		&item.DiskWriteBPS,
+		&item.DiskReadIOPS,
+		&item.DiskWriteIOPS,
 		&item.Load1,
 		&item.NetRxBPS,
 		&item.NetTxBPS,
+		&item.NetRxPacketsPS,
+		&item.NetTxPacketsPS,
 		&lastAgentSeenAt,
 		&lastMetricAt,
 		&lastProbeAt,

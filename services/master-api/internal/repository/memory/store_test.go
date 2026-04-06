@@ -31,7 +31,10 @@ func TestRegisterAndHeartbeat(t *testing.T) {
 	updated, _, err := store.Heartbeat(contracts.HeartbeatRequest{
 		HostUID: snapshot.HostUID,
 		Digest: contracts.AgentDigest{
-			CPUUsagePct: 23,
+			CPUUsagePct:       23,
+			MemAvailableBytes: 1024,
+			DiskReadIOPS:      15,
+			NetTxPacketsPS:    99,
 		},
 	}, time.Now().UTC())
 	if err != nil {
@@ -39,6 +42,15 @@ func TestRegisterAndHeartbeat(t *testing.T) {
 	}
 	if updated.CPUUsagePct != 23 {
 		t.Fatalf("expected cpu usage to be updated, got %v", updated.CPUUsagePct)
+	}
+	if updated.MemAvailableBytes != 1024 {
+		t.Fatalf("expected mem available bytes to be updated, got %v", updated.MemAvailableBytes)
+	}
+	if updated.DiskReadIOPS != 15 {
+		t.Fatalf("expected disk read iops to be updated, got %v", updated.DiskReadIOPS)
+	}
+	if updated.NetTxPacketsPS != 99 {
+		t.Fatalf("expected net tx packets to be updated, got %v", updated.NetTxPacketsPS)
 	}
 }
 
@@ -87,9 +99,11 @@ func TestHeartbeatStoresMetricHistory(t *testing.T) {
 	_, _, err := store.Heartbeat(contracts.HeartbeatRequest{
 		HostUID: snapshot.HostUID,
 		Digest: contracts.AgentDigest{
-			Load1:        2.5,
-			DiskReadBPS:  1024,
-			DiskWriteBPS: 2048,
+			Load1:          2.5,
+			DiskReadBPS:    1024,
+			DiskWriteBPS:   2048,
+			DiskReadIOPS:   12,
+			NetRxPacketsPS: 33,
 		},
 	}, now.Add(5*time.Second))
 	if err != nil {
@@ -111,6 +125,22 @@ func TestHeartbeatStoresMetricHistory(t *testing.T) {
 	}
 	if readPoints[0].Value != 1024 {
 		t.Fatalf("expected disk read value 1024, got %v", readPoints[0].Value)
+	}
+
+	readIOPSPoints := history[state.MetricDiskReadIOPS]
+	if len(readIOPSPoints) != 1 {
+		t.Fatalf("expected one disk read iops sample, got %d", len(readIOPSPoints))
+	}
+	if readIOPSPoints[0].Value != 12 {
+		t.Fatalf("expected disk read iops value 12, got %v", readIOPSPoints[0].Value)
+	}
+
+	rxPacketPoints := history[state.MetricNetRxPacketsPS]
+	if len(rxPacketPoints) != 1 {
+		t.Fatalf("expected one net rx packets sample, got %d", len(rxPacketPoints))
+	}
+	if rxPacketPoints[0].Value != 33 {
+		t.Fatalf("expected net rx packets value 33, got %v", rxPacketPoints[0].Value)
 	}
 }
 

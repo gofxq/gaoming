@@ -34,12 +34,20 @@ type AgentMetadata struct {
 type AgentDigest struct {
 	CPUUsagePct        float64 `json:"cpu_usage_pct"`
 	MemUsedPct         float64 `json:"mem_used_pct"`
+	MemAvailableBytes  int64   `json:"mem_available_bytes"`
+	SwapUsedPct        float64 `json:"swap_used_pct"`
 	DiskUsedPct        float64 `json:"disk_used_pct"`
+	DiskFreeBytes      int64   `json:"disk_free_bytes"`
+	DiskInodesUsedPct  float64 `json:"disk_inodes_used_pct"`
 	DiskReadBPS        int64   `json:"disk_read_bps"`
 	DiskWriteBPS       int64   `json:"disk_write_bps"`
+	DiskReadIOPS       int64   `json:"disk_read_iops"`
+	DiskWriteIOPS      int64   `json:"disk_write_iops"`
 	Load1              float64 `json:"load1"`
 	NetRxBPS           int64   `json:"net_rx_bps"`
 	NetTxBPS           int64   `json:"net_tx_bps"`
+	NetRxPacketsPS     int64   `json:"net_rx_packets_ps"`
+	NetTxPacketsPS     int64   `json:"net_tx_packets_ps"`
 	QueueDepth         int64   `json:"queue_depth"`
 	LastMetricBatchSeq int64   `json:"last_metric_batch_seq"`
 }

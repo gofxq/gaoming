@@ -33,7 +33,16 @@ func TestLoadReadsDotEnvAndWritesAgentConfigYAML(t *testing.T) {
 	if cfg.MasterAPIURL != "http://example-master:8080" {
 		t.Fatalf("unexpected master api url: %q", cfg.MasterAPIURL)
 	}
-	if cfg.ConfigPath != filepath.Join(dir, "agent-config.yaml") {
+	expectedPath := filepath.Join(dir, "agent-config.yaml")
+	resolvedExpectedPath, err := filepath.EvalSymlinks(expectedPath)
+	if err != nil {
+		resolvedExpectedPath = expectedPath
+	}
+	resolvedConfigPath, err := filepath.EvalSymlinks(cfg.ConfigPath)
+	if err != nil {
+		resolvedConfigPath = cfg.ConfigPath
+	}
+	if resolvedConfigPath != resolvedExpectedPath {
 		t.Fatalf("unexpected config path: %q", cfg.ConfigPath)
 	}
 

@@ -99,12 +99,20 @@ make docker-down
 
 - CPU
 - 内存
+- 可用内存
+- Swap
 - 磁盘用量
+- 磁盘剩余
+- inode 用量
 - 磁盘读
 - 磁盘写
+- 磁盘读 IOPS
+- 磁盘写 IOPS
 - 负载
 - 网络 RX
 - 网络 TX
+- 网络收包
+- 网络发包
 
 如果你只是想保留容器里跑 agent 的对比入口：
 
@@ -237,6 +245,13 @@ make install-agent-local-service
 - `core-worker`：合并后的后台 worker 占位。
 - `probe-worker`：周期性 HTTP 探测并上报结果。
 - `agent`：自动注册、上报 heartbeat 和 metric batch。
+
+## TODO
+
+- React 看板的 16 个指标已补齐，但旧的 embed 页 [ui_index.html](/Volumes/afs/dev/github.com/gofxq/gaoming/services/master-api/internal/transport/http/ui_index.html) 还没同步。
+- 第二梯队指标暂缓：`net_rx_errors_ps`、`net_tx_errors_ps`、`load5`、`uptime_seconds`。
+- 数据库兼容当前仍依赖重建本地库或手工执行 `ALTER TABLE`，还没有正式迁移机制。
+- `ingest-gateway` 仍只接收并 ack metric batch，尚未对新增指标做持久化或下游消费。
 
 当前版本里，`master-api` 负责主机当前状态和页面输出，`ingest-gateway` 负责写入接入，`probe-worker` 负责主动探测，`core-worker` 仍是后续状态引擎、告警引擎和调度逻辑的预留位置。
 

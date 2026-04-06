@@ -93,12 +93,22 @@ message EventRecord {
 message AgentDigest {
   double cpu_usage_pct = 1;
   double mem_used_pct = 2;
-  double disk_used_pct = 3;
-  double load1 = 4;
-  int64 net_rx_bps = 5;
-  int64 net_tx_bps = 6;
-  int64 queue_depth = 7;
-  int64 last_metric_batch_seq = 8;
+  int64 mem_available_bytes = 3;
+  double swap_used_pct = 4;
+  double disk_used_pct = 5;
+  int64 disk_free_bytes = 6;
+  double disk_inodes_used_pct = 7;
+  int64 disk_read_bps = 8;
+  int64 disk_write_bps = 9;
+  int64 disk_read_iops = 10;
+  int64 disk_write_iops = 11;
+  double load1 = 12;
+  int64 net_rx_bps = 13;
+  int64 net_tx_bps = 14;
+  int64 net_rx_packets_ps = 15;
+  int64 net_tx_packets_ps = 16;
+  int64 queue_depth = 17;
+  int64 last_metric_batch_seq = 18;
 }
 
 message AlertBrief {
@@ -120,16 +130,26 @@ message HostStatus {
 
   double cpu_usage_pct = 9;
   double mem_used_pct = 10;
-  double disk_used_pct = 11;
-  double load1 = 12;
-  int64 net_rx_bps = 13;
-  int64 net_tx_bps = 14;
+  int64 mem_available_bytes = 11;
+  double swap_used_pct = 12;
+  double disk_used_pct = 13;
+  int64 disk_free_bytes = 14;
+  double disk_inodes_used_pct = 15;
+  int64 disk_read_bps = 16;
+  int64 disk_write_bps = 17;
+  int64 disk_read_iops = 18;
+  int64 disk_write_iops = 19;
+  double load1 = 20;
+  int64 net_rx_bps = 21;
+  int64 net_tx_bps = 22;
+  int64 net_rx_packets_ps = 23;
+  int64 net_tx_packets_ps = 24;
 
-  google.protobuf.Timestamp last_agent_seen_at = 15;
-  google.protobuf.Timestamp last_metric_at = 16;
-  google.protobuf.Timestamp last_probe_at = 17;
-  int32 open_alert_count = 18;
-  map<string, string> labels = 19;
-  repeated AlertBrief alerts = 20;
-  int64 version = 21;
+  google.protobuf.Timestamp last_agent_seen_at = 25;
+  google.protobuf.Timestamp last_metric_at = 26;
+  google.protobuf.Timestamp last_probe_at = 27;
+  int32 open_alert_count = 28;
+  map<string, string> labels = 29;
+  repeated AlertBrief alerts = 30;
+  int64 version = 31;
 }

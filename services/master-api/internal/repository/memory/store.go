@@ -110,12 +110,20 @@ func (s *Store) Heartbeat(req contracts.HeartbeatRequest, now time.Time) (state.
 	snapshot.OverallState = state.Up
 	snapshot.CPUUsagePct = req.Digest.CPUUsagePct
 	snapshot.MemUsedPct = req.Digest.MemUsedPct
+	snapshot.MemAvailableBytes = req.Digest.MemAvailableBytes
+	snapshot.SwapUsedPct = req.Digest.SwapUsedPct
 	snapshot.DiskUsedPct = req.Digest.DiskUsedPct
+	snapshot.DiskFreeBytes = req.Digest.DiskFreeBytes
+	snapshot.DiskInodesUsedPct = req.Digest.DiskInodesUsedPct
 	snapshot.DiskReadBPS = req.Digest.DiskReadBPS
 	snapshot.DiskWriteBPS = req.Digest.DiskWriteBPS
+	snapshot.DiskReadIOPS = req.Digest.DiskReadIOPS
+	snapshot.DiskWriteIOPS = req.Digest.DiskWriteIOPS
 	snapshot.Load1 = req.Digest.Load1
 	snapshot.NetRxBPS = req.Digest.NetRxBPS
 	snapshot.NetTxBPS = req.Digest.NetTxBPS
+	snapshot.NetRxPacketsPS = req.Digest.NetRxPacketsPS
+	snapshot.NetTxPacketsPS = req.Digest.NetTxPacketsPS
 	snapshot.LastAgentSeenAt = now
 	snapshot.LastMetricAt = now
 	snapshot.Version++
@@ -123,12 +131,20 @@ func (s *Store) Heartbeat(req contracts.HeartbeatRequest, now time.Time) (state.
 	s.hosts[req.HostUID] = snapshot
 	s.recordMetricLocked(req.HostUID, state.MetricCPUUsagePct, now, snapshot.CPUUsagePct)
 	s.recordMetricLocked(req.HostUID, state.MetricMemUsedPct, now, snapshot.MemUsedPct)
+	s.recordMetricLocked(req.HostUID, state.MetricMemAvailableBytes, now, float64(snapshot.MemAvailableBytes))
+	s.recordMetricLocked(req.HostUID, state.MetricSwapUsedPct, now, snapshot.SwapUsedPct)
 	s.recordMetricLocked(req.HostUID, state.MetricDiskUsedPct, now, snapshot.DiskUsedPct)
+	s.recordMetricLocked(req.HostUID, state.MetricDiskFreeBytes, now, float64(snapshot.DiskFreeBytes))
+	s.recordMetricLocked(req.HostUID, state.MetricDiskInodesUsedPct, now, snapshot.DiskInodesUsedPct)
 	s.recordMetricLocked(req.HostUID, state.MetricDiskReadBPS, now, float64(snapshot.DiskReadBPS))
 	s.recordMetricLocked(req.HostUID, state.MetricDiskWriteBPS, now, float64(snapshot.DiskWriteBPS))
+	s.recordMetricLocked(req.HostUID, state.MetricDiskReadIOPS, now, float64(snapshot.DiskReadIOPS))
+	s.recordMetricLocked(req.HostUID, state.MetricDiskWriteIOPS, now, float64(snapshot.DiskWriteIOPS))
 	s.recordMetricLocked(req.HostUID, state.MetricLoad1, now, snapshot.Load1)
 	s.recordMetricLocked(req.HostUID, state.MetricNetRxBPS, now, float64(snapshot.NetRxBPS))
 	s.recordMetricLocked(req.HostUID, state.MetricNetTxBPS, now, float64(snapshot.NetTxBPS))
+	s.recordMetricLocked(req.HostUID, state.MetricNetRxPacketsPS, now, float64(snapshot.NetRxPacketsPS))
+	s.recordMetricLocked(req.HostUID, state.MetricNetTxPacketsPS, now, float64(snapshot.NetTxPacketsPS))
 	watchers, items := s.snapshotWatchersLocked()
 	s.mu.Unlock()
 	s.broadcast(watchers, items)

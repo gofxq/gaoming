@@ -145,13 +145,21 @@ func latestMetricPointsFromSnapshot(snapshot state.HostSnapshot) map[state.Metri
 
 	ts := snapshot.LastMetricAt.UTC()
 	return map[state.MetricKey]state.MetricPoint{
-		state.MetricCPUUsagePct:  {TS: ts, Value: snapshot.CPUUsagePct},
-		state.MetricMemUsedPct:   {TS: ts, Value: snapshot.MemUsedPct},
-		state.MetricDiskUsedPct:  {TS: ts, Value: snapshot.DiskUsedPct},
-		state.MetricDiskReadBPS:  {TS: ts, Value: float64(snapshot.DiskReadBPS)},
-		state.MetricDiskWriteBPS: {TS: ts, Value: float64(snapshot.DiskWriteBPS)},
-		state.MetricLoad1:        {TS: ts, Value: snapshot.Load1},
-		state.MetricNetRxBPS:     {TS: ts, Value: float64(snapshot.NetRxBPS)},
-		state.MetricNetTxBPS:     {TS: ts, Value: float64(snapshot.NetTxBPS)},
+		state.MetricCPUUsagePct:       {TS: ts, Value: snapshot.CPUUsagePct},
+		state.MetricMemUsedPct:        {TS: ts, Value: snapshot.MemUsedPct},
+		state.MetricMemAvailableBytes: {TS: ts, Value: float64(snapshot.MemAvailableBytes)},
+		state.MetricSwapUsedPct:       {TS: ts, Value: snapshot.SwapUsedPct},
+		state.MetricDiskUsedPct:       {TS: ts, Value: snapshot.DiskUsedPct},
+		state.MetricDiskFreeBytes:     {TS: ts, Value: float64(snapshot.DiskFreeBytes)},
+		state.MetricDiskInodesUsedPct: {TS: ts, Value: snapshot.DiskInodesUsedPct},
+		state.MetricDiskReadBPS:       {TS: ts, Value: float64(snapshot.DiskReadBPS)},
+		state.MetricDiskWriteBPS:      {TS: ts, Value: float64(snapshot.DiskWriteBPS)},
+		state.MetricDiskReadIOPS:      {TS: ts, Value: float64(snapshot.DiskReadIOPS)},
+		state.MetricDiskWriteIOPS:     {TS: ts, Value: float64(snapshot.DiskWriteIOPS)},
+		state.MetricLoad1:             {TS: ts, Value: snapshot.Load1},
+		state.MetricNetRxBPS:          {TS: ts, Value: float64(snapshot.NetRxBPS)},
+		state.MetricNetTxBPS:          {TS: ts, Value: float64(snapshot.NetTxBPS)},
+		state.MetricNetRxPacketsPS:    {TS: ts, Value: float64(snapshot.NetRxPacketsPS)},
+		state.MetricNetTxPacketsPS:    {TS: ts, Value: float64(snapshot.NetTxPacketsPS)},
 	}
 }

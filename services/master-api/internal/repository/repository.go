@@ -62,14 +62,22 @@ type OperationsStore interface {
 
 func DigestMetricValues(digest contracts.AgentDigest) map[state.MetricKey]float64 {
 	return map[state.MetricKey]float64{
-		state.MetricCPUUsagePct:  digest.CPUUsagePct,
-		state.MetricMemUsedPct:   digest.MemUsedPct,
-		state.MetricDiskUsedPct:  digest.DiskUsedPct,
-		state.MetricDiskReadBPS:  float64(digest.DiskReadBPS),
-		state.MetricDiskWriteBPS: float64(digest.DiskWriteBPS),
-		state.MetricLoad1:        digest.Load1,
-		state.MetricNetRxBPS:     float64(digest.NetRxBPS),
-		state.MetricNetTxBPS:     float64(digest.NetTxBPS),
+		state.MetricCPUUsagePct:       digest.CPUUsagePct,
+		state.MetricMemUsedPct:        digest.MemUsedPct,
+		state.MetricMemAvailableBytes: float64(digest.MemAvailableBytes),
+		state.MetricSwapUsedPct:       digest.SwapUsedPct,
+		state.MetricDiskUsedPct:       digest.DiskUsedPct,
+		state.MetricDiskFreeBytes:     float64(digest.DiskFreeBytes),
+		state.MetricDiskInodesUsedPct: digest.DiskInodesUsedPct,
+		state.MetricDiskReadBPS:       float64(digest.DiskReadBPS),
+		state.MetricDiskWriteBPS:      float64(digest.DiskWriteBPS),
+		state.MetricDiskReadIOPS:      float64(digest.DiskReadIOPS),
+		state.MetricDiskWriteIOPS:     float64(digest.DiskWriteIOPS),
+		state.MetricLoad1:             digest.Load1,
+		state.MetricNetRxBPS:          float64(digest.NetRxBPS),
+		state.MetricNetTxBPS:          float64(digest.NetTxBPS),
+		state.MetricNetRxPacketsPS:    float64(digest.NetRxPacketsPS),
+		state.MetricNetTxPacketsPS:    float64(digest.NetTxPacketsPS),
 	}
 }
 
@@ -77,11 +85,19 @@ func MetricKeys() []state.MetricKey {
 	return []state.MetricKey{
 		state.MetricCPUUsagePct,
 		state.MetricMemUsedPct,
+		state.MetricMemAvailableBytes,
+		state.MetricSwapUsedPct,
 		state.MetricDiskUsedPct,
+		state.MetricDiskFreeBytes,
+		state.MetricDiskInodesUsedPct,
 		state.MetricDiskReadBPS,
 		state.MetricDiskWriteBPS,
+		state.MetricDiskReadIOPS,
+		state.MetricDiskWriteIOPS,
 		state.MetricLoad1,
 		state.MetricNetRxBPS,
 		state.MetricNetTxBPS,
+		state.MetricNetRxPacketsPS,
+		state.MetricNetTxPacketsPS,
 	}
 }

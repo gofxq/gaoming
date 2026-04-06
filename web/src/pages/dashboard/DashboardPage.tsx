@@ -378,7 +378,7 @@ function MetricChart(props: { metricKey: MetricKey; points: Array<{ ts: number; 
     .join(" ");
 
   const endX = padX + ((props.points[props.points.length - 1].ts - minTs) / rangeTs) * plotWidth;
-  const areaPath = `M ${padX} ${padY + plotHeight} L ${linePoints.replaceAll(" ", " L ")} L ${endX} ${padY + plotHeight} Z`;
+  const areaPath = `M ${padX} ${padY + plotHeight} L ${linePoints.split(" ").join(" L ")} L ${endX} ${padY + plotHeight} Z`;
 
   return (
     <div className="chart-frame">
