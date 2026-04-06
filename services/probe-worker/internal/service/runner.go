@@ -111,5 +111,16 @@ func (r *Runner) report(ctx context.Context, result contracts.ProbeResult) {
 	}
 	defer resp.Body.Close()
 
-	r.logger.Info("probe cycle complete", "success", result.Success, "status_code", result.StatusCode, "latency_ms", result.LatencyMS)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		r.logger.Error("probe report rejected", "status", resp.Status, "report_url", r.cfg.ReportURL)
+		return
+	}
+
+	r.logger.Info(
+		"probe cycle complete",
+		"success", result.Success,
+		"status_code", result.StatusCode,
+		"latency_ms", result.LatencyMS,
+		"report_url", r.cfg.ReportURL,
+	)
 }

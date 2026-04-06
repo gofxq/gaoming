@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: proxyTarget
         ? {
-            "/api/v1": {
+            "/master": {
               target: proxyTarget,
               changeOrigin: true,
               secure: true,

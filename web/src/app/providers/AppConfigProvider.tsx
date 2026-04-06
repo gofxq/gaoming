@@ -25,8 +25,14 @@ function trimTrailingSlash(value: string) {
 const apiOrigin = trimTrailingSlash(import.meta.env.VITE_API_ORIGIN || "");
 
 const defaultConfig: AppConfig = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || (apiOrigin ? `${apiOrigin}/api/v1` : "/api/v1"),
-  streamPath: import.meta.env.VITE_STREAM_PATH || (apiOrigin ? `${apiOrigin}/api/v1/stream/hosts` : "/api/v1/stream/hosts"),
+  apiBaseUrl:
+    import.meta.env.VITE_API_BASE_URL ||
+    (apiOrigin ? `${apiOrigin}/master/api/v1` : "/master/api/v1"),
+  streamPath:
+    import.meta.env.VITE_STREAM_PATH ||
+    (apiOrigin
+      ? `${apiOrigin}/master/api/v1/stream/hosts`
+      : "/master/api/v1/stream/hosts"),
 };
 
 export function AppConfigProvider({ children }: PropsWithChildren) {

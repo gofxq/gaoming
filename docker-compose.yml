@@ -50,7 +50,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/master/healthz >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -70,7 +70,7 @@ services:
       master-api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/healthz >/dev/null"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/ingest/healthz >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -98,8 +98,8 @@ services:
         SERVICE_PATH: ./services/probe-worker/cmd/worker
     container_name: gaoming-probe-worker
     environment:
-      PROBE_TARGET_URL: http://master-api:8080/healthz
-      PROBE_REPORT_URL: http://ingest-gateway:8090/api/v1/probes
+      PROBE_TARGET_URL: http://master-api:8080/master/healthz
+      PROBE_REPORT_URL: http://ingest-gateway:8090/ingest/api/v1/probes
       PROBE_REGION: local-docker
       PROBE_INTERVAL_SEC: 10
     depends_on:

@@ -11,7 +11,7 @@ export default defineConfig(function (_a) {
             port: 5173,
             proxy: proxyTarget
                 ? {
-                    "/api/v1": {
+                    "/master": {
                         target: proxyTarget,
                         changeOrigin: true,
                         secure: true,

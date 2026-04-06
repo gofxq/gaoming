@@ -18,23 +18,23 @@ proto 契约仍然保留在：
 
 ### `master-api`
 
-- `GET /`
-- `GET /healthz`
-- `POST /api/v1/agents/register`
-- `POST /api/v1/agents/heartbeat`
-- `GET /api/v1/hosts`
-- `GET /api/v1/hosts/{host_uid}`
-- `GET /api/v1/stream/hosts`
-- `POST /api/v1/ops/maintenance`
-- `POST /api/v1/ops/alerts/{alert_id}/ack`
+- `GET /master/`
+- `GET /master/healthz`
+- `POST /master/api/v1/agents/register`
+- `POST /master/api/v1/agents/heartbeat`
+- `GET /master/api/v1/hosts`
+- `GET /master/api/v1/hosts/{host_uid}`
+- `GET /master/api/v1/stream/hosts`
+- `POST /master/api/v1/ops/maintenance`
+- `POST /master/api/v1/ops/alerts/{alert_id}/ack`
 
 ### `ingest-gateway`
 
-- `GET /healthz`
-- `POST /api/v1/metrics`
-- `POST /api/v1/events`
-- `POST /api/v1/probes`
-- `GET /debug/counters`
+- `GET /ingest/healthz`
+- `POST /ingest/api/v1/metrics`
+- `POST /ingest/api/v1/events`
+- `POST /ingest/api/v1/probes`
+- `GET /ingest/debug/counters`
 
 ## 核心数据契约
 

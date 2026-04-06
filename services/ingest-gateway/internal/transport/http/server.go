@@ -18,11 +18,11 @@ func NewServer(svc *service.Service) *Server {
 
 func (s *Server) Handler() nethttp.Handler {
 	mux := nethttp.NewServeMux()
-	mux.HandleFunc("/healthz", s.handleHealth)
-	mux.HandleFunc("/api/v1/metrics", s.handleMetrics)
-	mux.HandleFunc("/api/v1/events", s.handleEvents)
-	mux.HandleFunc("/api/v1/probes", s.handleProbes)
-	mux.HandleFunc("/debug/counters", s.handleCounters)
+	mux.HandleFunc("/ingest/healthz", s.handleHealth)
+	mux.HandleFunc("/ingest/api/v1/metrics", s.handleMetrics)
+	mux.HandleFunc("/ingest/api/v1/events", s.handleEvents)
+	mux.HandleFunc("/ingest/api/v1/probes", s.handleProbes)
+	mux.HandleFunc("/ingest/debug/counters", s.handleCounters)
 	return mux
 }
 

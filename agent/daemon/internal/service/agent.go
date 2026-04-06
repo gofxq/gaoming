@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gofxq/gaoming/pkg/contracts"
@@ -96,7 +97,7 @@ func (a *Agent) register(ctx context.Context) error {
 	}
 
 	var resp contracts.RegisterAgentResponse
-	if err := a.postJSON(ctx, a.cfg.MasterAPIURL+"/api/v1/agents/register", payload, &resp); err != nil {
+	if err := a.postJSON(ctx, masterAPIURL(a.cfg.MasterAPIURL, "agents/register"), payload, &resp); err != nil {
 		return fmt.Errorf("register agent: %w", err)
 	}
 
@@ -142,7 +143,7 @@ func (a *Agent) pushHeartbeat(ctx context.Context, now time.Time, digest contrac
 	}
 
 	var resp contracts.HeartbeatResponse
-	if err := a.postJSON(ctx, a.cfg.MasterAPIURL+"/api/v1/agents/heartbeat", payload, &resp); err != nil {
+	if err := a.postJSON(ctx, masterAPIURL(a.cfg.MasterAPIURL, "agents/heartbeat"), payload, &resp); err != nil {
 		var apiErr apiError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
 			a.logger.Warn("heartbeat target missing on server, re-registering", "host_uid", a.hostUID)
@@ -185,11 +186,35 @@ func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest
 	}
 
 	var resp contracts.AckResponse
-	if err := a.postJSON(ctx, a.cfg.IngestGatewayURL+"/api/v1/metrics", payload, &resp); err != nil {
+	if err := a.postJSON(ctx, ingestAPIURL(a.cfg.IngestGatewayURL, "metrics"), payload, &resp); err != nil {
 		return err
 	}
 	a.logger.Info("metrics sent", "host_uid", a.hostUID, "batch_seq", a.metricSeq)
 	return nil
+}
+
+func masterAPIURL(base string, endpoint string) string {
+	return serviceAPIURL(base, "/master", "/master/api/v1", endpoint)
+}
+
+func ingestAPIURL(base string, endpoint string) string {
+	return serviceAPIURL(base, "/ingest", "/ingest/api/v1", endpoint)
+}
+
+func serviceAPIURL(base string, servicePrefix string, apiPrefix string, endpoint string) string {
+	base = strings.TrimRight(base, "/")
+	endpoint = strings.TrimLeft(endpoint, "/")
+
+	switch {
+	case strings.HasSuffix(base, apiPrefix):
+		return base + "/" + endpoint
+	case strings.HasSuffix(base, servicePrefix):
+		return base + strings.TrimPrefix(apiPrefix, servicePrefix) + "/" + endpoint
+	case strings.HasSuffix(base, "/api/v1"):
+		return base + "/" + endpoint
+	default:
+		return base + apiPrefix + "/" + endpoint
+	}
 }
 
 func (a *Agent) digest(now time.Time) contracts.AgentDigest {

@@ -21,15 +21,15 @@ func NewServer(svc *service.Service) *Server {
 
 func (s *Server) Handler() nethttp.Handler {
 	mux := nethttp.NewServeMux()
-	mux.HandleFunc("/", s.handleDashboard)
-	mux.HandleFunc("/healthz", s.handleHealth)
-	mux.HandleFunc("/api/v1/stream/hosts", s.handleHostStream)
-	mux.HandleFunc("/api/v1/agents/register", s.handleRegisterAgent)
-	mux.HandleFunc("/api/v1/agents/heartbeat", s.handleHeartbeat)
-	mux.HandleFunc("/api/v1/hosts", s.handleListHosts)
-	mux.HandleFunc("/api/v1/hosts/", s.handleGetHost)
-	mux.HandleFunc("/api/v1/ops/maintenance", s.handleCreateMaintenance)
-	mux.HandleFunc("/api/v1/ops/alerts/", s.handleAckAlert)
+	mux.HandleFunc("/master/", s.handleDashboard)
+	mux.HandleFunc("/master/healthz", s.handleHealth)
+	mux.HandleFunc("/master/api/v1/stream/hosts", s.handleHostStream)
+	mux.HandleFunc("/master/api/v1/agents/register", s.handleRegisterAgent)
+	mux.HandleFunc("/master/api/v1/agents/heartbeat", s.handleHeartbeat)
+	mux.HandleFunc("/master/api/v1/hosts", s.handleListHosts)
+	mux.HandleFunc("/master/api/v1/hosts/", s.handleGetHost)
+	mux.HandleFunc("/master/api/v1/ops/maintenance", s.handleCreateMaintenance)
+	mux.HandleFunc("/master/api/v1/ops/alerts/", s.handleAckAlert)
 	return mux
 }
 
@@ -104,7 +104,7 @@ func (s *Server) handleGetHost(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	hostUID := strings.TrimPrefix(r.URL.Path, "/api/v1/hosts/")
+	hostUID := strings.TrimPrefix(r.URL.Path, "/master/api/v1/hosts/")
 	if hostUID == "" {
 		httpx.Error(w, nethttp.StatusBadRequest, "missing host uid")
 		return
@@ -150,7 +150,7 @@ func (s *Server) handleAckAlert(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/ops/alerts/")
+	path := strings.TrimPrefix(r.URL.Path, "/master/api/v1/ops/alerts/")
 	alertID := strings.TrimSuffix(path, "/ack")
 	if alertID == "" || !strings.HasSuffix(r.URL.Path, "/ack") {
 		httpx.Error(w, nethttp.StatusBadRequest, "invalid alert ack path")

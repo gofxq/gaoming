@@ -14,7 +14,7 @@ func (s *Server) handleDashboard(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	if r.URL.Path != "/" && r.URL.Path != "/ui/agents" {
+	if r.URL.Path != "/master/" && r.URL.Path != "/master/ui/agents" {
 		nethttp.NotFound(w, r)
 		return
 	}
