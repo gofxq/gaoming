@@ -6,6 +6,7 @@ export default defineConfig(function (_a) {
     var proxyTarget = env.VITE_PROXY_TARGET || env.VITE_API_ORIGIN || "http://localhost:8080/";
     return {
         plugins: [react()],
+        publicDir: "favicon",
         server: {
             host: "0.0.0.0",
             port: 5173,

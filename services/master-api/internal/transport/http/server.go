@@ -21,7 +21,6 @@ func NewServer(svc *service.Service) *Server {
 
 func (s *Server) Handler() nethttp.Handler {
 	mux := nethttp.NewServeMux()
-	mux.HandleFunc("/master/", s.handleDashboard)
 	mux.HandleFunc("/master/healthz", s.handleHealth)
 	mux.HandleFunc("/master/api/v1/stream/hosts", s.handleHostStream)
 	mux.HandleFunc("/master/api/v1/agents/register", s.handleRegisterAgent)

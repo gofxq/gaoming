@@ -18,7 +18,6 @@ proto 契约仍然保留在：
 
 ### `master-api`
 
-- `GET /master/`
 - `GET /master/healthz`
 - `POST /master/api/v1/agents/register`
 - `POST /master/api/v1/agents/heartbeat`
