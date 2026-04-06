@@ -30,7 +30,7 @@ Options:
   --service-group <name>           Linux service group, default: gaoming-agent
   --master-url <url>               Default: https://gm-metric.gofxq.com/
   --ingest-url <url>               Default: https://gm-metric.gofxq.com/
-  --tenant <code>                  Default: random generated tenant
+  --tenant <code>                  Default: empty, server generates tenant
   --loop-interval-sec <seconds>    Default: 5
   --region <name>                  Default: local
   --env <name>                     Default: prod
@@ -80,14 +80,6 @@ detect_arch() {
     aarch64|arm64) echo "arm64" ;;
     *) echo "unsupported architecture: $ARCH_RAW" >&2; exit 1 ;;
   esac
-}
-
-generate_tenant() {
-  suffix="$(od -An -N6 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || true)"
-  if [ -z "$suffix" ]; then
-    suffix="$(date +%s)"
-  fi
-  echo "tenant-${suffix}"
 }
 
 sha256_check() {
@@ -144,10 +136,6 @@ case "$OS" in
     exit 1
     ;;
 esac
-
-if [ -z "$AGENT_TENANT" ]; then
-  AGENT_TENANT="$(generate_tenant)"
-fi
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM

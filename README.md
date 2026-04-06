@@ -150,7 +150,7 @@ make compose-config
 - `master_api_url`: `https://gm-metric.gofxq.com/`
 - `ingest_gateway_url`: `https://gm-metric.gofxq.com/`
 - `loop_interval_sec`: `5`
-- `tenant_code`: 如果不指定会自动随机生成
+- `tenant_code`: 如果不指定则传空，由服务端生成
 
 Linux / macOS 一键安装：
 

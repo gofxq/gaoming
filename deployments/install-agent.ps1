@@ -29,15 +29,8 @@ function Resolve-Arch {
   }
 }
 
-function New-TenantCode {
-  "tenant-" + ([guid]::NewGuid().ToString("N").Substring(0, 12))
-}
-
 Assert-Admin
 $arch = Resolve-Arch
-if ([string]::IsNullOrWhiteSpace($TenantCode)) {
-  $TenantCode = New-TenantCode
-}
 
 $asset = "gaoming-agent_windows_${arch}.zip"
 $tmpDir = Join-Path $env:TEMP ("gaoming-agent-" + [guid]::NewGuid().ToString("N"))
