@@ -133,41 +133,77 @@ make compose-config
 
 ## Agent 发布与安装
 
-仓库增加了 GitHub Actions 工作流 [build-agent.yml](/home/u/dev/github.com/gofxq/gaoming/.github/workflows/build-agent.yml)，会自动编译 Linux `amd64` / `arm64` 的 agent。
+仓库增加了 GitHub Actions 工作流 [build-agent.yml](/home/u/dev/github.com/gofxq/gaoming/.github/workflows/build-agent.yml)，会自动编译 Linux、Darwin、Windows 的 agent。
 
 - 推送到 `main` 时会产出 workflow artifact。
 - 推送 `v*` tag 时会同时发布 release 资产：
   - `gaoming-agent_linux_amd64.tar.gz`
   - `gaoming-agent_linux_arm64.tar.gz`
+  - `gaoming-agent_darwin_amd64.tar.gz`
+  - `gaoming-agent_darwin_arm64.tar.gz`
+  - `gaoming-agent_windows_amd64.zip`
+  - `gaoming-agent_windows_arm64.zip`
   - `checksums.txt`
 
-Linux 机器上一键安装为 `systemd` 服务：
+默认安装参数：
+
+- `master_api_url`: `https://gm-metric.gofxq.com/`
+- `ingest_gateway_url`: `https://gm-metric.gofxq.com/`
+- `loop_interval_sec`: `5`
+- `tenant_code`: 如果不指定会自动随机生成
+
+Linux / macOS 一键安装：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.sh | \
 sudo sh -s -- \
-  --master-url https://your-master-api \
-  --ingest-url https://your-ingest-gateway \
-  --region prod \
-  --env prod \
-  --role node
+  --master-url https://gm-metric.gofxq.com/ \
+  --ingest-url https://gm-metric.gofxq.com/ \
+  --loop-interval-sec 5
 ```
 
-安装脚本是 [install-agent.sh](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent.sh)，默认会：
+Linux 上会安装成 `systemd` 服务，macOS 上会安装成 `launchd` 服务。安装脚本是 [install-agent.sh](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent.sh)。
+
+Windows 一键安装：
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.ps1 -UseBasicParsing | iex"
+```
+
+Windows 会注册为开机启动计划任务，脚本在 [install-agent.ps1](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent.ps1)。
+
+卸载：
+
+Linux / macOS：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/uninstall-agent.sh | \
+sudo sh
+```
+
+Windows：
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/uninstall-agent.ps1 -UseBasicParsing | iex"
+```
+
+远程安装脚本默认会：
 
 - 从 GitHub Releases 下载最新 agent 包
-- 安装到 `/opt/gaoming-agent`
-- 写入 `/opt/gaoming-agent/agent-config.yaml`
-- 注册 `gaoming-agent.service`
-- 执行 `systemctl enable --now gaoming-agent`
+- Linux 安装到 `/opt/gaoming-agent`
+- macOS 安装到 `/usr/local/gaoming-agent`
+- Windows 安装到 `%ProgramFiles%\GaomingAgent`
+- 写入安装目录下的 `agent-config.yaml`
+- 注册对应平台的开机自启动服务
 
 如果需要指定版本：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.sh | \
 sudo VERSION=v0.1.0 sh -s -- \
-  --master-url https://your-master-api \
-  --ingest-url https://your-ingest-gateway
+  --tenant tenant-custom \
+  --master-url https://gm-metric.gofxq.com/ \
+  --ingest-url https://gm-metric.gofxq.com/
 ```
 
 如果你是在 agent 所在机器上直接拉了仓库代码，希望用本地最新代码重新编译并更新 service，可以用 [install-agent-local.sh](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent-local.sh)：

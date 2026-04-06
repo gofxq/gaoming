@@ -31,30 +31,55 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build Linux agent archives
+      - name: Build agent archives
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
 
-          for arch in amd64 arm64; do
-            out_dir="dist/gaoming-agent_linux_${arch}"
+          build_tar() {
+            goos="$1"
+            goarch="$2"
+            name="gaoming-agent_${goos}_${goarch}"
+            out_dir="dist/${name}"
             mkdir -p "${out_dir}"
-            CGO_ENABLED=0 GOOS=linux GOARCH="${arch}" go build \
+            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build \
               -trimpath \
               -ldflags="-s -w" \
               -o "${out_dir}/gaoming-agent" \
               ./agent/daemon/cmd/agent
-            tar -C "${out_dir}" -czf "dist/gaoming-agent_linux_${arch}.tar.gz" gaoming-agent
+            tar -C "${out_dir}" -czf "dist/${name}.tar.gz" gaoming-agent
             rm -rf "${out_dir}"
-          done
+          }
 
-          sha256sum dist/gaoming-agent_linux_*.tar.gz > dist/checksums.txt
+          build_zip() {
+            goos="$1"
+            goarch="$2"
+            name="gaoming-agent_${goos}_${goarch}"
+            out_dir="dist/${name}"
+            mkdir -p "${out_dir}"
+            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build \
+              -trimpath \
+              -ldflags="-s -w" \
+              -o "${out_dir}/gaoming-agent.exe" \
+              ./agent/daemon/cmd/agent
+            (cd "${out_dir}" && zip -q "../${name}.zip" "gaoming-agent.exe")
+            rm -rf "${out_dir}"
+          }
+
+          build_tar linux amd64
+          build_tar linux arm64
+          build_tar darwin amd64
+          build_tar darwin arm64
+          build_zip windows amd64
+          build_zip windows arm64
+
+          sha256sum dist/gaoming-agent_* > dist/checksums.txt
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gaoming-agent-linux
+          name: gaoming-agent-release-assets
           path: dist/*
 
       - name: Publish release assets
@@ -64,5 +89,9 @@ jobs:
           files: |
             dist/gaoming-agent_linux_amd64.tar.gz
             dist/gaoming-agent_linux_arm64.tar.gz
+            dist/gaoming-agent_darwin_amd64.tar.gz
+            dist/gaoming-agent_darwin_arm64.tar.gz
+            dist/gaoming-agent_windows_amd64.zip
+            dist/gaoming-agent_windows_arm64.zip
             dist/checksums.txt
           generate_release_notes: true

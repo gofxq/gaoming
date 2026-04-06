@@ -547,7 +547,7 @@
       <span class="eyebrow">Live Board</span>
       <h1>所有 Agent 的实时状态</h1>
       <div class="hero-copy">
-        页面通过 SSE 订阅增量事件。首次连接收到全量同步，之后只接收发生变化的 host 更新；agent 默认每秒上报一次，同时为每个 host 保留最近 1 小时的 CPU、内存、磁盘用量、磁盘读写、负载、网络历史，并在同一个时间窗口里同时展示所有类型数据。
+        页面通过 SSE 订阅增量事件。首次连接和后续 host 变化都只接收各指标的最新一个点，不再推送历史全量窗口；agent 默认每秒上报一次，页面会在浏览器内按最近 1 小时窗口持续累积 CPU、内存、磁盘用量、磁盘读写、负载、网络数据，并在同一个时间窗口里同时展示所有类型数据。
       </div>
       <div class="hero-meta">
         <span class="meta-pill">推送模式 <strong>SSE 增量</strong></span>
@@ -895,6 +895,10 @@
       return found ? found.label : `${selectedWindowSec}s`;
     }
 
+    function maxWindowSeconds() {
+      return windowOptions.reduce((max, option) => Math.max(max, Number(option.seconds || 0)), selectedWindowSec);
+    }
+
     function escapePoints(value) {
       return String(value)
         .replaceAll("&", "&amp;")
@@ -1048,6 +1052,49 @@
       histories.clear();
       (payload.items || []).forEach(item => agents.set(item.host_uid, item));
       Object.entries(payload.histories || {}).forEach(([hostUID, metricHistory]) => histories.set(hostUID, metricHistory || {}));
+      Object.entries(payload.latest || {}).forEach(([hostUID, latestPoints]) => {
+        mergeLatestHistory(hostUID, latestPoints || {});
+      });
+    }
+
+    function normalizeMetricPoint(point) {
+      if (!point) {
+        return null;
+      }
+
+      const ts = new Date(point.ts).getTime();
+      const value = Number(point.value || 0);
+      if (!Number.isFinite(ts) || !Number.isFinite(value)) {
+        return null;
+      }
+
+      return {
+        ts: new Date(ts).toISOString(),
+        value
+      };
+    }
+
+    function mergeLatestHistory(hostUID, latestPoints) {
+      const nextHistory = { ...(histories.get(hostUID) || {}) };
+      const cutoff = Date.now() - maxWindowSeconds() * 1000;
+
+      Object.entries(latestPoints || {}).forEach(([metricKey, point]) => {
+        const normalized = normalizeMetricPoint(point);
+        if (!normalized) {
+          return;
+        }
+
+        const merged = (nextHistory[metricKey] || [])
+          .filter(existing => new Date(existing.ts).getTime() !== new Date(normalized.ts).getTime());
+        merged.push(normalized);
+        merged.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+        nextHistory[metricKey] = merged.filter(existing => {
+          const ts = new Date(existing.ts).getTime();
+          return Number.isFinite(ts) && ts >= cutoff;
+        });
+      });
+
+      histories.set(hostUID, nextHistory);
     }
 
     function mutateHostUpsert(payload) {
@@ -1056,7 +1103,11 @@
       }
 
       agents.set(payload.item.host_uid, payload.item);
-      histories.set(payload.item.host_uid, payload.history || {});
+      if (payload.history) {
+        histories.set(payload.item.host_uid, payload.history || {});
+        return;
+      }
+      mergeLatestHistory(payload.item.host_uid, payload.latest || {});
     }
 
     function mutateHostDelete(payload) {

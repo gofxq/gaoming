@@ -11,15 +11,15 @@ import (
 )
 
 type hostSyncPayload struct {
-	Items      []state.HostSnapshot                               `json:"items"`
-	Histories  map[string]map[state.MetricKey][]state.MetricPoint `json:"histories"`
-	ServerTime time.Time                                          `json:"server_time"`
+	Items      []state.HostSnapshot                             `json:"items"`
+	Latest     map[string]map[state.MetricKey]state.MetricPoint `json:"latest"`
+	ServerTime time.Time                                        `json:"server_time"`
 }
 
 type hostUpsertPayload struct {
-	Item       state.HostSnapshot                      `json:"item"`
-	History    map[state.MetricKey][]state.MetricPoint `json:"history"`
-	ServerTime time.Time                               `json:"server_time"`
+	Item       state.HostSnapshot                    `json:"item"`
+	Latest     map[state.MetricKey]state.MetricPoint `json:"latest"`
+	ServerTime time.Time                             `json:"server_time"`
 }
 
 type hostDeletePayload struct {
@@ -49,11 +49,6 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
 		return
 	}
-	histories, err := s.svc.GetAllHostMetricHistory(r.Context(), hostUIDs(items))
-	if err != nil {
-		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
-		return
-	}
 	updates, err := s.svc.SubscribeHostEvents(r.Context())
 	if err != nil {
 		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
@@ -66,7 +61,7 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 	now := time.Now().UTC()
 	payload, err := json.Marshal(hostSyncPayload{
 		Items:      items,
-		Histories:  histories,
+		Latest:     latestMetricPointsByHost(items),
 		ServerTime: now,
 	})
 	if err == nil {
@@ -102,13 +97,9 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 				if event.Snapshot == nil {
 					continue
 				}
-				history, err := s.svc.GetHostMetricHistory(r.Context(), event.Snapshot.HostUID)
-				if err != nil {
-					continue
-				}
 				payload, err := json.Marshal(hostUpsertPayload{
 					Item:       *event.Snapshot,
-					History:    history,
+					Latest:     latestMetricPointsFromSnapshot(*event.Snapshot),
 					ServerTime: now,
 				})
 				if err != nil {
@@ -128,10 +119,39 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 	}
 }
 
-func hostUIDs(items []state.HostSnapshot) []string {
-	result := make([]string, 0, len(items))
-	for _, item := range items {
-		result = append(result, item.HostUID)
+func latestMetricPointsByHost(items []state.HostSnapshot) map[string]map[state.MetricKey]state.MetricPoint {
+	if len(items) == 0 {
+		return nil
 	}
-	return result
+
+	latest := make(map[string]map[state.MetricKey]state.MetricPoint, len(items))
+	for _, item := range items {
+		points := latestMetricPointsFromSnapshot(item)
+		if len(points) == 0 {
+			continue
+		}
+		latest[item.HostUID] = points
+	}
+	if len(latest) == 0 {
+		return nil
+	}
+	return latest
+}
+
+func latestMetricPointsFromSnapshot(snapshot state.HostSnapshot) map[state.MetricKey]state.MetricPoint {
+	if snapshot.LastMetricAt.IsZero() {
+		return nil
+	}
+
+	ts := snapshot.LastMetricAt.UTC()
+	return map[state.MetricKey]state.MetricPoint{
+		state.MetricCPUUsagePct:  {TS: ts, Value: snapshot.CPUUsagePct},
+		state.MetricMemUsedPct:   {TS: ts, Value: snapshot.MemUsedPct},
+		state.MetricDiskUsedPct:  {TS: ts, Value: snapshot.DiskUsedPct},
+		state.MetricDiskReadBPS:  {TS: ts, Value: float64(snapshot.DiskReadBPS)},
+		state.MetricDiskWriteBPS: {TS: ts, Value: float64(snapshot.DiskWriteBPS)},
+		state.MetricLoad1:        {TS: ts, Value: snapshot.Load1},
+		state.MetricNetRxBPS:     {TS: ts, Value: float64(snapshot.NetRxBPS)},
+		state.MetricNetTxBPS:     {TS: ts, Value: float64(snapshot.NetTxBPS)},
+	}
 }
