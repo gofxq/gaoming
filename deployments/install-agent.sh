@@ -41,7 +41,7 @@ Options:
   --master-url <url>             Default: https://gm-metric.gofxq.com/
   --ingest-url <url>             Default: https://gm-metric.gofxq.com/
   --tenant <code>                Default: empty, server generates tenant
-  --loop-interval-sec <seconds>  Default: 5
+  --loop-interval-sec <seconds>  Default: 1
   --region <name>                Default: local
   --env <name>                   Default: prod
   --role <name>                  Default: node
@@ -200,17 +200,31 @@ verify_checksum() {
   asset_path="${TMP_DIR}/${ASSET}"
   checksums_path="${TMP_DIR}/checksums.txt"
   filename="$(basename "$asset_path")"
-  line="$(awk -v file="$filename" '$2 == file { print; exit }' "$checksums_path")"
+  expected=""
+  line="$(
+    awk -v file="$filename" '
+      {
+        candidate = $2
+        sub(/^\*/, "", candidate)
+        sub(/^.*\//, "", candidate)
+        if (candidate == file) {
+          print
+          exit
+        }
+      }
+    ' "$checksums_path"
+  )"
 
   [ -n "$line" ] || die "checksum not found for ${filename}"
+  expected="$(printf '%s\n' "$line" | awk '{print $1}')"
 
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$TMP_DIR" && printf '%s\n' "$line" | sha256sum -c - >/dev/null) || die "checksum verification failed"
+    actual="$(sha256sum "$asset_path" | awk '{print $1}')"
+    [ "$expected" = "$actual" ] || die "checksum verification failed"
     return
   fi
 
   if command -v shasum >/dev/null 2>&1; then
-    expected="$(printf '%s\n' "$line" | awk '{print $1}')"
     actual="$(shasum -a 256 "$asset_path" | awk '{print $1}')"
     [ "$expected" = "$actual" ] || die "checksum verification failed"
     return
