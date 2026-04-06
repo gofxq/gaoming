@@ -1,5 +1,6 @@
 import {
   createContext,
+  useEffect,
   useContext,
   useMemo,
   useState,
@@ -13,13 +14,64 @@ type TenantContextValue = {
 
 const TenantContext = createContext<TenantContextValue | null>(null);
 
+const DEFAULT_TENANT_CODE = "default";
+
+function normalizeTenantCode(value: string | null | undefined) {
+  const next = value?.trim();
+  return next || DEFAULT_TENANT_CODE;
+}
+
+function readTenantCodeFromLocation() {
+  if (typeof window === "undefined") {
+    return DEFAULT_TENANT_CODE;
+  }
+
+  const [tenantCode] = window.location.pathname.split("/").filter(Boolean);
+  return normalizeTenantCode(tenantCode);
+}
+
+function syncTenantCodeToLocation(tenantCode: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  const nextTenantCode = normalizeTenantCode(tenantCode);
+  if (url.pathname === `/${nextTenantCode}`) {
+    return;
+  }
+
+  window.history.replaceState(window.history.state, "", `/${nextTenantCode}${url.search}${url.hash}`);
+}
+
 export function TenantProvider({ children }: PropsWithChildren) {
-  const [tenantCode, setTenantCode] = useState("default");
+  const [tenantCode, setTenantCodeState] = useState(readTenantCodeFromLocation);
+
+  useEffect(() => {
+    syncTenantCodeToLocation(tenantCode);
+  }, [tenantCode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handlePopState = () => {
+      setTenantCodeState(readTenantCodeFromLocation());
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   const value = useMemo<TenantContextValue>(
     () => ({
       tenantCode,
-      setTenantCode,
+      setTenantCode: (nextTenantCode) => {
+        setTenantCodeState(normalizeTenantCode(nextTenantCode));
+      },
     }),
     [tenantCode],
   );

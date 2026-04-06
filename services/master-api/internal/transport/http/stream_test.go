@@ -53,3 +53,34 @@ func TestLatestMetricPointsFromSnapshotWithoutMetrics(t *testing.T) {
 		t.Fatalf("expected nil latest points for zero metric timestamp, got %+v", latest)
 	}
 }
+
+func TestMatchesTenant(t *testing.T) {
+	snapshot := state.HostSnapshot{TenantCode: "tenant-a"}
+
+	if !matchesTenant(snapshot, "") {
+		t.Fatal("expected empty tenant filter to match all snapshots")
+	}
+	if !matchesTenant(snapshot, "tenant-a") {
+		t.Fatal("expected tenant filter to match same tenant")
+	}
+	if matchesTenant(snapshot, "tenant-b") {
+		t.Fatal("expected tenant filter to reject different tenant")
+	}
+}
+
+func TestHostUIDsFromSnapshots(t *testing.T) {
+	items := []state.HostSnapshot{
+		{HostUID: "host-1"},
+		{},
+		{HostUID: "host-2"},
+	}
+
+	got := hostUIDsFromSnapshots(items)
+
+	if len(got) != 2 {
+		t.Fatalf("expected 2 host uids, got %d", len(got))
+	}
+	if got[0] != "host-1" || got[1] != "host-2" {
+		t.Fatalf("unexpected host uids: %+v", got)
+	}
+}

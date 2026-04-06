@@ -35,6 +35,7 @@ func (c Code) String() string {
 
 type HostSnapshot struct {
 	HostUID           string            `json:"host_uid"`
+	TenantCode        string            `json:"tenant_code,omitempty"`
 	Hostname          string            `json:"hostname"`
 	PrimaryIP         string            `json:"primary_ip"`
 	GroupID           string            `json:"group_id,omitempty"`

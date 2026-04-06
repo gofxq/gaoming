@@ -82,8 +82,8 @@ func (s *Service) Heartbeat(ctx context.Context, req contracts.HeartbeatRequest)
 	}, nil
 }
 
-func (s *Service) ListHosts(ctx context.Context) ([]state.HostSnapshot, error) {
-	return s.hostStore.ListHosts(ctx)
+func (s *Service) ListHosts(ctx context.Context, tenantCode string) ([]state.HostSnapshot, error) {
+	return s.hostStore.ListHosts(ctx, tenantCode)
 }
 
 func (s *Service) SubscribeHostEvents(ctx context.Context) (<-chan HostEvent, error) {
@@ -98,8 +98,8 @@ func (s *Service) GetAllHostMetricHistory(ctx context.Context, hostUIDs []string
 	return s.metricStore.GetAllHostMetricHistory(ctx, hostUIDs)
 }
 
-func (s *Service) GetHost(ctx context.Context, hostUID string) (state.HostSnapshot, bool, error) {
-	return s.hostStore.GetHost(ctx, hostUID)
+func (s *Service) GetHost(ctx context.Context, hostUID string, tenantCode string) (state.HostSnapshot, bool, error) {
+	return s.hostStore.GetHost(ctx, hostUID, tenantCode)
 }
 
 func (s *Service) CreateMaintenance(ctx context.Context, req contracts.CreateMaintenanceWindowRequest) (repository.MaintenanceWindow, error) {

@@ -53,6 +53,7 @@ export type HostHistoryMap = Partial<Record<MetricKey, MetricPoint[]>>;
 
 export type HostSyncPayload = {
   items?: HostSnapshot[];
+  histories?: Record<string, HostHistoryMap>;
   latest?: Record<string, MetricLatestMap>;
   server_time?: string;
 };
@@ -328,6 +329,28 @@ export function mergeLatestHistory(
       const ts = new Date(existing.ts).getTime();
       return Number.isFinite(ts) && ts >= cutoff;
     });
+  }
+
+  return nextHistory;
+}
+
+export function normalizeHistoryMap(history: HostHistoryMap | undefined, windowSec: number) {
+  const nextHistory: HostHistoryMap = {};
+  const cutoff = Date.now() - windowSec * 1000;
+
+  for (const metric of METRICS) {
+    const normalized = (history?.[metric.key] || [])
+      .map((point) => normalizeMetricPoint(point))
+      .filter((point): point is MetricPoint => Boolean(point))
+      .filter((point) => {
+        const ts = new Date(point.ts).getTime();
+        return Number.isFinite(ts) && ts >= cutoff;
+      })
+      .sort((left, right) => new Date(left.ts).getTime() - new Date(right.ts).getTime());
+
+    if (normalized.length) {
+      nextHistory[metric.key] = normalized;
+    }
   }
 
   return nextHistory;

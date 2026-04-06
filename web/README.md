@@ -6,9 +6,9 @@
 
 ## 本地开发
 
-默认测试接口指向 `https://gm-metric.gofxq.com/`。
+默认测试接口指向 `http://localhost:8080/`。
 
-开发模式默认通过 Vite 代理把 `/api/v1/*` 转发到这个地址，因此浏览器侧仍然走同源请求，不需要远端额外放开 CORS。
+开发模式默认通过 Vite 代理把 `/master/*` 转发到这个地址，因此浏览器侧仍然走同源请求，不需要远端额外放开 CORS。即使直接运行 `yarn dev`，也会默认代理到这个地址；如果要切到本地或其他环境，再覆盖代理目标。
 
 ```bash
 make web-install
@@ -78,9 +78,9 @@ web/
 
 - 第一批已经接入 dashboard 展示页面，聚焦核心指标和窗口信息。
 - 直接复用现有 `master-api` 接口：
-  - `GET /api/v1/hosts`
-  - `GET /api/v1/hosts/{host_uid}`
-  - `GET /api/v1/stream/hosts`
+  - `GET /master/api/v1/hosts`
+  - `GET /master/api/v1/hosts/{host_uid}`
+  - `GET /master/api/v1/stream/hosts`
 - 当前实现已经把实时看板迁到 React SPA，并保留 SSE 增量刷新。
 
 ### 阶段 3：再接鉴权、租户和配置

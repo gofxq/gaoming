@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,12 +11,13 @@ import (
 	"github.com/gofxq/gaoming/pkg/clock"
 	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/services/master-api/internal/config"
-	"github.com/gofxq/gaoming/services/master-api/internal/repository/postgres"
+	postgresrepo "github.com/gofxq/gaoming/services/master-api/internal/repository/postgres"
 	redisrepo "github.com/gofxq/gaoming/services/master-api/internal/repository/redis"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 	httptransport "github.com/gofxq/gaoming/services/master-api/internal/transport/http"
-	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
+	gormpostgres "gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type App struct {
@@ -23,7 +25,7 @@ type App struct {
 	logger      *slog.Logger
 	svc         *service.Service
 	cancel      context.CancelFunc
-	postgres    *pgxpool.Pool
+	postgres    *sql.DB
 	redisClient *goredis.Client
 }
 
@@ -37,12 +39,16 @@ func New() (*App, error) {
 	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer initCancel()
 
-	pgPool, err := pgxpool.New(initCtx, cfg.PostgresDSN)
+	gormDB, err := gorm.Open(gormpostgres.Open(cfg.PostgresDSN), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("connect postgres: %w", err)
 	}
-	if err := pgPool.Ping(initCtx); err != nil {
-		pgPool.Close()
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("open postgres sql db: %w", err)
+	}
+	if err := sqlDB.PingContext(initCtx); err != nil {
+		_ = sqlDB.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
@@ -52,17 +58,17 @@ func New() (*App, error) {
 		DB:       cfg.RedisDB,
 	})
 	if err := redisClient.Ping(initCtx).Err(); err != nil {
-		pgPool.Close()
+		_ = sqlDB.Close()
 		_ = redisClient.Close()
 		return nil, fmt.Errorf("ping redis: %w", err)
 	}
 
-	hostStore, err := postgres.NewStore(initCtx, pgPool, postgres.Config{
+	hostStore, err := postgresrepo.NewStore(initCtx, gormDB, postgresrepo.Config{
 		TenantCode: cfg.TenantCode,
 		TenantName: cfg.TenantName,
 	})
 	if err != nil {
-		pgPool.Close()
+		_ = sqlDB.Close()
 		_ = redisClient.Close()
 		return nil, err
 	}
@@ -80,7 +86,7 @@ func New() (*App, error) {
 		logger:      logger,
 		svc:         svc,
 		cancel:      cancel,
-		postgres:    pgPool,
+		postgres:    sqlDB,
 		redisClient: redisClient,
 	}
 

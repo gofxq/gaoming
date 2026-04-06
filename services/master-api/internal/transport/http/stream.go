@@ -11,9 +11,10 @@ import (
 )
 
 type hostSyncPayload struct {
-	Items      []state.HostSnapshot                             `json:"items"`
-	Latest     map[string]map[state.MetricKey]state.MetricPoint `json:"latest"`
-	ServerTime time.Time                                        `json:"server_time"`
+	Items      []state.HostSnapshot                               `json:"items"`
+	Histories  map[string]map[state.MetricKey][]state.MetricPoint `json:"histories,omitempty"`
+	Latest     map[string]map[state.MetricKey]state.MetricPoint   `json:"latest"`
+	ServerTime time.Time                                          `json:"server_time"`
 }
 
 type hostUpsertPayload struct {
@@ -33,6 +34,8 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 		return
 	}
 
+	tenantCode := tenantCodeFromRequest(r)
+
 	flusher, ok := w.(nethttp.Flusher)
 	if !ok {
 		nethttp.Error(w, "streaming not supported", nethttp.StatusInternalServerError)
@@ -44,7 +47,12 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	items, err := s.svc.ListHosts(r.Context())
+	items, err := s.svc.ListHosts(r.Context(), tenantCode)
+	if err != nil {
+		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
+		return
+	}
+	histories, err := s.svc.GetAllHostMetricHistory(r.Context(), hostUIDsFromSnapshots(items))
 	if err != nil {
 		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
 		return
@@ -61,6 +69,7 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 	now := time.Now().UTC()
 	payload, err := json.Marshal(hostSyncPayload{
 		Items:      items,
+		Histories:  histories,
 		Latest:     latestMetricPointsByHost(items),
 		ServerTime: now,
 	})
@@ -83,6 +92,9 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 			now := time.Now().UTC()
 			switch event.Type {
 			case service.HostEventDelete:
+				if tenantCode != "" {
+					continue
+				}
 				payload, err := json.Marshal(hostDeletePayload{
 					HostUID:    event.HostUID,
 					ServerTime: now,
@@ -95,6 +107,9 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 				}
 			case service.HostEventUpsert:
 				if event.Snapshot == nil {
+					continue
+				}
+				if !matchesTenant(*event.Snapshot, tenantCode) {
 					continue
 				}
 				payload, err := json.Marshal(hostUpsertPayload{
@@ -117,6 +132,28 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 			flusher.Flush()
 		}
 	}
+}
+
+func hostUIDsFromSnapshots(items []state.HostSnapshot) []string {
+	if len(items) == 0 {
+		return nil
+	}
+
+	hostUIDs := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.HostUID == "" {
+			continue
+		}
+		hostUIDs = append(hostUIDs, item.HostUID)
+	}
+	return hostUIDs
+}
+
+func matchesTenant(snapshot state.HostSnapshot, tenantCode string) bool {
+	if tenantCode == "" {
+		return true
+	}
+	return snapshot.TenantCode == tenantCode
 }
 
 func latestMetricPointsByHost(items []state.HostSnapshot) map[string]map[state.MetricKey]state.MetricPoint {

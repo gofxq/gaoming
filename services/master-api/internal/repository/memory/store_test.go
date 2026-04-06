@@ -160,7 +160,7 @@ func TestReconcileOfflineMarksHostOffline(t *testing.T) {
 		t.Fatalf("expected one offline reconciliation, got %d", changed)
 	}
 
-	updated, ok := store.GetHost(snapshot.HostUID)
+	updated, ok := store.GetHost(snapshot.HostUID, "")
 	if !ok {
 		t.Fatal("expected host to exist")
 	}
@@ -169,5 +169,44 @@ func TestReconcileOfflineMarksHostOffline(t *testing.T) {
 	}
 	if updated.OverallState != state.Offline {
 		t.Fatalf("expected overall state offline, got %v", updated.OverallState)
+	}
+}
+
+func TestListHostsFiltersByTenant(t *testing.T) {
+	store := NewStore()
+	now := time.Now().UTC()
+
+	first, _, firstTenant := store.RegisterAgent(contracts.RegisterAgentRequest{
+		Host: contracts.HostIdentity{
+			TenantCode: "tenant-a",
+			Hostname:   "node-a",
+			PrimaryIP:  "10.0.0.11",
+		},
+	}, now)
+	second, _, secondTenant := store.RegisterAgent(contracts.RegisterAgentRequest{
+		Host: contracts.HostIdentity{
+			TenantCode: "tenant-b",
+			Hostname:   "node-b",
+			PrimaryIP:  "10.0.0.12",
+		},
+	}, now)
+
+	items := store.ListHosts("tenant-a")
+	if len(items) != 1 {
+		t.Fatalf("expected one tenant-a host, got %d", len(items))
+	}
+	if items[0].HostUID != first.HostUID {
+		t.Fatalf("expected host uid %s, got %s", first.HostUID, items[0].HostUID)
+	}
+	if items[0].TenantCode != firstTenant {
+		t.Fatalf("expected tenant code %s, got %s", firstTenant, items[0].TenantCode)
+	}
+
+	if _, ok := store.GetHost(second.HostUID, firstTenant); ok {
+		t.Fatal("expected cross-tenant host lookup to be rejected")
+	}
+
+	if got, ok := store.GetHost(second.HostUID, secondTenant); !ok || got.TenantCode != secondTenant {
+		t.Fatalf("expected tenant-b host lookup to succeed, got %+v ok=%v", got, ok)
 	}
 }

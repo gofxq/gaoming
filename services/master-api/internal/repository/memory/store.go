@@ -75,6 +75,7 @@ func (s *Store) RegisterAgent(req contracts.RegisterAgentRequest, now time.Time)
 
 	snapshot := s.hosts[hostUID]
 	snapshot.HostUID = hostUID
+	snapshot.TenantCode = tenantCode
 	snapshot.Hostname = req.Host.Hostname
 	snapshot.PrimaryIP = req.Host.PrimaryIP
 	snapshot.AgentState = state.Up
@@ -151,12 +152,15 @@ func (s *Store) Heartbeat(req contracts.HeartbeatRequest, now time.Time) (state.
 	return snapshot, s.configs[req.HostUID], nil
 }
 
-func (s *Store) ListHosts() []state.HostSnapshot {
+func (s *Store) ListHosts(tenantCode string) []state.HostSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	items := make([]state.HostSnapshot, 0, len(s.hosts))
-	for _, host := range s.hosts {
+	for hostUID, host := range s.hosts {
+		if tenantCode != "" && s.hostTenants[hostUID] != tenantCode {
+			continue
+		}
 		items = append(items, host)
 	}
 
@@ -166,11 +170,14 @@ func (s *Store) ListHosts() []state.HostSnapshot {
 	return items
 }
 
-func (s *Store) GetHost(hostUID string) (state.HostSnapshot, bool) {
+func (s *Store) GetHost(hostUID string, tenantCode string) (state.HostSnapshot, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	host, ok := s.hosts[hostUID]
+	if ok && tenantCode != "" && s.hostTenants[hostUID] != tenantCode {
+		return state.HostSnapshot{}, false
+	}
 	return host, ok
 }
 

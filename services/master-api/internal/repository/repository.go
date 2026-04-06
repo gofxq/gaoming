@@ -38,8 +38,8 @@ type HostEvent struct {
 type HostStateStore interface {
 	RegisterAgent(ctx context.Context, req contracts.RegisterAgentRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, string, error)
 	Heartbeat(ctx context.Context, req contracts.HeartbeatRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, error)
-	ListHosts(ctx context.Context) ([]state.HostSnapshot, error)
-	GetHost(ctx context.Context, hostUID string) (state.HostSnapshot, bool, error)
+	ListHosts(ctx context.Context, tenantCode string) ([]state.HostSnapshot, error)
+	GetHost(ctx context.Context, hostUID string, tenantCode string) (state.HostSnapshot, bool, error)
 	ReconcileOffline(ctx context.Context, now time.Time) ([]state.HostSnapshot, error)
 }
 

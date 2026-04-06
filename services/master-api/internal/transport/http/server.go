@@ -89,7 +89,7 @@ func (s *Server) handleListHosts(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	items, err := s.svc.ListHosts(r.Context())
+	items, err := s.svc.ListHosts(r.Context(), tenantCodeFromRequest(r))
 	if err != nil {
 		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
 		return
@@ -110,7 +110,7 @@ func (s *Server) handleGetHost(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	host, ok, err := s.svc.GetHost(r.Context(), hostUID)
+	host, ok, err := s.svc.GetHost(r.Context(), hostUID, tenantCodeFromRequest(r))
 	if err != nil {
 		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
 		return
@@ -170,4 +170,8 @@ func (s *Server) handleAckAlert(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	httpx.WriteJSON(w, nethttp.StatusOK, resp)
+}
+
+func tenantCodeFromRequest(r *nethttp.Request) string {
+	return strings.TrimSpace(r.URL.Query().Get("tenant"))
 }
