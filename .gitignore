@@ -16,6 +16,9 @@ api/gen/
 .env.local
 .env.*.local
 agent-config.yaml
+web/.env
+web/.env.local
+web/.env.*.local
 
 .idea/
 .vscode/
@@ -28,3 +31,7 @@ docker-compose.override.yml
 deployments/deploy-remote.local.env
 deployments/deploy-agent.local.env
 agent-config.yaml
+docs/plans/
+web/node_modules/
+web/dist/
+web/.vite/

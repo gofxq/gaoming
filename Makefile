@@ -1,7 +1,9 @@
 GO ?= go
 DOCKER_COMPOSE ?= docker compose
+YARN ?= yarn
+WEB_API_ORIGIN ?= https://gm-metric.gofxq.com
 
-.PHONY: fmt build test check clean run-master run-ingest run-core run-probe run-agent proto-check proto-lint compose-config docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent deploy-agent-service install-agent-local-service
+.PHONY: fmt build test check clean run-master run-ingest run-core run-probe run-agent proto-check proto-lint compose-config docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent deploy-agent-service install-agent-local-service web-install web-dev web-build
 
 fmt:
 	$(GO) fmt ./...
@@ -75,3 +77,12 @@ install-agent-local-service:
 	mkdir -p .tmp
 	$(GO) build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
 	sh ./deployments/install-agent-local.sh --bin ./.tmp/gaoming-agent
+
+web-install:
+	cd web && $(YARN) install
+
+web-dev:
+	cd web && VITE_PROXY_TARGET=$(WEB_API_ORIGIN) $(YARN) dev
+
+web-build:
+	cd web && VITE_API_ORIGIN=$(WEB_API_ORIGIN) $(YARN) build
