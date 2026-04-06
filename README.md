@@ -7,15 +7,37 @@
 curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/install-agent.sh | sudo sh
 ```
 
+安装完成后展示：
+```bash
+master-url [https://gm-metric.gofxq.com/]:
+ingest-url [https://gm-metric.gofxq.com/]:
+tenant [<auto>]: default
+loop-interval-sec [5]: 1
+[+] downloading gaoming-agent_linux_amd64.tar.gz
+[+] installed gaoming-agent to /opt/gaoming-agent
+[+] config: /opt/gaoming-agent/agent-config.yaml
+[+] tenant_code: default
+[+] dashboard: https://gm-metric.gofxq.com/default
+```
+
+
+安装完成后打开dashboard即可。手机端可打开增加 pwa 支持安装至手机。
+
+[PWA](https://gm-metric.gofxq.com/default/pwa)
+
 ![icon](web/favicon/android-chrome-512x512.png)
 
 一个面向主机与节点的轻量监控系统：Agent 自动注册、持续上报指标，Web 端按租户展示实时状态。
 
 
-
 🔗 在线 Demo: [https://gaoming.gofxq.com/default](https://gaoming.gofxq.com/default)
-
+## WEB
 ![web-demo](docs/gaoming.gofxq.com_default.png)
+
+## PWA
+| 横屏                                      | 竖屏｜                                     |                                          |
+| ----------------------------------------- | ------------------------------------------ | ---------------------------------------- | ----------------------------------------- |
+| ![png](<docs/pics/mobile_overview_-.png>) | ![text](<docs/pics/mobile_overview_I.png>) | ![text](<docs/pics/mobile_detail_-.png>) | ![text](<gdocs/pics/mobile_detail_I.png>) |
 
 ## ✨ 核心能力
 
