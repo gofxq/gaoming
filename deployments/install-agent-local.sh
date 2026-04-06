@@ -92,6 +92,53 @@ if [ ! -f "$CONFIG_PATH" ]; then
   exit 1
 fi
 
+read_config_value() {
+  key="$1"
+  path="$2"
+  [ -f "$path" ] || return 1
+
+  awk -F: -v key="$key" '
+    $1 == key {
+      value = substr($0, index($0, ":") + 1)
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      print value
+      exit
+    }
+  ' "$path"
+}
+
+wait_for_tenant_code() {
+  config_path="$1"
+  attempts=0
+
+  while [ "$attempts" -lt 10 ]; do
+    tenant_code="$(read_config_value "tenant_code" "$config_path" 2>/dev/null || true)"
+    if [ -n "$tenant_code" ]; then
+      printf '%s\n' "$tenant_code"
+      return 0
+    fi
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+
+  return 1
+}
+
+build_dashboard_url() {
+  base_url="$1"
+  tenant_code="$2"
+  printf '%s/%s\n' "${base_url%/}" "$tenant_code"
+}
+
+build_hosts_api_url() {
+  base_url="$1"
+  tenant_code="$2"
+  printf '%s/master/api/v1/hosts?tenant=%s\n' "${base_url%/}" "$tenant_code"
+}
+
 ensure_group() {
   if getent group "$SERVICE_GROUP" >/dev/null 2>&1; then
     return 0
@@ -154,3 +201,17 @@ echo "installed ${SERVICE_NAME}"
 echo "source binary: ${BIN_PATH}"
 echo "installed binary: ${INSTALL_DIR}/gaoming-agent"
 echo "config: ${INSTALL_DIR}/agent-config.yaml"
+
+master_api_url="$(read_config_value "master_api_url" "${INSTALL_DIR}/agent-config.yaml" 2>/dev/null || true)"
+tenant_code="$(wait_for_tenant_code "${INSTALL_DIR}/agent-config.yaml" || true)"
+
+if [ -n "$tenant_code" ] && [ -n "$master_api_url" ]; then
+  echo "tenant_code: ${tenant_code}"
+  echo "dashboard: $(build_dashboard_url "$master_api_url" "$tenant_code")"
+  echo "hosts api: $(build_hosts_api_url "$master_api_url" "$tenant_code")"
+elif [ -n "$master_api_url" ]; then
+  echo "tenant_code: <auto>"
+  echo "dashboard: ${master_api_url%/}/<tenant_code>"
+  echo "hosts api: $(build_hosts_api_url "$master_api_url" "<tenant_code>")"
+  echo "tenant_code is not available yet; wait for the agent to register and then check ${INSTALL_DIR}/agent-config.yaml"
+fi

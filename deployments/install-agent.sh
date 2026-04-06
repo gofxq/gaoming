@@ -3,6 +3,11 @@ set -eu
 umask 022
 
 # ---------- defaults ----------
+MASTER_API_URL_EXPLICIT="${MASTER_API_URL+1}"
+INGEST_GATEWAY_URL_EXPLICIT="${INGEST_GATEWAY_URL+1}"
+AGENT_TENANT_EXPLICIT="${AGENT_TENANT+1}"
+AGENT_LOOP_INTERVAL_SEC_EXPLICIT="${AGENT_LOOP_INTERVAL_SEC+1}"
+
 REPO="${REPO:-gofxq/gaoming}"
 VERSION="${VERSION:-latest}"
 
@@ -55,6 +60,48 @@ die()  { printf '[x] %s\n' "$*" >&2; exit 1; }
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "$1 is required"
+}
+
+has_tty_prompt() {
+  [ -r /dev/tty ] && [ -w /dev/tty ]
+}
+
+prompt_with_default() {
+  label="$1"
+  current="$2"
+  display_default="$3"
+
+  if ! has_tty_prompt; then
+    printf '%s' "$current"
+    return 0
+  fi
+
+  printf '%s [%s]: ' "$label" "$display_default" >/dev/tty
+  if IFS= read -r input </dev/tty && [ -n "$input" ]; then
+    printf '%s' "$input"
+    return 0
+  fi
+
+  printf '%s' "$current"
+}
+
+prompt_install_inputs() {
+  if ! has_tty_prompt; then
+    return 0
+  fi
+
+  if [ -z "$MASTER_API_URL_EXPLICIT" ]; then
+    MASTER_API_URL="$(prompt_with_default "master-url" "$MASTER_API_URL" "$MASTER_API_URL")"
+  fi
+  if [ -z "$INGEST_GATEWAY_URL_EXPLICIT" ]; then
+    INGEST_GATEWAY_URL="$(prompt_with_default "ingest-url" "$INGEST_GATEWAY_URL" "$INGEST_GATEWAY_URL")"
+  fi
+  if [ -z "$AGENT_TENANT_EXPLICIT" ]; then
+    AGENT_TENANT="$(prompt_with_default "tenant" "$AGENT_TENANT" "${AGENT_TENANT:-<auto>}")"
+  fi
+  if [ -z "$AGENT_LOOP_INTERVAL_SEC_EXPLICIT" ]; then
+    AGENT_LOOP_INTERVAL_SEC="$(prompt_with_default "loop-interval-sec" "$AGENT_LOOP_INTERVAL_SEC" "$AGENT_LOOP_INTERVAL_SEC")"
+  fi
 }
 
 # ---------- validation ----------
@@ -116,10 +163,10 @@ parse_args() {
       --service-name)        [ "$#" -ge 2 ] || die "missing value for --service-name"; SERVICE_NAME="$2"; shift 2 ;;
       --service-user)        [ "$#" -ge 2 ] || die "missing value for --service-user"; SERVICE_USER="$2"; shift 2 ;;
       --service-group)       [ "$#" -ge 2 ] || die "missing value for --service-group"; SERVICE_GROUP="$2"; shift 2 ;;
-      --master-url)          [ "$#" -ge 2 ] || die "missing value for --master-url"; MASTER_API_URL="$2"; shift 2 ;;
-      --ingest-url)          [ "$#" -ge 2 ] || die "missing value for --ingest-url"; INGEST_GATEWAY_URL="$2"; shift 2 ;;
-      --tenant)              [ "$#" -ge 2 ] || die "missing value for --tenant"; AGENT_TENANT="$2"; shift 2 ;;
-      --loop-interval-sec)   [ "$#" -ge 2 ] || die "missing value for --loop-interval-sec"; AGENT_LOOP_INTERVAL_SEC="$2"; shift 2 ;;
+      --master-url)          [ "$#" -ge 2 ] || die "missing value for --master-url"; MASTER_API_URL="$2"; MASTER_API_URL_EXPLICIT=1; shift 2 ;;
+      --ingest-url)          [ "$#" -ge 2 ] || die "missing value for --ingest-url"; INGEST_GATEWAY_URL="$2"; INGEST_GATEWAY_URL_EXPLICIT=1; shift 2 ;;
+      --tenant)              [ "$#" -ge 2 ] || die "missing value for --tenant"; AGENT_TENANT="$2"; AGENT_TENANT_EXPLICIT=1; shift 2 ;;
+      --loop-interval-sec)   [ "$#" -ge 2 ] || die "missing value for --loop-interval-sec"; AGENT_LOOP_INTERVAL_SEC="$2"; AGENT_LOOP_INTERVAL_SEC_EXPLICIT=1; shift 2 ;;
       --region)              [ "$#" -ge 2 ] || die "missing value for --region"; AGENT_REGION="$2"; shift 2 ;;
       --env)                 [ "$#" -ge 2 ] || die "missing value for --env"; AGENT_ENV="$2"; shift 2 ;;
       --role)                [ "$#" -ge 2 ] || die "missing value for --role"; AGENT_ROLE="$2"; shift 2 ;;
@@ -269,6 +316,51 @@ write_file() {
   mv "$tmp" "$path"
 }
 
+read_config_value() {
+  key="$1"
+  path="$2"
+  [ -f "$path" ] || return 1
+
+  awk -F: -v key="$key" '
+    $1 == key {
+      value = substr($0, index($0, ":") + 1)
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      print value
+      exit
+    }
+  ' "$path"
+}
+
+wait_for_tenant_code() {
+  config_path="${INSTALL_DIR}/agent-config.yaml"
+  attempts=0
+
+  while [ "$attempts" -lt 10 ]; do
+    tenant_code="$(read_config_value "tenant_code" "$config_path" 2>/dev/null || true)"
+    if [ -n "$tenant_code" ]; then
+      printf '%s\n' "$tenant_code"
+      return 0
+    fi
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+
+  return 1
+}
+
+build_dashboard_url() {
+  tenant_code="$1"
+  printf '%s/%s\n' "${MASTER_API_URL%/}" "$tenant_code"
+}
+
+build_hosts_api_url() {
+  tenant_code="$1"
+  printf '%s/master/api/v1/hosts?tenant=%s\n' "${MASTER_API_URL%/}" "$tenant_code"
+}
+
 render_config() {
   cat <<EOF
 master_api_url: "$(yaml_escape "$MASTER_API_URL")"
@@ -405,14 +497,25 @@ install_service() {
 }
 
 print_summary() {
+  tenant_code="$(wait_for_tenant_code || true)"
+
   log "installed ${SERVICE_NAME} to ${INSTALL_DIR}"
   log "config: ${INSTALL_DIR}/agent-config.yaml"
+  if [ -n "$tenant_code" ]; then
+    log "tenant_code: ${tenant_code}"
+    log "dashboard: $(build_dashboard_url "$tenant_code")"
+    return
+  fi
+
   log "tenant_code: ${AGENT_TENANT:-<auto>}"
+  log "dashboard: ${MASTER_API_URL%/}/<tenant_code>"
+  warn "tenant_code is not available yet; wait for the agent to register, then read ${INSTALL_DIR}/agent-config.yaml"
 }
 
 main() {
   parse_args "$@"
   prepare_platform
+  prompt_install_inputs
   validate_inputs
   require_root
 
