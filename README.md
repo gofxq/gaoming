@@ -12,16 +12,16 @@
 
 ## 文档索引
 
-- [docs/00-summary.md](/home/u/dev/github.com/gofxq/gaoming/docs/00-summary.md)
-- [docs/01-data-model.md](/home/u/dev/github.com/gofxq/gaoming/docs/01-data-model.md)
-- [docs/02-contracts.md](/home/u/dev/github.com/gofxq/gaoming/docs/02-contracts.md)
-- [docs/03-runtime-flow.md](/home/u/dev/github.com/gofxq/gaoming/docs/03-runtime-flow.md)
-- [docs/04-layout.md](/home/u/dev/github.com/gofxq/gaoming/docs/04-layout.md)
-- [docs/05-local-run.md](/home/u/dev/github.com/gofxq/gaoming/docs/05-local-run.md)
-- [docs/06-repository-hygiene.md](/home/u/dev/github.com/gofxq/gaoming/docs/06-repository-hygiene.md)
-- [docs/07-oss-options.md](/home/u/dev/github.com/gofxq/gaoming/docs/07-oss-options.md)
-- [docs/08-persistence-runtime.md](/home/u/dev/github.com/gofxq/gaoming/docs/08-persistence-runtime.md)
-- [docs/99-status-roadmap.md](/home/u/dev/github.com/gofxq/gaoming/docs/99-status-roadmap.md)
+- [docs/00-summary.md](docs/00-summary.md)
+- [docs/01-data-model.md](docs/01-data-model.md)
+- [docs/02-contracts.md](docs/02-contracts.md)
+- [docs/03-runtime-flow.md](docs/03-runtime-flow.md)
+- [docs/04-layout.md](docs/04-layout.md)
+- [docs/05-local-run.md](docs/05-local-run.md)
+- [docs/06-repository-hygiene.md](docs/06-repository-hygiene.md)
+- [docs/07-oss-options.md](docs/07-oss-options.md)
+- [docs/08-persistence-runtime.md](docs/08-persistence-runtime.md)
+- [docs/99-status-roadmap.md](docs/99-status-roadmap.md)
 
 ## 系统方案
 
@@ -151,7 +151,7 @@ make compose-config
 
 ## Agent 发布与安装
 
-仓库增加了 GitHub Actions 工作流 [build-agent.yml](/home/u/dev/github.com/gofxq/gaoming/.github/workflows/build-agent.yml)，会自动编译 Linux、Darwin、Windows 的 agent。
+仓库增加了 GitHub Actions 工作流 [build-agent.yml](.github/workflows/build-agent.yml)，会自动编译 Linux、Darwin、Windows 的 agent。
 
 - 推送到 `main` 时会产出 workflow artifact。
 - 推送 `v*` tag 时会同时发布 release 资产：
@@ -180,7 +180,7 @@ sudo sh -s -- \
   --loop-interval-sec 5
 ```
 
-Linux 上会安装成 `systemd` 服务，macOS 上会安装成 `launchd` 服务。安装脚本是 [install-agent.sh](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent.sh)。
+Linux 上会安装成 `systemd` 服务，macOS 上会安装成 `launchd` 服务。安装脚本是 [install-agent.sh](deployments/install-agent.sh)。
 
 Windows 一键安装：
 
@@ -188,7 +188,7 @@ Windows 一键安装：
 powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.ps1 -UseBasicParsing | iex"
 ```
 
-Windows 会注册为开机启动计划任务，脚本在 [install-agent.ps1](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent.ps1)。
+Windows 会注册为开机启动计划任务，脚本在 [install-agent.ps1](deployments/install-agent.ps1)。
 
 卸载：
 
@@ -224,7 +224,7 @@ sudo VERSION=v0.1.0 sh -s -- \
   --ingest-url https://gm-metric.gofxq.com/
 ```
 
-如果是在 agent 所在机器上直接拉了仓库代码，希望用本地最新代码重新编译并更新 service，可以用 [install-agent-local.sh](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent-local.sh)：
+如果是在 agent 所在机器上直接拉了仓库代码，希望用本地最新代码重新编译并更新 service，可以用 [install-agent-local.sh](deployments/install-agent-local.sh)：
 
 ```bash
 go build -o ./gaoming-agent ./agent/daemon/cmd/agent
