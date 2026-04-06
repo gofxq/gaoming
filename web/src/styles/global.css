@@ -126,7 +126,7 @@ button {
 
 .meta-pill,
 .chip {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.82);
@@ -205,7 +205,7 @@ button {
 }
 
 .host-list {
-  display: grid;
+  display: flex;
   gap: 14px;
 }
 
@@ -397,11 +397,6 @@ button {
   margin-bottom: 8px;
 }
 
-.chip {
-  cursor: pointer;
-  padding: 7px 10px;
-  font-size: 12px;
-}
 
 .chip.active {
   border-color: rgba(15, 118, 110, 0.35);
