@@ -212,7 +212,7 @@ button {
 .host-card {
   display: grid;
   gap: 14px;
-  width: 18%;
+  min-width: 120px;
   padding: 18px;
   text-align: left;
   background: rgba(255, 255, 255, 0.68);

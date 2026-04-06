@@ -329,6 +329,9 @@ export function DashboardPage() {
       visibleWindowMetrics: DEFAULT_VISIBLE_WINDOW_METRICS,
     });
   }
+  const showIcp =
+    typeof window !== "undefined" &&
+    window.location.hostname.endsWith("gofxq.com");
 
   return (
     <div className="dashboard">
@@ -435,10 +438,10 @@ export function DashboardPage() {
 
             {selectedHost ? (
               <div className="window-meta">
-              <span className={`status-pill ${stateClass(selectedHost.overall_state)}`}>
-                {stateLabel(selectedHost.overall_state)}
-              </span>
-              <span className="meta-pill">最后指标: {formatAgo(selectedHost.last_metric_at)}</span>
+                <span className={`status-pill ${stateClass(selectedHost.overall_state)}`}>
+                  {stateLabel(selectedHost.overall_state)}
+                </span>
+                <span className="meta-pill">最后指标: {formatAgo(selectedHost.last_metric_at)}</span>
               </div>
             ) : null}
           </div>
@@ -531,6 +534,26 @@ export function DashboardPage() {
         <StatCard label="平均内存" value={formatPercent(avgMem)} />
         <StatCard label="当前窗口" value={currentWindowLabel(selectedWindowSec)} />
       </section>
+
+      {showIcp ? (
+        <div
+          style={{
+            marginTop: 12,
+            textAlign: "center",
+            color: "rgba(0, 0, 0, 0.45)",
+            fontSize: 12,
+          }}
+        >
+          <a
+            href="https://beian.miit.gov.cn/"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: "inherit" }}
+          >
+            沪ICP备2022013283号-1
+          </a>
+        </div>
+      ) : null}
     </div>
   );
 }

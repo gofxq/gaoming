@@ -98,7 +98,7 @@ make docker-logs
 make docker-down
 ```
 
-如果你只是为了本地测试，推荐默认用这个模式：
+如果只是为了本地测试，推荐默认用这个模式：
 
 - 后端服务走 Docker
 - `agent` 直接运行在宿主机
@@ -224,7 +224,7 @@ sudo VERSION=v0.1.0 sh -s -- \
   --ingest-url https://gm-metric.gofxq.com/
 ```
 
-如果你是在 agent 所在机器上直接拉了仓库代码，希望用本地最新代码重新编译并更新 service，可以用 [install-agent-local.sh](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent-local.sh)：
+如果是在 agent 所在机器上直接拉了仓库代码，希望用本地最新代码重新编译并更新 service，可以用 [install-agent-local.sh](/home/u/dev/github.com/gofxq/gaoming/deployments/install-agent-local.sh)：
 
 ```bash
 go build -o ./gaoming-agent ./agent/daemon/cmd/agent
@@ -233,7 +233,7 @@ bash ./deployments/install-agent-local.sh --bin ./gaoming-agent
 
 这个脚本会：
 
-- 读取你通过 `--bin` 指定的二进制文件
+- 读取 `--bin` 指定的二进制文件
 - 直接读取当前目录的 `agent-config.yaml`
 - 覆盖安装 `/opt/gaoming-agent/gaoming-agent`
 - 覆盖安装 `/opt/gaoming-agent/agent-config.yaml`
@@ -257,12 +257,5 @@ make install-agent-local-service
 - `agent`：自动注册、上报 heartbeat 和 metric batch。
 
 ## TODO
-
-- React 看板的 16 个指标已补齐，但旧的 embed 页 [ui_index.html](/Volumes/afs/dev/github.com/gofxq/gaoming/services/master-api/internal/transport/http/ui_index.html) 还没同步。
-- 第二梯队指标暂缓：`net_rx_errors_ps`、`net_tx_errors_ps`、`load5`、`uptime_seconds`。
-- 数据库兼容当前仍依赖重建本地库或手工执行 `ALTER TABLE`，还没有正式迁移机制。
-- `ingest-gateway` 仍只接收并 ack metric batch，尚未对新增指标做持久化或下游消费。
-
-当前版本里，`master-api` 负责主机当前状态和页面输出，`ingest-gateway` 负责写入接入，`probe-worker` 负责主动探测，`core-worker` 仍是后续状态引擎、告警引擎和调度逻辑的预留位置。
 
 README 原始的大型设计内容已经拆分到 `docs/` 中继续维护。
