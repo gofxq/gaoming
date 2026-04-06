@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import { useTenant } from "../../app/providers/TenantProvider";
 
 export function Shell() {
@@ -17,6 +17,9 @@ export function Shell() {
         <div className="shell-badges">
           <span className="meta-pill">SPA</span>
           <span className="meta-pill">H5 Ready</span>
+          <Link to={`/${tenantCode}/pwa`} className="meta-pill">
+            Tenant PWA
+          </Link>
           <span className="meta-pill">Tenant: {tenantCode}</span>
         </div>
       </header>

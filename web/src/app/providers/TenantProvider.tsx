@@ -36,12 +36,14 @@ function syncTenantCodeToLocation(tenantCode: string) {
   }
 
   const url = new URL(window.location.href);
+  const [, ...restSegments] = url.pathname.split("/").filter(Boolean);
   const nextTenantCode = normalizeTenantCode(tenantCode);
-  if (url.pathname === `/${nextTenantCode}`) {
+  const nextPath = `/${[nextTenantCode, ...restSegments].join("/")}`;
+  if (url.pathname === nextPath) {
     return;
   }
 
-  window.history.replaceState(window.history.state, "", `/${nextTenantCode}${url.search}${url.hash}`);
+  window.history.replaceState(window.history.state, "", `${nextPath}${url.search}${url.hash}`);
 }
 
 export function TenantProvider({ children }: PropsWithChildren) {
