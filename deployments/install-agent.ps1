@@ -29,6 +29,15 @@ function Resolve-Arch {
   }
 }
 
+function Get-InstallTenantCode {
+  $endpoint = ($MasterApiUrl.TrimEnd('/') + "/master/api/v1/install/tenant")
+  $response = Invoke-RestMethod -Method Post -Uri $endpoint
+  if (-not $response.tenant_code) {
+    throw "tenant allocation response did not include tenant_code"
+  }
+  return [string]$response.tenant_code
+}
+
 Assert-Admin
 $arch = Resolve-Arch
 
@@ -43,6 +52,11 @@ try {
   } else {
     $assetUrl = "https://github.com/$Repo/releases/download/$Version/$asset"
     $checksumUrl = "https://github.com/$Repo/releases/download/$Version/checksums.txt"
+  }
+
+  if ([string]::IsNullOrWhiteSpace($TenantCode)) {
+    Write-Host "allocating tenant from master-api"
+    $TenantCode = Get-InstallTenantCode
   }
 
   Invoke-WebRequest -Uri $assetUrl -OutFile (Join-Path $tmpDir $asset)
@@ -77,6 +91,8 @@ loop_interval_sec: $LoopIntervalSec
 
   Write-Host "installed $TaskName to $InstallDir"
   Write-Host "tenant_code: $TenantCode"
+  Write-Host ("dashboard: " + $MasterApiUrl.TrimEnd('/') + "/" + $TenantCode)
+  Write-Host ("hosts api: " + $MasterApiUrl.TrimEnd('/') + "/master/api/v1/hosts?tenant=" + $TenantCode)
 } finally {
   Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
 }

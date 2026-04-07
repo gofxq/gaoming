@@ -59,6 +59,19 @@ func (s *Service) RegisterAgent(ctx context.Context, req contracts.RegisterAgent
 	}, nil
 }
 
+func (s *Service) AllocateInstallTenant(ctx context.Context) (contracts.AllocateInstallTenantResponse, error) {
+	tenantCode, err := s.hostStore.AllocateTenant(ctx)
+	if err != nil {
+		return contracts.AllocateInstallTenantResponse{}, err
+	}
+
+	return contracts.AllocateInstallTenantResponse{
+		RequestID:  ids.New("req"),
+		Message:    "tenant allocated",
+		TenantCode: tenantCode,
+	}, nil
+}
+
 func (s *Service) Heartbeat(ctx context.Context, req contracts.HeartbeatRequest) (contracts.HeartbeatResponse, error) {
 	snapshot, config, err := s.hostStore.Heartbeat(ctx, req, s.clock.Now())
 	if err != nil {

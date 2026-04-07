@@ -361,6 +361,25 @@ build_hosts_api_url() {
   printf '%s/master/api/v1/hosts?tenant=%s\n' "${MASTER_API_URL%/}" "$tenant_code"
 }
 
+fetch_install_tenant() {
+  response="$(curl -fsSL -X POST "${MASTER_API_URL%/}/master/api/v1/install/tenant")" \
+    || die "failed to allocate tenant from ${MASTER_API_URL%/}/master/api/v1/install/tenant"
+  tenant_code="$(
+    printf '%s' "$response" | tr -d '\n' | sed -n 's/.*"tenant_code"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+  )"
+  [ -n "$tenant_code" ] || die "tenant allocation response did not include tenant_code"
+  printf '%s\n' "$tenant_code"
+}
+
+ensure_install_tenant() {
+  if [ -n "$AGENT_TENANT" ]; then
+    return 0
+  fi
+
+  log "allocating tenant from master-api"
+  AGENT_TENANT="$(fetch_install_tenant)"
+}
+
 render_config() {
   cat <<EOF
 master_api_url: "$(yaml_escape "$MASTER_API_URL")"
@@ -504,12 +523,13 @@ print_summary() {
   if [ -n "$tenant_code" ]; then
     log "tenant_code: ${tenant_code}"
     log "dashboard: $(build_dashboard_url "$tenant_code")"
+    log "hosts api: $(build_hosts_api_url "$tenant_code")"
     return
   fi
 
   log "tenant_code: ${AGENT_TENANT:-<auto>}"
-  log "dashboard: ${MASTER_API_URL%/}/<tenant_code>"
-  warn "tenant_code is not available yet; wait for the agent to register, then read ${INSTALL_DIR}/agent-config.yaml"
+  log "dashboard: $(build_dashboard_url "${AGENT_TENANT}")"
+  log "hosts api: $(build_hosts_api_url "${AGENT_TENANT}")"
 }
 
 main() {
@@ -527,6 +547,7 @@ main() {
   need_cmd install
   need_cmd mktemp
 
+  ensure_install_tenant
   make_tmpdir
   download_assets
   verify_checksum

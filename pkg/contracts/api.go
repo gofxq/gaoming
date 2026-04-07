@@ -65,6 +65,12 @@ type RegisterAgentResponse struct {
 	Config     AgentConfig `json:"config"`
 }
 
+type AllocateInstallTenantResponse struct {
+	RequestID  string `json:"request_id"`
+	Message    string `json:"message"`
+	TenantCode string `json:"tenant_code"`
+}
+
 type HeartbeatRequest struct {
 	HostUID string      `json:"host_uid"`
 	AgentID string      `json:"agent_id"`

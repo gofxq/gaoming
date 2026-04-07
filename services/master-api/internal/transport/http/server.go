@@ -23,6 +23,7 @@ func (s *Server) Handler() nethttp.Handler {
 	mux := nethttp.NewServeMux()
 	mux.HandleFunc("/master/healthz", s.handleHealth)
 	mux.HandleFunc("/master/api/v1/stream/hosts", s.handleHostStream)
+	mux.HandleFunc("/master/api/v1/install/tenant", s.handleAllocateInstallTenant)
 	mux.HandleFunc("/master/api/v1/agents/register", s.handleRegisterAgent)
 	mux.HandleFunc("/master/api/v1/agents/heartbeat", s.handleHeartbeat)
 	mux.HandleFunc("/master/api/v1/hosts", s.handleListHosts)
@@ -34,6 +35,21 @@ func (s *Server) Handler() nethttp.Handler {
 
 func (s *Server) handleHealth(w nethttp.ResponseWriter, _ *nethttp.Request) {
 	httpx.WriteJSON(w, nethttp.StatusOK, s.svc.Health())
+}
+
+func (s *Server) handleAllocateInstallTenant(w nethttp.ResponseWriter, r *nethttp.Request) {
+	if r.Method != nethttp.MethodPost {
+		httpx.Error(w, nethttp.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	resp, err := s.svc.AllocateInstallTenant(r.Context())
+	if err != nil {
+		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httpx.WriteJSON(w, nethttp.StatusOK, resp)
 }
 
 func (s *Server) handleRegisterAgent(w nethttp.ResponseWriter, r *nethttp.Request) {

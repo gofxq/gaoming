@@ -48,6 +48,15 @@ func NewStore(ctx context.Context, db *gorm.DB, cfg Config) (*Store, error) {
 	return &Store{db: db, defaultTenantID: tenant.ID}, nil
 }
 
+func (s *Store) AllocateTenant(ctx context.Context) (string, error) {
+	tenantCode := ids.New("tenant")
+	tenant, err := ensureTenant(ctx, s.db, tenantCode, tenantCode)
+	if err != nil {
+		return "", err
+	}
+	return tenant.TenantCode, nil
+}
+
 func (s *Store) RegisterAgent(ctx context.Context, req contracts.RegisterAgentRequest, now time.Time) (state.HostSnapshot, contracts.AgentConfig, string, error) {
 	var (
 		snapshot   state.HostSnapshot
