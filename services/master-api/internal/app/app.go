@@ -72,7 +72,7 @@ func New() (*App, error) {
 		_ = redisClient.Close()
 		return nil, err
 	}
-	metricStore := redisrepo.NewMetricWindowStore(redisClient, "", 3600, 2*time.Hour)
+	metricStore := redisrepo.NewMetricWindowStore(redisClient, "", 60, 2*time.Hour)
 	eventBus := redisrepo.NewEventBus(redisClient, "")
 	svc := service.New(hostStore, metricStore, hostStore, eventBus, clock.Real{}, logger)
 	handler := httptransport.NewServer(svc).Handler()
