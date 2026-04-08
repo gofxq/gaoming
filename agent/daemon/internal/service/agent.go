@@ -14,8 +14,9 @@ import (
 	monitorv1 "github.com/gofxq/gaoming/api/gen/go/monitor/v1"
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/ids"
+	"github.com/gofxq/gaoming/pkg/logx"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -306,12 +307,13 @@ func (a *Agent) grpcIngestClient(ctx context.Context) (monitorv1.MetricsIngestSe
 		return a.grpcIngest, nil
 	}
 
-	conn, err := grpc.DialContext(
-		ctx,
+	conn, err := grpc.NewClient(
+		// ctx,
 		a.cfg.IngestGatewayGRPCAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, "")),
 	)
 	if err != nil {
+		logx.New("agent").Error("failed to create gRPC client", "error", err)
 		return nil, err
 	}
 
