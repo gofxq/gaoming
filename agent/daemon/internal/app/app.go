@@ -24,10 +24,12 @@ func New() (*App, error) {
 	host.TenantCode = cfg.TenantCode
 
 	agent := service.New(service.Config{
-		MasterAPIURL:     cfg.MasterAPIURL,
-		IngestGatewayURL: cfg.IngestGatewayURL,
-		LoopInterval:     time.Duration(cfg.LoopIntervalSec) * time.Second,
-		Host:             host,
+		MasterAPIURL:          cfg.MasterAPIURL,
+		IngestGatewayURL:      cfg.IngestGatewayURL,
+		IngestGatewayGRPCAddr: cfg.IngestGatewayGRPCAddr,
+		ReportMode:            cfg.ReportMode,
+		LoopInterval:          time.Duration(cfg.LoopIntervalSec) * time.Second,
+		Host:                  host,
 		PersistTenant: func(tenantCode string) error {
 			return config.SaveTenant(cfg.ConfigPath, tenantCode)
 		},
@@ -37,5 +39,6 @@ func New() (*App, error) {
 }
 
 func (a *App) Run(ctx context.Context) error {
+	defer a.agent.Close()
 	return a.agent.Run(ctx)
 }

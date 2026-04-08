@@ -4,3 +4,7 @@ plugins:
     out: api/gen/go
     opt:
       - paths=source_relative
+  - plugin: go-grpc
+    out: api/gen/go
+    opt:
+      - paths=source_relative

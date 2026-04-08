@@ -1,23 +1,30 @@
 # 仓库工程化补充
 
-为了让项目更像一个可长期维护的仓库，而不是一次性样例，当前已经补上这些基础设施文件：
+当前仓库已经补齐了基础工程文件：
 
-- [/.gitignore](/home/u/dev/github.com/gofxq/gaoming/.gitignore)
-- [/.editorconfig](/home/u/dev/github.com/gofxq/gaoming/.editorconfig)
-- [/.dockerignore](/home/u/dev/github.com/gofxq/gaoming/.dockerignore)
-- [/.gitattributes](/home/u/dev/github.com/gofxq/gaoming/.gitattributes)
-- [/CONTRIBUTING.md](/home/u/dev/github.com/gofxq/gaoming/CONTRIBUTING.md)
+- [`.gitignore`](../.gitignore)
+- [`.editorconfig`](../.editorconfig)
+- [`.dockerignore`](../.dockerignore)
+- [`.gitattributes`](../.gitattributes)
+- [`CONTRIBUTING.md`](../CONTRIBUTING.md)
 
 ## 作用
 
-- `.gitignore`：忽略编译产物、日志、覆盖率文件、本地环境文件和 IDE 垃圾文件。
-- `.editorconfig`：统一缩进、换行和结尾换行策略。
-- `.dockerignore`：减少 Docker 构建上下文，避免把无关文件送进镜像构建。
-- `.gitattributes`：统一文本文件的 LF 换行。
-- `CONTRIBUTING.md`：固定开发、校验和提交流程。
+- `.gitignore`
+  - 忽略编译产物、日志、覆盖率文件、本地环境文件和 IDE 垃圾文件
+- `.editorconfig`
+  - 统一缩进、换行和文件结尾
+- `.dockerignore`
+  - 控制镜像构建上下文
+- `.gitattributes`
+  - 统一文本文件换行策略
+- `CONTRIBUTING.md`
+  - 固定开发、校验和提交流程
 
-## 推荐习惯
+## 当前仓库习惯
 
-- 日常开发优先执行 `make check`。
-- 改了容器或启动链路时，补跑 `make compose-config` 和 `make smoke`。
-- 新增详细设计时写进 `docs/`，不要把 README 再膨胀回大杂烩。
+- Go 侧优先用 `make check`
+- 涉及容器改动时补跑 `make compose-config`
+- 涉及联调链路时补跑 `make smoke` 和 `make smoke-agent`
+- Web 变更走 `make web-dev` / `make web-build`
+- 设计和运行态说明继续沉淀在 `docs/`，前端专项说明放 `web/README.md`

@@ -1,76 +1,162 @@
 # 本地启动与验证
 
-## 直接在本机运行
+## 推荐联调方式
 
-```bash
-make build
-make run-master
-make run-ingest
-make run-core
-make run-probe
-make run-agent
-```
+- 后端与依赖走 Docker
+- Agent 跑宿主机
+- Web 跑 `Vite`
 
-## 使用 Docker Compose
-
-推荐本地联调方式：
-
-- `master-api / ingest-gateway / postgres / redis / core-worker / probe-worker` 走 Docker
-- `agent` 直接运行在宿主机
+对应命令：
 
 ```bash
 make docker-up
 make smoke
 make run-agent
 make smoke-agent
+make web-dev WEB_API_ORIGIN=http://127.0.0.1:8080
+```
+
+页面入口：
+
+- `http://127.0.0.1:5173/default`
+- `http://127.0.0.1:5173/default/pwa`
+
+## 后端健康检查
+
+```bash
+curl http://127.0.0.1:8080/master/healthz
+curl "http://127.0.0.1:8080/master/api/v1/hosts?tenant=default"
+curl http://127.0.0.1:8090/ingest/healthz
+curl http://127.0.0.1:8090/ingest/debug/counters
+curl -v 127.0.0.1:8091
+```
+
+如果 `probe-worker` 已在运行，`/ingest/debug/counters` 里的 `probe_reports` 会持续增长。
+
+## Agent 本地运行
+
+```bash
+make run-agent
+```
+
+Agent 当前配置来源优先级是：
+
+1. 环境变量
+2. 当前目录下 `.env`
+3. 当前目录下 `agent-config.yaml`
+4. 代码默认值
+
+几个常用变量：
+
+- `MASTER_API_URL`
+- `INGEST_GATEWAY_URL`
+- `INGEST_GATEWAY_GRPC_ADDR`
+- `AGENT_REPORT_MODE`
+- `AGENT_REGION`
+- `AGENT_ENV`
+- `AGENT_ROLE`
+- `AGENT_TENANT`
+- `AGENT_LOOP_INTERVAL_SEC`
+
+如果要从宿主机测试 gRPC 上报，可以直接这样跑：
+
+```bash
+MASTER_API_URL=http://127.0.0.1:8080 \
+INGEST_GATEWAY_URL=http://127.0.0.1:8090 \
+INGEST_GATEWAY_GRPC_ADDR=127.0.0.1:8091 \
+AGENT_REPORT_MODE=grpc \
+AGENT_CONFIG_PATH=/tmp/gaoming-agent-grpc.yaml \
+make run-agent
+```
+
+然后再执行：
+
+```bash
+TENANT=<agent-config.yaml 里的 tenant_code> \
+MASTER_URL=http://127.0.0.1:8080 \
+INGEST_URL=http://127.0.0.1:8090 \
+make smoke-agent
+```
+
+第一次注册成功后，如果服务端返回了 `tenant_code`，Agent 会把它持久化回 `agent-config.yaml`。
+
+`make smoke-agent` 会同时检查：
+
+- `master-api` 是否已经能查到主机
+- `ingest-gateway` 的 `metric_batches` 是否继续增长
+
+它支持这些环境变量：
+
+- `MASTER_URL`，默认 `http://127.0.0.1:8080`
+- `INGEST_URL`，默认 `http://127.0.0.1:8090`
+- `TENANT`，指定后按 tenant 过滤主机列表
+- `EXPECT_METRICS=0`，只验证注册，不检查 `metric_batches`
+
+## 纯本机方式运行后端
+
+如果你不想跑容器，也可以直接启动各服务，但要先准备 PostgreSQL 和 Redis。
+
+`master-api` 默认连的是：
+
+- PostgreSQL `127.0.0.1:5432`
+- Redis `127.0.0.1:6379`
+
+如果你复用 `docker compose` 暴露的端口，则需要显式覆盖：
+
+```bash
+MASTER_API_POSTGRES_DSN='postgres://gaoming:gaoming@127.0.0.1:35432/gaoming?sslmode=disable' \
+MASTER_API_REDIS_ADDR='127.0.0.1:36379' \
+make run-master
+```
+
+其余服务可分别启动：
+
+```bash
+make run-ingest
+make run-core
+make run-probe
+```
+
+## 当前页面链路
+
+Web 页面当前不由 `master-api` 直接托管。
+
+开发模式下：
+
+- `Vite` 运行在 `5173`
+- `/master/*` 通过代理转发到 `WEB_API_ORIGIN`
+
+因此本地看页面时，应访问 `5173`，不是 `8080`。
+
+## 关键验证点
+
+### 注册与租户
+
+- 运行 `make run-agent` 后，`GET /master/api/v1/hosts?tenant=default` 应该能看到主机
+- `agent-config.yaml` 里会保存当前租户
+
+### 实时更新
+
+- 刷新 `http://127.0.0.1:5173/default`
+- 页面应该通过 `SSE` 收到 `sync` 和后续 `host_upsert`
+
+### 离线判定
+
+- 停掉 `agent`
+- 等待约 15 秒到 20 秒
+- 主机会被标记为 `OFFLINE`
+
+### 接入层计数
+
+- `metric_batches` 会随着 Agent 周期上报增长
+- `probe_reports` 会随着 `probe-worker` 周期探测增长
+
+## 常用命令
+
+```bash
 make docker-logs
+make docker-ps
 make docker-down
+make test
+make check
 ```
-
-如果只是想保留“容器里跑 agent”的对比模式：
-
-```bash
-make docker-up-full
-```
-
-## 关键接口
-
-```bash
-curl http://127.0.0.1:8080/healthz
-curl http://127.0.0.1:8080/api/v1/hosts
-curl http://127.0.0.1:8090/debug/counters
-```
-
-## 状态页面
-
-浏览器直接访问：
-
-```text
-http://127.0.0.1:8080/
-```
-
-页面会通过 SSE 接收 `sync / host_upsert / host_delete` 增量事件，实时展示所有 agent 的状态，并支持按时间窗口同时查看 CPU、内存、磁盘用量、磁盘读、磁盘写、负载、网络 RX、网络 TX 的历史曲线。
-
-默认行为：
-
-- 超过 15 秒没有 heartbeat 的 host 会被自动标记为 `OFFLINE`
-- 页面会默认把 `OFFLINE` host 置灰并排到列表后面
-- 可以通过“只看在线 Agent”开关过滤掉离线主机
-- 可以通过“暂停更新”冻结页面视图，恢复时再一次性刷入积压事件
-
-SSE 推送端点：
-
-```text
-http://127.0.0.1:8080/api/v1/stream/hosts
-```
-
-页面现在已经从轮询升级为基于 `EventSource` 的实时推送。
-
-## 说明
-
-- 数据库初始化 SQL 会在 PostgreSQL 容器第一次启动时自动执行。
-- 默认 `docker-up` 不会启动容器里的 agent，避免把宿主机测试流程和容器内 agent 混在一起。
-- 当前最推荐的测试方式是宿主机直接运行 `make run-agent`，这样看到的 CPU、内存、负载、网络更接近真实宿主机数据。
-- 宿主机 agent 默认每秒上报一次，指标采集当前基于 `gopsutil`，页面会在同一个时间窗口内同时展示 CPU、内存、磁盘用量、磁盘读、磁盘写、负载、网络 RX、网络 TX。
-- 当前 `master-api` 还没有把状态写入 PostgreSQL/Redis，首版先保证服务、容器、注册与上报链路全部可跑。
-- 如果要继续向 README 的完整设计演进，下一步是把 `master-api` 和 `core-worker` 的内存存储替换成 PG/Redis/MQ。

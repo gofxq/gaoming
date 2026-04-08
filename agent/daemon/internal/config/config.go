@@ -3,6 +3,8 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -10,14 +12,16 @@ import (
 )
 
 type Config struct {
-	MasterAPIURL     string
-	IngestGatewayURL string
-	Region           string
-	Env              string
-	Role             string
-	TenantCode       string
-	ConfigPath       string
-	LoopIntervalSec  int
+	MasterAPIURL          string
+	IngestGatewayURL      string
+	IngestGatewayGRPCAddr string
+	ReportMode            string
+	Region                string
+	Env                   string
+	Role                  string
+	TenantCode            string
+	ConfigPath            string
+	LoopIntervalSec       int
 }
 
 func Load() (Config, error) {
@@ -31,15 +35,22 @@ func Load() (Config, error) {
 	fileState.MasterAPIURL = normalizeLegacyURL(fileState.MasterAPIURL, "MASTER_API_URL", "MASTER_API_HTTP_ADDR", envFile)
 	fileState.IngestGatewayURL = normalizeLegacyURL(fileState.IngestGatewayURL, "INGEST_GATEWAY_URL", "INGEST_GATEWAY_HTTP_ADDR", envFile)
 
+	masterAPIURL := strings.TrimRight(valueString([]string{"MASTER_API_URL"}, envFile, fileState.MasterAPIURL, "http://127.0.0.1:8080"), "/")
+	ingestGatewayURL := strings.TrimRight(valueString([]string{"INGEST_GATEWAY_URL"}, envFile, fileState.IngestGatewayURL, "http://127.0.0.1:8090"), "/")
+	reportMode := normalizeReportMode(valueString([]string{"AGENT_REPORT_MODE"}, envFile, fileState.ReportMode, reportModeHTTP))
+	ingestGatewayGRPCAddr := normalizeGRPCAddr(valueString([]string{"INGEST_GATEWAY_GRPC_ADDR"}, envFile, fileState.IngestGatewayGRPCAddr, defaultGRPCAddrForURL(ingestGatewayURL)))
+
 	cfg := Config{
-		MasterAPIURL:     strings.TrimRight(valueString([]string{"MASTER_API_URL"}, envFile, fileState.MasterAPIURL, "http://127.0.0.1:8080"), "/"),
-		IngestGatewayURL: strings.TrimRight(valueString([]string{"INGEST_GATEWAY_URL"}, envFile, fileState.IngestGatewayURL, "http://127.0.0.1:8090"), "/"),
-		Region:           valueString([]string{"AGENT_REGION"}, envFile, fileState.Region, "local"),
-		Env:              valueString([]string{"AGENT_ENV"}, envFile, fileState.Env, "dev"),
-		Role:             valueString([]string{"AGENT_ROLE"}, envFile, fileState.Role, "node"),
-		TenantCode:       valueString([]string{"AGENT_TENANT"}, envFile, fileState.TenantCode, ""),
-		ConfigPath:       configPath,
-		LoopIntervalSec:  valueInt("AGENT_LOOP_INTERVAL_SEC", envFile, fileState.LoopIntervalSec, 1),
+		MasterAPIURL:          masterAPIURL,
+		IngestGatewayURL:      ingestGatewayURL,
+		IngestGatewayGRPCAddr: ingestGatewayGRPCAddr,
+		ReportMode:            reportMode,
+		Region:                valueString([]string{"AGENT_REGION"}, envFile, fileState.Region, "local"),
+		Env:                   valueString([]string{"AGENT_ENV"}, envFile, fileState.Env, "dev"),
+		Role:                  valueString([]string{"AGENT_ROLE"}, envFile, fileState.Role, "node"),
+		TenantCode:            valueString([]string{"AGENT_TENANT"}, envFile, fileState.TenantCode, ""),
+		ConfigPath:            configPath,
+		LoopIntervalSec:       valueInt("AGENT_LOOP_INTERVAL_SEC", envFile, fileState.LoopIntervalSec, 1),
 	}
 
 	if err := Save(cfg); err != nil {
@@ -49,13 +60,15 @@ func Load() (Config, error) {
 }
 
 type persistedConfig struct {
-	MasterAPIURL     string
-	IngestGatewayURL string
-	Region           string
-	Env              string
-	Role             string
-	TenantCode       string
-	LoopIntervalSec  int
+	MasterAPIURL          string
+	IngestGatewayURL      string
+	IngestGatewayGRPCAddr string
+	ReportMode            string
+	Region                string
+	Env                   string
+	Role                  string
+	TenantCode            string
+	LoopIntervalSec       int
 }
 
 func Save(cfg Config) error {
@@ -68,13 +81,15 @@ func Save(cfg Config) error {
 	}
 
 	body := renderConfigFile(persistedConfig{
-		MasterAPIURL:     cfg.MasterAPIURL,
-		IngestGatewayURL: cfg.IngestGatewayURL,
-		Region:           cfg.Region,
-		Env:              cfg.Env,
-		Role:             cfg.Role,
-		TenantCode:       cfg.TenantCode,
-		LoopIntervalSec:  cfg.LoopIntervalSec,
+		MasterAPIURL:          cfg.MasterAPIURL,
+		IngestGatewayURL:      cfg.IngestGatewayURL,
+		IngestGatewayGRPCAddr: cfg.IngestGatewayGRPCAddr,
+		ReportMode:            cfg.ReportMode,
+		Region:                cfg.Region,
+		Env:                   cfg.Env,
+		Role:                  cfg.Role,
+		TenantCode:            cfg.TenantCode,
+		LoopIntervalSec:       cfg.LoopIntervalSec,
 	})
 	return os.WriteFile(cfg.ConfigPath, []byte(body), 0o600)
 }
@@ -87,14 +102,16 @@ func SaveTenant(path string, tenantCode string) error {
 	state := loadConfigFile(path)
 	state.TenantCode = tenantCode
 	cfg := Config{
-		MasterAPIURL:     state.MasterAPIURL,
-		IngestGatewayURL: state.IngestGatewayURL,
-		Region:           state.Region,
-		Env:              state.Env,
-		Role:             state.Role,
-		TenantCode:       state.TenantCode,
-		ConfigPath:       path,
-		LoopIntervalSec:  state.LoopIntervalSec,
+		MasterAPIURL:          state.MasterAPIURL,
+		IngestGatewayURL:      state.IngestGatewayURL,
+		IngestGatewayGRPCAddr: state.IngestGatewayGRPCAddr,
+		ReportMode:            normalizeReportMode(state.ReportMode),
+		Region:                state.Region,
+		Env:                   state.Env,
+		Role:                  state.Role,
+		TenantCode:            state.TenantCode,
+		ConfigPath:            path,
+		LoopIntervalSec:       state.LoopIntervalSec,
 	}
 	return Save(cfg)
 }
@@ -137,6 +154,10 @@ func loadConfigFile(path string) persistedConfig {
 			cfg.MasterAPIURL = value
 		case "ingest_gateway_url":
 			cfg.IngestGatewayURL = value
+		case "ingest_gateway_grpc_addr":
+			cfg.IngestGatewayGRPCAddr = value
+		case "report_mode":
+			cfg.ReportMode = normalizeReportMode(value)
 		case "region":
 			cfg.Region = value
 		case "env":
@@ -152,6 +173,41 @@ func loadConfigFile(path string) persistedConfig {
 		}
 	}
 	return cfg
+}
+
+const (
+	reportModeHTTP = "http"
+	reportModeGRPC = "grpc"
+)
+
+func normalizeReportMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case reportModeGRPC:
+		return reportModeGRPC
+	default:
+		return reportModeHTTP
+	}
+}
+
+func defaultGRPCAddrForURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Host == "" {
+		return "127.0.0.1:8091"
+	}
+
+	host := parsed.Hostname()
+	if host == "" {
+		return "127.0.0.1:8091"
+	}
+	return net.JoinHostPort(host, "8091")
+}
+
+func normalizeGRPCAddr(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "127.0.0.1:8091"
+	}
+	return value
 }
 
 func loadDotEnv(path string) map[string]string {
@@ -224,6 +280,8 @@ func renderConfigFile(cfg persistedConfig) string {
 	var b strings.Builder
 	writeYAMLString(&b, "master_api_url", cfg.MasterAPIURL)
 	writeYAMLString(&b, "ingest_gateway_url", cfg.IngestGatewayURL)
+	writeYAMLString(&b, "ingest_gateway_grpc_addr", normalizeGRPCAddr(cfg.IngestGatewayGRPCAddr))
+	writeYAMLString(&b, "report_mode", normalizeReportMode(cfg.ReportMode))
 	writeYAMLString(&b, "region", cfg.Region)
 	writeYAMLString(&b, "env", cfg.Env)
 	writeYAMLString(&b, "role", cfg.Role)

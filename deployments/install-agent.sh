@@ -5,6 +5,8 @@ umask 022
 # ---------- defaults ----------
 MASTER_API_URL_EXPLICIT="${MASTER_API_URL+1}"
 INGEST_GATEWAY_URL_EXPLICIT="${INGEST_GATEWAY_URL+1}"
+INGEST_GATEWAY_GRPC_ADDR_EXPLICIT="${INGEST_GATEWAY_GRPC_ADDR+1}"
+AGENT_REPORT_MODE_EXPLICIT="${AGENT_REPORT_MODE+1}"
 AGENT_TENANT_EXPLICIT="${AGENT_TENANT+1}"
 AGENT_LOOP_INTERVAL_SEC_EXPLICIT="${AGENT_LOOP_INTERVAL_SEC+1}"
 
@@ -17,6 +19,8 @@ SERVICE_GROUP="${SERVICE_GROUP:-gaoming-agent}"
 
 MASTER_API_URL="${MASTER_API_URL:-https://gm-metric.gofxq.com/}"
 INGEST_GATEWAY_URL="${INGEST_GATEWAY_URL:-https://gm-metric.gofxq.com/}"
+INGEST_GATEWAY_GRPC_ADDR="${INGEST_GATEWAY_GRPC_ADDR:-gm-metric.gofxq.com:8091}"
+AGENT_REPORT_MODE="${AGENT_REPORT_MODE:-http}"
 
 AGENT_REGION="${AGENT_REGION:-local}"
 AGENT_ENV="${AGENT_ENV:-prod}"
@@ -45,6 +49,8 @@ Options:
   --service-group <name>         Linux service group, default: gaoming-agent
   --master-url <url>             Default: https://gm-metric.gofxq.com/
   --ingest-url <url>             Default: https://gm-metric.gofxq.com/
+  --ingest-grpc-addr <addr>      Default: gm-metric.gofxq.com:8091
+  --report-mode <http|grpc>      Default: http
   --tenant <code>                Default: empty, server generates tenant
   --loop-interval-sec <seconds>  Default: 1
   --region <name>                Default: local
@@ -93,8 +99,14 @@ prompt_install_inputs() {
   if [ -z "$MASTER_API_URL_EXPLICIT" ]; then
     MASTER_API_URL="$(prompt_with_default "master-url" "$MASTER_API_URL" "$MASTER_API_URL")"
   fi
+  if [ -z "$AGENT_REPORT_MODE_EXPLICIT" ]; then
+    AGENT_REPORT_MODE="$(prompt_with_default "report-mode" "$AGENT_REPORT_MODE" "$AGENT_REPORT_MODE")"
+  fi
   if [ -z "$INGEST_GATEWAY_URL_EXPLICIT" ]; then
     INGEST_GATEWAY_URL="$(prompt_with_default "ingest-url" "$INGEST_GATEWAY_URL" "$INGEST_GATEWAY_URL")"
+  fi
+  if [ "$AGENT_REPORT_MODE" = "grpc" ] && [ -z "$INGEST_GATEWAY_GRPC_ADDR_EXPLICIT" ]; then
+    INGEST_GATEWAY_GRPC_ADDR="$(prompt_with_default "ingest-grpc-addr" "$INGEST_GATEWAY_GRPC_ADDR" "$INGEST_GATEWAY_GRPC_ADDR")"
   fi
   if [ -z "$AGENT_TENANT_EXPLICIT" ]; then
     AGENT_TENANT="$(prompt_with_default "tenant" "$AGENT_TENANT" "${AGENT_TENANT:-<auto>}")"
@@ -127,6 +139,17 @@ validate_url() {
   esac
 }
 
+validate_report_mode() {
+  case "$1" in
+    http|grpc) : ;;
+    *) die "report-mode must be http or grpc: $1" ;;
+  esac
+}
+
+validate_non_empty() {
+  [ -n "$1" ] || die "$2 must not be empty"
+}
+
 validate_positive_int() {
   case "$1" in
     ''|*[!0-9]*) die "$2 must be a positive integer" ;;
@@ -149,6 +172,10 @@ validate_inputs() {
   validate_name "$SERVICE_GROUP" "service-group"
   validate_url "$MASTER_API_URL" "master-url"
   validate_url "$INGEST_GATEWAY_URL" "ingest-url"
+  validate_report_mode "$AGENT_REPORT_MODE"
+  if [ "$AGENT_REPORT_MODE" = "grpc" ]; then
+    validate_non_empty "$INGEST_GATEWAY_GRPC_ADDR" "ingest-grpc-addr"
+  fi
   validate_positive_int "$AGENT_LOOP_INTERVAL_SEC" "loop-interval-sec"
   validate_abs_path "$INSTALL_DIR" "install-dir"
 }
@@ -165,6 +192,8 @@ parse_args() {
       --service-group)       [ "$#" -ge 2 ] || die "missing value for --service-group"; SERVICE_GROUP="$2"; shift 2 ;;
       --master-url)          [ "$#" -ge 2 ] || die "missing value for --master-url"; MASTER_API_URL="$2"; MASTER_API_URL_EXPLICIT=1; shift 2 ;;
       --ingest-url)          [ "$#" -ge 2 ] || die "missing value for --ingest-url"; INGEST_GATEWAY_URL="$2"; INGEST_GATEWAY_URL_EXPLICIT=1; shift 2 ;;
+      --ingest-grpc-addr)    [ "$#" -ge 2 ] || die "missing value for --ingest-grpc-addr"; INGEST_GATEWAY_GRPC_ADDR="$2"; INGEST_GATEWAY_GRPC_ADDR_EXPLICIT=1; shift 2 ;;
+      --report-mode)         [ "$#" -ge 2 ] || die "missing value for --report-mode"; AGENT_REPORT_MODE="$2"; AGENT_REPORT_MODE_EXPLICIT=1; shift 2 ;;
       --tenant)              [ "$#" -ge 2 ] || die "missing value for --tenant"; AGENT_TENANT="$2"; AGENT_TENANT_EXPLICIT=1; shift 2 ;;
       --loop-interval-sec)   [ "$#" -ge 2 ] || die "missing value for --loop-interval-sec"; AGENT_LOOP_INTERVAL_SEC="$2"; AGENT_LOOP_INTERVAL_SEC_EXPLICIT=1; shift 2 ;;
       --region)              [ "$#" -ge 2 ] || die "missing value for --region"; AGENT_REGION="$2"; shift 2 ;;
@@ -384,6 +413,8 @@ render_config() {
   cat <<EOF
 master_api_url: "$(yaml_escape "$MASTER_API_URL")"
 ingest_gateway_url: "$(yaml_escape "$INGEST_GATEWAY_URL")"
+ingest_gateway_grpc_addr: "$(yaml_escape "$INGEST_GATEWAY_GRPC_ADDR")"
+report_mode: "$(yaml_escape "$AGENT_REPORT_MODE")"
 region: "$(yaml_escape "$AGENT_REGION")"
 env: "$(yaml_escape "$AGENT_ENV")"
 role: "$(yaml_escape "$AGENT_ROLE")"
@@ -520,6 +551,12 @@ print_summary() {
 
   log "installed ${SERVICE_NAME} to ${INSTALL_DIR}"
   log "config: ${INSTALL_DIR}/agent-config.yaml"
+  log "report_mode: ${AGENT_REPORT_MODE}"
+  if [ "$AGENT_REPORT_MODE" = "grpc" ]; then
+    log "ingest_grpc_addr: ${INGEST_GATEWAY_GRPC_ADDR}"
+  else
+    log "ingest_url: ${INGEST_GATEWAY_URL}"
+  fi
   if [ -n "$tenant_code" ]; then
     log "tenant_code: ${tenant_code}"
     log "dashboard: $(build_dashboard_url "$tenant_code")"

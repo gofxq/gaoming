@@ -11,28 +11,36 @@ import (
 	"strings"
 	"time"
 
+	monitorv1 "github.com/gofxq/gaoming/api/gen/go/monitor/v1"
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/ids"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Config struct {
-	MasterAPIURL     string
-	IngestGatewayURL string
-	LoopInterval     time.Duration
-	Host             contracts.HostIdentity
-	PersistTenant    func(string) error
+	MasterAPIURL          string
+	IngestGatewayURL      string
+	IngestGatewayGRPCAddr string
+	ReportMode            string
+	LoopInterval          time.Duration
+	Host                  contracts.HostIdentity
+	PersistTenant         func(string) error
 }
 
 type Agent struct {
-	cfg       Config
-	logger    *slog.Logger
-	client    *http.Client
-	agentID   string
-	hostUID   string
-	bootTime  time.Time
-	hbSeq     int64
-	metricSeq int64
-	sampler   systemSampler
+	cfg        Config
+	logger     *slog.Logger
+	client     *http.Client
+	grpcConn   *grpc.ClientConn
+	grpcIngest monitorv1.MetricsIngestServiceClient
+	agentID    string
+	hostUID    string
+	bootTime   time.Time
+	hbSeq      int64
+	metricSeq  int64
+	sampler    systemSampler
 }
 
 type apiError struct {
@@ -53,6 +61,13 @@ func New(cfg Config, logger *slog.Logger) *Agent {
 		bootTime: time.Now().UTC(),
 		sampler:  newSystemSampler(),
 	}
+}
+
+func (a *Agent) Close() error {
+	if a.grpcConn != nil {
+		return a.grpcConn.Close()
+	}
+	return nil
 }
 
 func (a *Agent) Run(ctx context.Context) error {
@@ -185,11 +200,28 @@ func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest
 		},
 	}
 
-	var resp contracts.AckResponse
-	if err := a.postJSON(ctx, ingestAPIURL(a.cfg.IngestGatewayURL, "metrics"), payload, &resp); err != nil {
-		return err
+	switch normalizeReportMode(a.cfg.ReportMode) {
+	case reportModeGRPC:
+		return a.pushMetricsGRPC(ctx, payload)
+	default:
+		var resp contracts.AckResponse
+		if err := a.postJSON(ctx, ingestAPIURL(a.cfg.IngestGatewayURL, "metrics"), payload, &resp); err != nil {
+			return err
+		}
 	}
 	a.logger.Info("metrics sent", "host_uid", a.hostUID, "batch_seq", a.metricSeq)
+	return nil
+}
+
+func (a *Agent) pushMetricsGRPC(ctx context.Context, payload contracts.PushMetricBatchRequest) error {
+	client, err := a.grpcIngestClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	if _, err := client.PushMetricBatch(ctx, toProtoPushMetricBatchRequest(payload)); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -267,4 +299,68 @@ func (a *Agent) postJSON(ctx context.Context, url string, payload any, out any) 
 	}
 
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func (a *Agent) grpcIngestClient(ctx context.Context) (monitorv1.MetricsIngestServiceClient, error) {
+	if a.grpcIngest != nil {
+		return a.grpcIngest, nil
+	}
+
+	conn, err := grpc.DialContext(
+		ctx,
+		a.cfg.IngestGatewayGRPCAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	a.grpcConn = conn
+	a.grpcIngest = monitorv1.NewMetricsIngestServiceClient(conn)
+	return a.grpcIngest, nil
+}
+
+const (
+	reportModeHTTP = "http"
+	reportModeGRPC = "grpc"
+)
+
+func normalizeReportMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case reportModeGRPC:
+		return reportModeGRPC
+	default:
+		return reportModeHTTP
+	}
+}
+
+func toProtoPushMetricBatchRequest(req contracts.PushMetricBatchRequest) *monitorv1.PushMetricBatchRequest {
+	points := make([]*monitorv1.MetricPoint, 0, len(req.Points))
+	for _, point := range req.Points {
+		points = append(points, &monitorv1.MetricPoint{
+			Name:   point.Name,
+			Value:  point.Value,
+			Ts:     timestamppb.New(point.TS),
+			Labels: cloneStringMap(point.Labels),
+		})
+	}
+
+	return &monitorv1.PushMetricBatchRequest{
+		HostUid:     req.HostUID,
+		AgentId:     req.AgentID,
+		BatchSeq:    req.BatchSeq,
+		CollectedAt: timestamppb.New(req.CollectedAt),
+		Points:      points,
+	}
+}
+
+func cloneStringMap(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
 }

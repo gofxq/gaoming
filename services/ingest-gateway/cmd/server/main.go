@@ -10,13 +10,14 @@ import (
 	"time"
 
 	"github.com/gofxq/gaoming/services/ingest-gateway/internal/app"
+	"google.golang.org/grpc"
 )
 
 func main() {
 	application := app.New()
 
 	go func() {
-		if err := application.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := application.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, grpc.ErrServerStopped) {
 			panic(err)
 		}
 	}()
