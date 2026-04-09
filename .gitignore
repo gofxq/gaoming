@@ -10,16 +10,10 @@ cover.out
 *.log
 *.pid
 
-api/gen/
-
 .env
 .env.local
 .env.*.local
 agent-config.yaml
-web/.env
-web/.env.local
-web/.env.*.local
-
 .idea/
 .vscode/
 *.swp
@@ -35,4 +29,7 @@ docs/plans/
 web/node_modules/
 web/dist/
 web/.vite/
+web/.env
+web/.env.local
+web/.env.*.local
 deployments/
