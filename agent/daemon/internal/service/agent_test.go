@@ -48,42 +48,6 @@ func TestMasterAPIURL(t *testing.T) {
 	}
 }
 
-func TestIngestAPIURL(t *testing.T) {
-	tests := []struct {
-		name     string
-		base     string
-		endpoint string
-		want     string
-	}{
-		{
-			name:     "root base",
-			base:     "http://127.0.0.1:8090",
-			endpoint: "metrics",
-			want:     "http://127.0.0.1:8090/ingest/api/v1/metrics",
-		},
-		{
-			name:     "service base",
-			base:     "http://127.0.0.1:8090/ingest",
-			endpoint: "metrics",
-			want:     "http://127.0.0.1:8090/ingest/api/v1/metrics",
-		},
-		{
-			name:     "api base",
-			base:     "http://127.0.0.1:8090/ingest/api/v1",
-			endpoint: "metrics",
-			want:     "http://127.0.0.1:8090/ingest/api/v1/metrics",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := ingestAPIURL(tt.base, tt.endpoint); got != tt.want {
-				t.Fatalf("ingestAPIURL(%q, %q) = %q, want %q", tt.base, tt.endpoint, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestPushMetricsWithDigestGRPC(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -102,7 +66,6 @@ func TestPushMetricsWithDigestGRPC(t *testing.T) {
 	}()
 
 	agent := New(Config{
-		ReportMode:            "grpc",
 		IngestGatewayGRPCAddr: listener.Addr().String(),
 		LoopInterval:          time.Second,
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))

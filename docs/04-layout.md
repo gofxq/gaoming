@@ -47,8 +47,10 @@
 - `internal/config`
 - `internal/service`
   - metric/event/probe 接收计数
+- `internal/transport/grpc`
+  - Agent metrics gRPC 接入
 - `internal/transport/http`
-  - `/ingest/*` HTTP 路由
+  - `/ingest/*` HTTP 路由（health、events、probes、debug）
 
 ### `services/core-worker`
 

@@ -20,7 +20,7 @@ func TestLoadReadsDotEnvAndWritesAgentConfigYAML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dotenv := "MASTER_API_URL=http://example-master:8080\nINGEST_GATEWAY_URL=http://example-ingest:8090\nINGEST_GATEWAY_GRPC_ADDR=example-ingest:18091\nAGENT_REPORT_MODE=grpc\nAGENT_REGION=prod\nAGENT_ENV=prod\nAGENT_ROLE=edge\nAGENT_LOOP_INTERVAL_SEC=7\n"
+	dotenv := "MASTER_API_URL=http://example-master:8080\nINGEST_GATEWAY_GRPC_ADDR=example-ingest:18091\nAGENT_REGION=prod\nAGENT_ENV=prod\nAGENT_ROLE=edge\nAGENT_LOOP_INTERVAL_SEC=7\n"
 	if err := os.WriteFile(".env", []byte(dotenv), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -35,9 +35,6 @@ func TestLoadReadsDotEnvAndWritesAgentConfigYAML(t *testing.T) {
 	}
 	if cfg.IngestGatewayGRPCAddr != "example-ingest:18091" {
 		t.Fatalf("unexpected ingest grpc addr: %q", cfg.IngestGatewayGRPCAddr)
-	}
-	if cfg.ReportMode != "grpc" {
-		t.Fatalf("unexpected report mode: %q", cfg.ReportMode)
 	}
 	expectedPath := filepath.Join(dir, "agent-config.yaml")
 	resolvedExpectedPath, err := filepath.EvalSymlinks(expectedPath)
@@ -63,8 +60,11 @@ func TestLoadReadsDotEnvAndWritesAgentConfigYAML(t *testing.T) {
 	if !strings.Contains(text, `ingest_gateway_grpc_addr: "example-ingest:18091"`) {
 		t.Fatalf("expected saved config to contain grpc addr, got:\n%s", text)
 	}
-	if !strings.Contains(text, `report_mode: "grpc"`) {
-		t.Fatalf("expected saved config to contain report mode, got:\n%s", text)
+	if strings.Contains(text, "ingest_gateway_url:") {
+		t.Fatalf("expected saved config not to contain legacy ingest url, got:\n%s", text)
+	}
+	if strings.Contains(text, "report_mode:") {
+		t.Fatalf("expected saved config not to contain report mode, got:\n%s", text)
 	}
 	if !strings.Contains(text, "loop_interval_sec: 7") {
 		t.Fatalf("expected saved config to contain loop interval, got:\n%s", text)
@@ -97,18 +97,12 @@ func TestLoadDoesNotTreatServerHTTPAddrAsAgentBaseURL(t *testing.T) {
 	if cfg.MasterAPIURL != "http://127.0.0.1:8080" {
 		t.Fatalf("unexpected master api url: %q", cfg.MasterAPIURL)
 	}
-	if cfg.IngestGatewayURL != "http://127.0.0.1:8090" {
-		t.Fatalf("unexpected ingest gateway url: %q", cfg.IngestGatewayURL)
-	}
 	if cfg.IngestGatewayGRPCAddr != "127.0.0.1:8091" {
 		t.Fatalf("unexpected ingest grpc addr: %q", cfg.IngestGatewayGRPCAddr)
 	}
-	if cfg.ReportMode != "http" {
-		t.Fatalf("unexpected report mode: %q", cfg.ReportMode)
-	}
 }
 
-func TestLoadRepairsLegacyPersistedURLFromServerHTTPAddr(t *testing.T) {
+func TestLoadRepairsLegacyPersistedMasterURLFromServerHTTPAddr(t *testing.T) {
 	dir := t.TempDir()
 	oldWD, err := os.Getwd()
 	if err != nil {
@@ -126,8 +120,7 @@ func TestLoadRepairsLegacyPersistedURLFromServerHTTPAddr(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := "" +
-		"master_api_url: \"https://wrong-master.example.com/\"\n" +
-		"ingest_gateway_url: \"https://wrong-ingest.example.com/\"\n"
+		"master_api_url: \"https://wrong-master.example.com/\"\n"
 	if err := os.WriteFile("agent-config.yaml", []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -140,8 +133,36 @@ func TestLoadRepairsLegacyPersistedURLFromServerHTTPAddr(t *testing.T) {
 	if cfg.MasterAPIURL != "http://127.0.0.1:8080" {
 		t.Fatalf("unexpected repaired master api url: %q", cfg.MasterAPIURL)
 	}
-	if cfg.IngestGatewayURL != "http://127.0.0.1:8090" {
-		t.Fatalf("unexpected repaired ingest gateway url: %q", cfg.IngestGatewayURL)
+	if cfg.IngestGatewayGRPCAddr != "127.0.0.1:8091" {
+		t.Fatalf("unexpected repaired ingest grpc addr: %q", cfg.IngestGatewayGRPCAddr)
+	}
+}
+
+func TestLoadDerivesGRPCAddrFromLegacyIngestURL(t *testing.T) {
+	dir := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldWD)
+	})
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	dotenv := "MASTER_API_URL=http://example-master:8080\nINGEST_GATEWAY_URL=http://legacy-ingest:8090\n"
+	if err := os.WriteFile(".env", []byte(dotenv), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.IngestGatewayGRPCAddr != "legacy-ingest:8091" {
+		t.Fatalf("unexpected derived ingest grpc addr: %q", cfg.IngestGatewayGRPCAddr)
 	}
 }
 
@@ -160,9 +181,7 @@ func TestLoadReadsSavedAgentConfigYAMLWithoutDotEnv(t *testing.T) {
 
 	body := "" +
 		"master_api_url: \"http://saved-master:8080\"\n" +
-		"ingest_gateway_url: \"http://saved-ingest:8090\"\n" +
 		"ingest_gateway_grpc_addr: \"saved-ingest:18091\"\n" +
-		"report_mode: \"grpc\"\n" +
 		"region: \"saved-region\"\n" +
 		"env: \"saved-env\"\n" +
 		"role: \"saved-role\"\n" +
@@ -182,9 +201,6 @@ func TestLoadReadsSavedAgentConfigYAMLWithoutDotEnv(t *testing.T) {
 	}
 	if cfg.IngestGatewayGRPCAddr != "saved-ingest:18091" {
 		t.Fatalf("unexpected ingest grpc addr: %q", cfg.IngestGatewayGRPCAddr)
-	}
-	if cfg.ReportMode != "grpc" {
-		t.Fatalf("unexpected report mode: %q", cfg.ReportMode)
 	}
 	if cfg.TenantCode != "tenant-saved" {
 		t.Fatalf("unexpected tenant code: %q", cfg.TenantCode)

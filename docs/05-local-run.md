@@ -49,9 +49,7 @@ Agent 当前配置来源优先级是：
 几个常用变量：
 
 - `MASTER_API_URL`
-- `INGEST_GATEWAY_URL`
 - `INGEST_GATEWAY_GRPC_ADDR`
-- `AGENT_REPORT_MODE`
 - `AGENT_REGION`
 - `AGENT_ENV`
 - `AGENT_ROLE`
@@ -62,9 +60,7 @@ Agent 当前配置来源优先级是：
 
 ```bash
 MASTER_API_URL=http://127.0.0.1:8080 \
-INGEST_GATEWAY_URL=http://127.0.0.1:8090 \
 INGEST_GATEWAY_GRPC_ADDR=127.0.0.1:8091 \
-AGENT_REPORT_MODE=grpc \
 AGENT_CONFIG_PATH=/tmp/gaoming-agent-grpc.yaml \
 make run-agent
 ```

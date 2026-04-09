@@ -10,8 +10,7 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 安装完成后展示：
 ```bash
 master-url [https://gm-metric.gofxq.com/]:
-report-mode [http]:
-ingest-url [https://gm-metric.gofxq.com/]:
+ingest-grpc-addr [gm-metric.gofxq.com:443]:
 tenant [<auto>]: default
 loop-interval-sec [5]: 1
 [+] downloading gaoming-agent_linux_amd64.tar.gz
@@ -120,9 +119,7 @@ make run-agent
 
 ```bash
 MASTER_API_URL=http://127.0.0.1:8080 \
-INGEST_GATEWAY_URL=http://127.0.0.1:8090 \
 INGEST_GATEWAY_GRPC_ADDR=127.0.0.1:8091 \
-AGENT_REPORT_MODE=grpc \
 AGENT_CONFIG_PATH=/tmp/gaoming-agent-grpc.yaml \
 make run-agent
 ```
@@ -169,9 +166,7 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 安装脚本会交互式提示以下参数，直接回车就用默认值：
 
 - `master-url`: `https://gm-metric.gofxq.com/`
-- `report-mode`: `http`
-- `ingest-url`: `https://gm-metric.gofxq.com/`
-- `ingest-grpc-addr`: `gm-metric.gofxq.com:8091`，仅 `grpc` 模式需要
+- `ingest-grpc-addr`: `gm-metric.gofxq.com:443`
 - `tenant`: 留空则由服务端自动生成
 - `loop-interval-sec`: `5`
 

@@ -6,9 +6,7 @@ param(
   [ValidateNotNullOrEmpty()][string]$InstallDir = "$env:ProgramFiles\GaomingAgent",
   [ValidateNotNullOrEmpty()][string]$TaskName = "GaomingAgent",
   [ValidateNotNullOrEmpty()][string]$MasterApiUrl = "https://gm-metric.gofxq.com/",
-  [ValidateNotNullOrEmpty()][string]$IngestGatewayUrl = "https://gm-metric.gofxq.com/",
   [ValidateNotNullOrEmpty()][string]$IngestGatewayGrpcAddr = "gm-metric.gofxq.com:8091",
-  [ValidateSet("http", "grpc")][string]$ReportMode = "http",
   [string]$TenantCode = "",
   [ValidateRange(1, 3600)][int]$LoopIntervalSec = 5,
   [ValidateNotNullOrEmpty()][string]$Region = "local",
@@ -154,9 +152,7 @@ try {
 
   @"
 master_api_url: "$MasterApiUrl"
-ingest_gateway_url: "$IngestGatewayUrl"
 ingest_gateway_grpc_addr: "$IngestGatewayGrpcAddr"
-report_mode: "$ReportMode"
 region: "$Region"
 env: "$EnvName"
 role: "$Role"
@@ -180,10 +176,7 @@ loop_interval_sec: $LoopIntervalSec
   Start-ScheduledTask -TaskName $TaskName
 
   Write-Output "installed $TaskName to $InstallDir"
-  Write-Output "report_mode: $ReportMode"
-  if ($ReportMode -eq "grpc") {
-    Write-Output "ingest_grpc_addr: $IngestGatewayGrpcAddr"
-  }
+  Write-Output "ingest_grpc_addr: $IngestGatewayGrpcAddr"
   Write-Output "tenant_code: $TenantCode"
   Write-Output ("dashboard: " + $MasterApiUrl.TrimEnd('/') + "/" + $TenantCode)
   Write-Output ("hosts api: " + $MasterApiUrl.TrimEnd('/') + "/master/api/v1/hosts?tenant=" + $TenantCode)

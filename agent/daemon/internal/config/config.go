@@ -13,9 +13,7 @@ import (
 
 type Config struct {
 	MasterAPIURL          string
-	IngestGatewayURL      string
 	IngestGatewayGRPCAddr string
-	ReportMode            string
 	Region                string
 	Env                   string
 	Role                  string
@@ -33,18 +31,14 @@ func Load() (Config, error) {
 	fileState := loadConfigFile(configPath)
 	envFile := loadDotEnv(defaultEnvPath())
 	fileState.MasterAPIURL = normalizeLegacyURL(fileState.MasterAPIURL, "MASTER_API_URL", "MASTER_API_HTTP_ADDR", envFile)
-	fileState.IngestGatewayURL = normalizeLegacyURL(fileState.IngestGatewayURL, "INGEST_GATEWAY_URL", "INGEST_GATEWAY_HTTP_ADDR", envFile)
 
 	masterAPIURL := strings.TrimRight(valueString([]string{"MASTER_API_URL"}, envFile, fileState.MasterAPIURL, "http://127.0.0.1:8080"), "/")
-	ingestGatewayURL := strings.TrimRight(valueString([]string{"INGEST_GATEWAY_URL"}, envFile, fileState.IngestGatewayURL, "http://127.0.0.1:8090"), "/")
-	reportMode := normalizeReportMode(valueString([]string{"AGENT_REPORT_MODE"}, envFile, fileState.ReportMode, reportModeHTTP))
-	ingestGatewayGRPCAddr := normalizeGRPCAddr(valueString([]string{"INGEST_GATEWAY_GRPC_ADDR"}, envFile, fileState.IngestGatewayGRPCAddr, defaultGRPCAddrForURL(ingestGatewayURL)))
+	legacyIngestGatewayURL := strings.TrimRight(valueString([]string{"INGEST_GATEWAY_URL"}, envFile, fileState.LegacyIngestGatewayURL, masterAPIURL), "/")
+	ingestGatewayGRPCAddr := normalizeGRPCAddr(valueString([]string{"INGEST_GATEWAY_GRPC_ADDR"}, envFile, fileState.IngestGatewayGRPCAddr, defaultGRPCAddrForURL(legacyIngestGatewayURL)))
 
 	cfg := Config{
 		MasterAPIURL:          masterAPIURL,
-		IngestGatewayURL:      ingestGatewayURL,
 		IngestGatewayGRPCAddr: ingestGatewayGRPCAddr,
-		ReportMode:            reportMode,
 		Region:                valueString([]string{"AGENT_REGION"}, envFile, fileState.Region, "local"),
 		Env:                   valueString([]string{"AGENT_ENV"}, envFile, fileState.Env, "dev"),
 		Role:                  valueString([]string{"AGENT_ROLE"}, envFile, fileState.Role, "node"),
@@ -60,15 +54,14 @@ func Load() (Config, error) {
 }
 
 type persistedConfig struct {
-	MasterAPIURL          string
-	IngestGatewayURL      string
-	IngestGatewayGRPCAddr string
-	ReportMode            string
-	Region                string
-	Env                   string
-	Role                  string
-	TenantCode            string
-	LoopIntervalSec       int
+	MasterAPIURL           string
+	LegacyIngestGatewayURL string
+	IngestGatewayGRPCAddr  string
+	Region                 string
+	Env                    string
+	Role                   string
+	TenantCode             string
+	LoopIntervalSec        int
 }
 
 func Save(cfg Config) error {
@@ -82,9 +75,7 @@ func Save(cfg Config) error {
 
 	body := renderConfigFile(persistedConfig{
 		MasterAPIURL:          cfg.MasterAPIURL,
-		IngestGatewayURL:      cfg.IngestGatewayURL,
 		IngestGatewayGRPCAddr: cfg.IngestGatewayGRPCAddr,
-		ReportMode:            cfg.ReportMode,
 		Region:                cfg.Region,
 		Env:                   cfg.Env,
 		Role:                  cfg.Role,
@@ -103,9 +94,7 @@ func SaveTenant(path string, tenantCode string) error {
 	state.TenantCode = tenantCode
 	cfg := Config{
 		MasterAPIURL:          state.MasterAPIURL,
-		IngestGatewayURL:      state.IngestGatewayURL,
 		IngestGatewayGRPCAddr: state.IngestGatewayGRPCAddr,
-		ReportMode:            normalizeReportMode(state.ReportMode),
 		Region:                state.Region,
 		Env:                   state.Env,
 		Role:                  state.Role,
@@ -153,11 +142,9 @@ func loadConfigFile(path string) persistedConfig {
 		case "master_api_url":
 			cfg.MasterAPIURL = value
 		case "ingest_gateway_url":
-			cfg.IngestGatewayURL = value
+			cfg.LegacyIngestGatewayURL = value
 		case "ingest_gateway_grpc_addr":
 			cfg.IngestGatewayGRPCAddr = value
-		case "report_mode":
-			cfg.ReportMode = normalizeReportMode(value)
 		case "region":
 			cfg.Region = value
 		case "env":
@@ -173,20 +160,6 @@ func loadConfigFile(path string) persistedConfig {
 		}
 	}
 	return cfg
-}
-
-const (
-	reportModeHTTP = "http"
-	reportModeGRPC = "grpc"
-)
-
-func normalizeReportMode(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case reportModeGRPC:
-		return reportModeGRPC
-	default:
-		return reportModeHTTP
-	}
 }
 
 func defaultGRPCAddrForURL(raw string) string {
@@ -279,9 +252,7 @@ func valueInt(key string, envFile map[string]string, fileValue int, fallback int
 func renderConfigFile(cfg persistedConfig) string {
 	var b strings.Builder
 	writeYAMLString(&b, "master_api_url", cfg.MasterAPIURL)
-	writeYAMLString(&b, "ingest_gateway_url", cfg.IngestGatewayURL)
 	writeYAMLString(&b, "ingest_gateway_grpc_addr", normalizeGRPCAddr(cfg.IngestGatewayGRPCAddr))
-	writeYAMLString(&b, "report_mode", normalizeReportMode(cfg.ReportMode))
 	writeYAMLString(&b, "region", cfg.Region)
 	writeYAMLString(&b, "env", cfg.Env)
 	writeYAMLString(&b, "role", cfg.Role)

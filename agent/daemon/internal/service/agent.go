@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -17,14 +18,13 @@ import (
 	"github.com/gofxq/gaoming/pkg/logx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Config struct {
 	MasterAPIURL          string
-	IngestGatewayURL      string
 	IngestGatewayGRPCAddr string
-	ReportMode            string
 	LoopInterval          time.Duration
 	Host                  contracts.HostIdentity
 	PersistTenant         func(string) error
@@ -201,14 +201,8 @@ func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest
 		},
 	}
 
-	switch normalizeReportMode(a.cfg.ReportMode) {
-	case reportModeGRPC:
-		return a.pushMetricsGRPC(ctx, payload)
-	default:
-		var resp contracts.AckResponse
-		if err := a.postJSON(ctx, ingestAPIURL(a.cfg.IngestGatewayURL, "metrics"), payload, &resp); err != nil {
-			return err
-		}
+	if err := a.pushMetricsGRPC(ctx, payload); err != nil {
+		return err
 	}
 	a.logger.Info("metrics sent", "host_uid", a.hostUID, "batch_seq", a.metricSeq)
 	return nil
@@ -228,10 +222,6 @@ func (a *Agent) pushMetricsGRPC(ctx context.Context, payload contracts.PushMetri
 
 func masterAPIURL(base string, endpoint string) string {
 	return serviceAPIURL(base, "/master", "/master/api/v1", endpoint)
-}
-
-func ingestAPIURL(base string, endpoint string) string {
-	return serviceAPIURL(base, "/ingest", "/ingest/api/v1", endpoint)
 }
 
 func serviceAPIURL(base string, servicePrefix string, apiPrefix string, endpoint string) string {
@@ -310,7 +300,7 @@ func (a *Agent) grpcIngestClient(ctx context.Context) (monitorv1.MetricsIngestSe
 	conn, err := grpc.NewClient(
 		// ctx,
 		a.cfg.IngestGatewayGRPCAddr,
-		grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, "")),
+		grpc.WithTransportCredentials(grpcTransportCredentials(a.cfg.IngestGatewayGRPCAddr)),
 	)
 	if err != nil {
 		logx.New("agent").Error("failed to create gRPC client", "error", err)
@@ -322,18 +312,22 @@ func (a *Agent) grpcIngestClient(ctx context.Context) (monitorv1.MetricsIngestSe
 	return a.grpcIngest, nil
 }
 
-const (
-	reportModeHTTP = "http"
-	reportModeGRPC = "grpc"
-)
-
-func normalizeReportMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case reportModeGRPC:
-		return reportModeGRPC
-	default:
-		return reportModeHTTP
+func grpcTransportCredentials(addr string) credentials.TransportCredentials {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err == nil {
+		switch {
+		case strings.EqualFold(host, "localhost"):
+			return insecure.NewCredentials()
+		case isLoopbackIP(host):
+			return insecure.NewCredentials()
+		}
 	}
+	return credentials.NewClientTLSFromCert(nil, "")
+}
+
+func isLoopbackIP(host string) bool {
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 func toProtoPushMetricBatchRequest(req contracts.PushMetricBatchRequest) *monitorv1.PushMetricBatchRequest {
