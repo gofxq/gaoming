@@ -16,7 +16,7 @@ SERVICE_USER="${SERVICE_USER:-gaoming-agent}"
 SERVICE_GROUP="${SERVICE_GROUP:-gaoming-agent}"
 
 MASTER_API_URL="${MASTER_API_URL:-https://gm-metric.gofxq.com/}"
-INGEST_GATEWAY_GRPC_ADDR="${INGEST_GATEWAY_GRPC_ADDR:-gm-metric.gofxq.com:8091}"
+INGEST_GATEWAY_GRPC_ADDR="${INGEST_GATEWAY_GRPC_ADDR:-gm-rpc.gofxq.com:443}"
 
 AGENT_REGION="${AGENT_REGION:-local}"
 AGENT_ENV="${AGENT_ENV:-prod}"
@@ -44,7 +44,7 @@ Options:
   --service-user <name>          Linux service user, default: gaoming-agent
   --service-group <name>         Linux service group, default: gaoming-agent
   --master-url <url>             Default: https://gm-metric.gofxq.com/
-  --ingest-grpc-addr <addr>      Default: gm-metric.gofxq.com:8091
+  --ingest-grpc-addr <addr>      Default: gm-rpc.gofxq.com:443
   --tenant <code>                Default: empty, server generates tenant
   --loop-interval-sec <seconds>  Default: 5
   --region <name>                Default: local

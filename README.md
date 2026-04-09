@@ -10,7 +10,7 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 安装完成后展示：
 ```bash
 master-url [https://gm-metric.gofxq.com/]:
-ingest-grpc-addr [gm-metric.gofxq.com:443]:
+ingest-grpc-addr [gm-rpc.gofxq.com:443]:
 tenant [<auto>]: default
 loop-interval-sec [5]: 1
 [+] downloading gaoming-agent_linux_amd64.tar.gz
