@@ -2,14 +2,13 @@ package service
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"net"
 	"testing"
 	"time"
 
 	monitorv1 "github.com/gofxq/gaoming/api/gen/go/monitor/v1"
 	"github.com/gofxq/gaoming/pkg/contracts"
+	"github.com/gofxq/gaoming/pkg/logx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -45,7 +44,7 @@ func TestPushMetricsWithDigestGRPC(t *testing.T) {
 			Role:       "node",
 			TenantCode: "tenant-ok",
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, logx.NewNop())
 	defer agent.Close()
 
 	agent.agentID = "agent-test"
@@ -108,7 +107,7 @@ func TestRunStopsOnInvalidTenant(t *testing.T) {
 			PrimaryIP:  "10.0.0.2",
 			TenantCode: "tenant-missing",
 		},
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, logx.NewNop())
 	defer agent.Close()
 
 	err = agent.Run(context.Background())

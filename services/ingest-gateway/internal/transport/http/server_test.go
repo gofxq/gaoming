@@ -1,19 +1,19 @@
 package http
 
 import (
-	"io"
-	"log/slog"
 	nethttp "net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gofxq/gaoming/pkg/clock"
+	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/services/ingest-gateway/internal/service"
 )
 
 func TestMetricsEndpointRemoved(t *testing.T) {
-	svc := service.New(slog.New(slog.NewTextHandler(io.Discard, nil)), clock.Real{}, nil, nil, nil)
-	handler := NewServer(svc).Handler()
+	logger := logx.NewNop()
+	svc := service.New(logger, clock.Real{}, nil, nil, nil)
+	handler := NewServer(svc, logger).Handler()
 
 	req := httptest.NewRequest(nethttp.MethodPost, "/ingest/api/v1/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -26,8 +26,9 @@ func TestMetricsEndpointRemoved(t *testing.T) {
 }
 
 func TestInstallTenantEndpointRemoved(t *testing.T) {
-	svc := service.New(slog.New(slog.NewTextHandler(io.Discard, nil)), clock.Real{}, nil, nil, nil)
-	handler := NewServer(svc).Handler()
+	logger := logx.NewNop()
+	svc := service.New(logger, clock.Real{}, nil, nil, nil)
+	handler := NewServer(svc, logger).Handler()
 
 	req := httptest.NewRequest(nethttp.MethodPost, "/ingest/api/v1/install/tenant", nil)
 	rec := httptest.NewRecorder()

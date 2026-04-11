@@ -4,161 +4,130 @@ import (
 	nethttp "net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gofxq/gaoming/pkg/contracts"
-	"github.com/gofxq/gaoming/pkg/httpx"
+	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 )
 
 type Server struct {
-	svc *service.Service
+	svc    *service.Service
+	logger *logx.Logger
 }
 
-func NewServer(svc *service.Service) *Server {
-	return &Server{svc: svc}
+func NewServer(svc *service.Service, logger *logx.Logger) *Server {
+	gin.SetMode(gin.ReleaseMode)
+	return &Server{svc: svc, logger: logger}
 }
 
 func (s *Server) Handler() nethttp.Handler {
-	mux := nethttp.NewServeMux()
-	mux.HandleFunc("/master/healthz", s.handleHealth)
-	mux.HandleFunc("/master/api/v1/stream/hosts", s.handleHostStream)
-	mux.HandleFunc("/master/api/v1/install/tenant", s.handleAllocateInstallTenant)
-	mux.HandleFunc("/master/api/v1/agents/register", s.handleRegisterAgent)
-	mux.HandleFunc("/master/api/v1/hosts", s.handleListHosts)
-	mux.HandleFunc("/master/api/v1/hosts/", s.handleGetHost)
-	mux.HandleFunc("/master/api/v1/ops/maintenance", s.handleCreateMaintenance)
-	mux.HandleFunc("/master/api/v1/ops/alerts/", s.handleAckAlert)
-	return mux
+	engine := gin.New()
+	engine.HandleMethodNotAllowed = true
+	engine.Use(logx.GinMiddleware(s.logger))
+	engine.Use(gin.Recovery())
+	engine.GET("/master/healthz", s.handleHealth)
+	engine.GET("/master/api/v1/stream/hosts", s.handleHostStream)
+	engine.POST("/master/api/v1/install/tenant", s.handleAllocateInstallTenant)
+	engine.POST("/master/api/v1/agents/register", s.handleRegisterAgent)
+	engine.GET("/master/api/v1/hosts", s.handleListHosts)
+	engine.GET("/master/api/v1/hosts/:hostUID", s.handleGetHost)
+	engine.POST("/master/api/v1/ops/maintenance", s.handleCreateMaintenance)
+	engine.POST("/master/api/v1/ops/alerts/:alertID/ack", s.handleAckAlert)
+	return engine
 }
 
-func (s *Server) handleHealth(w nethttp.ResponseWriter, _ *nethttp.Request) {
-	httpx.WriteJSON(w, nethttp.StatusOK, s.svc.Health())
+func (s *Server) handleHealth(c *gin.Context) {
+	c.JSON(nethttp.StatusOK, s.svc.Health())
 }
 
-func (s *Server) handleAllocateInstallTenant(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodPost {
-		httpx.Error(w, nethttp.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	resp, err := s.svc.AllocateInstallTenant(r.Context())
+func (s *Server) handleAllocateInstallTenant(c *gin.Context) {
+	resp, err := s.svc.AllocateInstallTenant(c.Request.Context())
 	if err != nil {
-		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	httpx.WriteJSON(w, nethttp.StatusOK, resp)
+	c.JSON(nethttp.StatusOK, resp)
 }
 
-func (s *Server) handleRegisterAgent(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodPost {
-		httpx.Error(w, nethttp.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
+func (s *Server) handleRegisterAgent(c *gin.Context) {
 	var req contracts.RegisterAgentRequest
-	if err := httpx.ReadJSON(r, &req); err != nil {
-		httpx.Error(w, nethttp.StatusBadRequest, err.Error())
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp, err := s.svc.RegisterAgent(r.Context(), req)
+	resp, err := s.svc.RegisterAgent(c.Request.Context(), req)
 	if err != nil {
-		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	httpx.WriteJSON(w, nethttp.StatusOK, resp)
+	c.JSON(nethttp.StatusOK, resp)
 }
 
-func (s *Server) handleListHosts(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodGet {
-		httpx.Error(w, nethttp.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	items, err := s.svc.ListHosts(r.Context(), tenantCodeFromRequest(r))
+func (s *Server) handleListHosts(c *gin.Context) {
+	items, err := s.svc.ListHosts(c.Request.Context(), tenantCodeFromContext(c))
 	if err != nil {
-		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	httpx.WriteJSON(w, nethttp.StatusOK, map[string]any{"items": items})
+	c.JSON(nethttp.StatusOK, gin.H{"items": items})
 }
 
-func (s *Server) handleGetHost(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodGet {
-		httpx.Error(w, nethttp.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	hostUID := strings.TrimPrefix(r.URL.Path, "/master/api/v1/hosts/")
+func (s *Server) handleGetHost(c *gin.Context) {
+	hostUID := strings.TrimSpace(c.Param("hostUID"))
 	if hostUID == "" {
-		httpx.Error(w, nethttp.StatusBadRequest, "missing host uid")
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": "missing host uid"})
 		return
 	}
 
-	host, ok, err := s.svc.GetHost(r.Context(), hostUID, tenantCodeFromRequest(r))
+	host, ok, err := s.svc.GetHost(c.Request.Context(), hostUID, tenantCodeFromContext(c))
 	if err != nil {
-		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if !ok {
-		httpx.Error(w, nethttp.StatusNotFound, "host not found")
+		c.JSON(nethttp.StatusNotFound, gin.H{"error": "host not found"})
 		return
 	}
-
-	httpx.WriteJSON(w, nethttp.StatusOK, host)
+	c.JSON(nethttp.StatusOK, host)
 }
 
-func (s *Server) handleCreateMaintenance(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodPost {
-		httpx.Error(w, nethttp.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
+func (s *Server) handleCreateMaintenance(c *gin.Context) {
 	var req contracts.CreateMaintenanceWindowRequest
-	if err := httpx.ReadJSON(r, &req); err != nil {
-		httpx.Error(w, nethttp.StatusBadRequest, err.Error())
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp, err := s.svc.CreateMaintenance(r.Context(), req)
+	resp, err := s.svc.CreateMaintenance(c.Request.Context(), req)
 	if err != nil {
-		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	httpx.WriteJSON(w, nethttp.StatusCreated, resp)
+	c.JSON(nethttp.StatusCreated, resp)
 }
 
-func (s *Server) handleAckAlert(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodPost {
-		httpx.Error(w, nethttp.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	path := strings.TrimPrefix(r.URL.Path, "/master/api/v1/ops/alerts/")
-	alertID := strings.TrimSuffix(path, "/ack")
-	if alertID == "" || !strings.HasSuffix(r.URL.Path, "/ack") {
-		httpx.Error(w, nethttp.StatusBadRequest, "invalid alert ack path")
+func (s *Server) handleAckAlert(c *gin.Context) {
+	alertID := strings.TrimSpace(c.Param("alertID"))
+	if alertID == "" {
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": "invalid alert ack path"})
 		return
 	}
 
 	var req contracts.AckAlertRequest
-	if err := httpx.ReadJSON(r, &req); err != nil {
-		httpx.Error(w, nethttp.StatusBadRequest, err.Error())
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp, err := s.svc.AckAlert(r.Context(), alertID, req)
+	resp, err := s.svc.AckAlert(c.Request.Context(), alertID, req)
 	if err != nil {
-		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	httpx.WriteJSON(w, nethttp.StatusOK, resp)
+	c.JSON(nethttp.StatusOK, resp)
 }
 
-func tenantCodeFromRequest(r *nethttp.Request) string {
-	return strings.TrimSpace(r.URL.Query().Get("tenant"))
+func tenantCodeFromContext(c *gin.Context) string {
+	return strings.TrimSpace(c.Query("tenant"))
 }

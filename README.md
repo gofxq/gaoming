@@ -164,6 +164,8 @@ make smoke-agent
 make docker-up-full
 ```
 
+这会把前端也跑在 Docker 里，但 `web` 容器内部直接启动 `yarn dev`，并通过 Vite 代理访问 Compose 网络中的 `master-api`。
+
 ## 📦 安装 Agent
 
 mac/ linux 一行安装命令：

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -29,7 +28,7 @@ type App struct {
 	grpcServer   *grpc.Server
 	grpcAddr     string
 	grpcListener net.Listener
-	logger       *slog.Logger
+	logger       *logx.Logger
 	svc          *service.Service
 	cancel       context.CancelFunc
 	postgres     *sql.DB
@@ -79,7 +78,7 @@ func New() (*App, error) {
 	metricStore := redisrepo.NewMetricWindowStore(redisClient, "", 60, 2*time.Hour)
 	eventBus := redisrepo.NewEventBus(redisClient, "")
 	svc := service.New(logger, clock.Real{}, hostStore, metricStore, eventBus)
-	handler := httptransport.NewServer(svc).Handler()
+	handler := httptransport.NewServer(svc, logger).Handler()
 	grpcServer := grpc.NewServer()
 	monitorv1.RegisterAgentControlServiceServer(grpcServer, grpctransport.NewServer(svc))
 	monitorv1.RegisterMetricsIngestServiceServer(grpcServer, grpctransport.NewServer(svc))
@@ -123,6 +122,9 @@ func (a *App) Run() error {
 
 func (a *App) Shutdown(ctx context.Context) error {
 	a.cancel()
+	if a.logger != nil {
+		_ = a.logger.Sync()
+	}
 	a.grpcServer.GracefulStop()
 	if a.grpcListener != nil {
 		_ = a.grpcListener.Close()

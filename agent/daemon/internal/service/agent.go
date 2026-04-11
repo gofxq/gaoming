@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -33,7 +32,7 @@ type Config struct {
 
 type Agent struct {
 	cfg        Config
-	logger     *slog.Logger
+	logger     *logx.Logger
 	client     *http.Client
 	grpcConn   *grpc.ClientConn
 	grpcCtl    monitorv1.AgentControlServiceClient
@@ -46,7 +45,7 @@ type Agent struct {
 	sampler    systemSampler
 }
 
-func New(cfg Config, logger *slog.Logger) *Agent {
+func New(cfg Config, logger *logx.Logger) *Agent {
 	return &Agent{
 		cfg:      cfg,
 		logger:   logger,
@@ -331,6 +330,8 @@ func grpcTransportCredentials(addr string) credentials.TransportCredentials {
 			return insecure.NewCredentials()
 		case isLoopbackIP(host):
 			return insecure.NewCredentials()
+		case isLocalServiceHost(host):
+			return insecure.NewCredentials()
 		}
 	}
 	return credentials.NewClientTLSFromCert(nil, "")
@@ -339,6 +340,17 @@ func grpcTransportCredentials(addr string) credentials.TransportCredentials {
 func isLoopbackIP(host string) bool {
 	ip := net.ParseIP(strings.Trim(host, "[]"))
 	return ip != nil && ip.IsLoopback()
+}
+
+func isLocalServiceHost(host string) bool {
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	if host == "" {
+		return false
+	}
+	if strings.Contains(host, ".") {
+		return false
+	}
+	return true
 }
 
 func toProtoPushMetricBatchRequest(req contracts.PushMetricBatchRequest) *monitorv1.PushMetricBatchRequest {

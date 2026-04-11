@@ -3,8 +3,6 @@ package grpc
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -13,6 +11,7 @@ import (
 	"github.com/gofxq/gaoming/pkg/clock"
 	"github.com/gofxq/gaoming/pkg/contracts"
 	hostruntime "github.com/gofxq/gaoming/pkg/hostruntime/repository"
+	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/pkg/state"
 	"github.com/gofxq/gaoming/services/ingest-gateway/internal/service"
 	gogrpc "google.golang.org/grpc"
@@ -29,7 +28,7 @@ func TestPushMetricBatch(t *testing.T) {
 	defer listener.Close()
 
 	svc := service.New(
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logx.NewNop(),
 		clock.Real{},
 		stubHostStore{},
 		stubMetricStore{},
@@ -93,7 +92,7 @@ func TestPushMetricBatchReturnsFailedPreconditionForMissingTenant(t *testing.T) 
 	defer listener.Close()
 
 	svc := service.New(
-		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logx.NewNop(),
 		clock.Real{},
 		stubHostStore{reportMetricsErr: hostruntime.ErrTenantNotFound},
 		stubMetricStore{},

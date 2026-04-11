@@ -3,9 +3,9 @@ package http
 import (
 	"encoding/json"
 	"fmt"
-	nethttp "net/http"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gofxq/gaoming/pkg/state"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 )
@@ -28,38 +28,33 @@ type hostDeletePayload struct {
 	ServerTime time.Time `json:"server_time"`
 }
 
-func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodGet {
-		nethttp.Error(w, "method not allowed", nethttp.StatusMethodNotAllowed)
-		return
-	}
+func (s *Server) handleHostStream(c *gin.Context) {
+	tenantCode := tenantCodeFromContext(c)
 
-	tenantCode := tenantCodeFromRequest(r)
-
-	flusher, ok := w.(nethttp.Flusher)
+	flusher, ok := c.Writer.(gin.ResponseWriter)
 	if !ok {
-		nethttp.Error(w, "streaming not supported", nethttp.StatusInternalServerError)
+		c.JSON(500, gin.H{"error": "streaming not supported"})
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
 
-	items, err := s.svc.ListHosts(r.Context(), tenantCode)
+	items, err := s.svc.ListHosts(c.Request.Context(), tenantCode)
 	if err != nil {
-		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	histories, err := s.svc.GetAllHostMetricHistory(r.Context(), hostUIDsFromSnapshots(items))
+	histories, err := s.svc.GetAllHostMetricHistory(c.Request.Context(), hostUIDsFromSnapshots(items))
 	if err != nil {
-		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
-	updates, err := s.svc.SubscribeHostEvents(r.Context())
+	updates, err := s.svc.SubscribeHostEvents(c.Request.Context())
 	if err != nil {
-		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
+		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -74,7 +69,7 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 		ServerTime: now,
 	})
 	if err == nil {
-		if _, err := fmt.Fprintf(w, "event: sync\ndata: %s\n\n", payload); err != nil {
+		if _, err := fmt.Fprintf(c.Writer, "event: sync\ndata: %s\n\n", payload); err != nil {
 			return
 		}
 		flusher.Flush()
@@ -82,7 +77,7 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 
 	for {
 		select {
-		case <-r.Context().Done():
+		case <-c.Request.Context().Done():
 			return
 		case event, ok := <-updates:
 			if !ok {
@@ -102,7 +97,7 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 				if err != nil {
 					continue
 				}
-				if _, err := fmt.Fprintf(w, "event: host_delete\ndata: %s\n\n", payload); err != nil {
+				if _, err := fmt.Fprintf(c.Writer, "event: host_delete\ndata: %s\n\n", payload); err != nil {
 					return
 				}
 			case service.HostEventUpsert:
@@ -120,13 +115,13 @@ func (s *Server) handleHostStream(w nethttp.ResponseWriter, r *nethttp.Request) 
 				if err != nil {
 					continue
 				}
-				if _, err := fmt.Fprintf(w, "event: host_upsert\ndata: %s\n\n", payload); err != nil {
+				if _, err := fmt.Fprintf(c.Writer, "event: host_upsert\ndata: %s\n\n", payload); err != nil {
 					return
 				}
 			}
 			flusher.Flush()
 		case <-heartbeat.C:
-			if _, err := fmt.Fprint(w, ": keep-alive\n\n"); err != nil {
+			if _, err := fmt.Fprint(c.Writer, ": keep-alive\n\n"); err != nil {
 				return
 			}
 			flusher.Flush()

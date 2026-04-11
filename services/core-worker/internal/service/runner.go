@@ -2,16 +2,17 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"time"
+
+	"github.com/gofxq/gaoming/pkg/logx"
 )
 
 type Runner struct {
-	logger   *slog.Logger
+	logger   *logx.Logger
 	interval time.Duration
 }
 
-func NewRunner(logger *slog.Logger, interval time.Duration) *Runner {
+func NewRunner(logger *logx.Logger, interval time.Duration) *Runner {
 	return &Runner{logger: logger, interval: interval}
 }
 

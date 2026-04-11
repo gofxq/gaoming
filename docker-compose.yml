@@ -131,5 +131,25 @@ services:
       ingest-gateway:
         condition: service_healthy
 
+  web:
+    profiles:
+      - web
+    build:
+      context: .
+      dockerfile: deployments/docker/web.Dockerfile
+    container_name: gaoming-web
+    environment:
+      VITE_PROXY_TARGET: http://master-api:8080
+    ports:
+      - "5173:5173"
+    depends_on:
+      master-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5173/ >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres_data:

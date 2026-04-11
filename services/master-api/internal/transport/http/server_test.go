@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	nethttp "net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	"github.com/gofxq/gaoming/pkg/clock"
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/hostruntime/repository"
+	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/pkg/state"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 )
@@ -91,9 +91,10 @@ func (stubOpsStore) AckAlert(context.Context, string, string, time.Time) error {
 }
 
 func newTestServer(hostStore repository.HostStateStore) *Server {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	_ = io.Discard
+	logger := logx.NewNop()
 	svc := service.New(hostStore, stubMetricStore{}, stubOpsStore{}, stubEventBus{}, clock.Real{}, logger)
-	return NewServer(svc)
+	return NewServer(svc, logger)
 }
 
 func TestHandleAllocateInstallTenant(t *testing.T) {

@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/gofxq/gaoming/pkg/clock"
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/hostruntime/repository"
 	"github.com/gofxq/gaoming/pkg/ids"
+	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/pkg/state"
 )
 
@@ -18,7 +18,7 @@ type Service struct {
 	opsStore    repository.OperationsStore
 	eventBus    repository.EventBus
 	clock       clock.Clock
-	logger      *slog.Logger
+	logger      *logx.Logger
 }
 
 type HostEvent = repository.HostEvent
@@ -28,7 +28,7 @@ const (
 	HostEventDelete = repository.HostEventDelete
 )
 
-func New(hostStore repository.HostStateStore, metricStore repository.MetricWindowStore, opsStore repository.OperationsStore, eventBus repository.EventBus, clk clock.Clock, logger *slog.Logger) *Service {
+func New(hostStore repository.HostStateStore, metricStore repository.MetricWindowStore, opsStore repository.OperationsStore, eventBus repository.EventBus, clk clock.Clock, logger *logx.Logger) *Service {
 	return &Service{
 		hostStore:   hostStore,
 		metricStore: metricStore,

@@ -23,6 +23,16 @@ make web-dev WEB_API_ORIGIN=http://127.0.0.1:8080
 
 当前默认包管理器为 `yarn`。
 
+## Docker 联调
+
+如果要直接看整套项目的启动效果，可以在仓库根目录执行：
+
+```bash
+make docker-up-full
+```
+
+它会启动后端服务、容器化 `agent` 和 `web` 开发容器。`web` 容器内部直接运行 `yarn dev`，并通过 Vite 代理把 `/master/*` 转发到 Compose 网络里的 `master-api`。启动完成后直接访问 `http://localhost:5173`。
+
 ## 推荐目录
 
 ```text

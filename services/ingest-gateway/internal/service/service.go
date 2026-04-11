@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/gofxq/gaoming/pkg/contracts"
 	hostruntime "github.com/gofxq/gaoming/pkg/hostruntime/repository"
 	"github.com/gofxq/gaoming/pkg/ids"
+	"github.com/gofxq/gaoming/pkg/logx"
 )
 
 type Counters struct {
@@ -22,13 +22,13 @@ type Service struct {
 	hostStore   hostruntime.HostStateStore
 	metricStore hostruntime.MetricWindowStore
 	eventBus    hostruntime.EventBus
-	logger      *slog.Logger
+	logger      *logx.Logger
 	clock       clock.Clock
 	mu          sync.Mutex
 	stats       Counters
 }
 
-func New(logger *slog.Logger, clk clock.Clock, hostStore hostruntime.HostStateStore, metricStore hostruntime.MetricWindowStore, eventBus hostruntime.EventBus) *Service {
+func New(logger *logx.Logger, clk clock.Clock, hostStore hostruntime.HostStateStore, metricStore hostruntime.MetricWindowStore, eventBus hostruntime.EventBus) *Service {
 	return &Service{
 		hostStore:   hostStore,
 		metricStore: metricStore,

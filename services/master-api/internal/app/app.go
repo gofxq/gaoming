@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -22,7 +21,7 @@ import (
 
 type App struct {
 	server      *http.Server
-	logger      *slog.Logger
+	logger      *logx.Logger
 	svc         *service.Service
 	cancel      context.CancelFunc
 	postgres    *sql.DB
@@ -76,7 +75,7 @@ func New() (*App, error) {
 	metricStore := redisrepo.NewMetricWindowStore(redisClient, "", 60, 2*time.Hour)
 	eventBus := redisrepo.NewEventBus(redisClient, "")
 	svc := service.New(hostStore, metricStore, hostStore, eventBus, clock.Real{}, logger)
-	handler := httptransport.NewServer(svc).Handler()
+	handler := httptransport.NewServer(svc, logger).Handler()
 	_, cancel := context.WithCancel(context.Background())
 
 	app := &App{
@@ -101,6 +100,9 @@ func (a *App) Run() error {
 
 func (a *App) Shutdown(ctx context.Context) error {
 	a.cancel()
+	if a.logger != nil {
+		_ = a.logger.Sync()
+	}
 	if err := a.server.Shutdown(ctx); err != nil {
 		return err
 	}

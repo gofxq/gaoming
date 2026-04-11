@@ -53,7 +53,7 @@ docker-up:
 	$(DOCKER_COMPOSE) up -d --build
 
 docker-up-full:
-	$(DOCKER_COMPOSE) --profile container-agent up -d --build
+	$(DOCKER_COMPOSE) --profile container-agent --profile web up -d --build
 
 docker-down:
 	$(DOCKER_COMPOSE) down --remove-orphans

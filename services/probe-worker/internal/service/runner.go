@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/gofxq/gaoming/pkg/contracts"
+	"github.com/gofxq/gaoming/pkg/logx"
 )
 
 type Config struct {
@@ -21,11 +21,11 @@ type Config struct {
 
 type Runner struct {
 	cfg    Config
-	logger *slog.Logger
+	logger *logx.Logger
 	client *http.Client
 }
 
-func NewRunner(cfg Config, logger *slog.Logger) *Runner {
+func NewRunner(cfg Config, logger *logx.Logger) *Runner {
 	return &Runner{
 		cfg:    cfg,
 		logger: logger,
