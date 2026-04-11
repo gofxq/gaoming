@@ -1,5 +1,8 @@
 # 高明 / Gaoming
 
+![icon](web/favicon/android-chrome-512x512.png)
+
+> 高明是明代神魔小说《封神演义》中的虚拟角色，本体为棋盘山桃精，与其弟柳鬼高觉（顺风耳）并称千里眼。
 
 ## 🚀 快速体验
 
@@ -25,7 +28,6 @@ loop-interval-sec [5]: 1
 
 [PWA](https://gm-metric.gofxq.com/default/pwa)
 
-![icon](web/favicon/android-chrome-512x512.png)
 
 一个面向主机与节点的轻量监控系统：Agent 自动注册、持续上报指标，Web 端按租户展示实时状态。
 
