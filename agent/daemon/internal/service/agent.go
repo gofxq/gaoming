@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -17,8 +16,10 @@ import (
 	"github.com/gofxq/gaoming/pkg/ids"
 	"github.com/gofxq/gaoming/pkg/logx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -35,22 +36,14 @@ type Agent struct {
 	logger     *slog.Logger
 	client     *http.Client
 	grpcConn   *grpc.ClientConn
+	grpcCtl    monitorv1.AgentControlServiceClient
 	grpcIngest monitorv1.MetricsIngestServiceClient
+	metricSink monitorv1.MetricsIngestService_StreamMetricBatchesClient
 	agentID    string
 	hostUID    string
 	bootTime   time.Time
-	hbSeq      int64
 	metricSeq  int64
 	sampler    systemSampler
-}
-
-type apiError struct {
-	StatusCode int
-	Status     string
-}
-
-func (e apiError) Error() string {
-	return fmt.Sprintf("unexpected status: %s", e.Status)
 }
 
 func New(cfg Config, logger *slog.Logger) *Agent {
@@ -65,6 +58,9 @@ func New(cfg Config, logger *slog.Logger) *Agent {
 }
 
 func (a *Agent) Close() error {
+	if a.metricSink != nil {
+		_ = a.metricSink.CloseSend()
+	}
 	if a.grpcConn != nil {
 		return a.grpcConn.Close()
 	}
@@ -102,32 +98,91 @@ func (a *Agent) Run(ctx context.Context) error {
 }
 
 func (a *Agent) register(ctx context.Context) error {
-	payload := contracts.RegisterAgentRequest{
-		Host: a.cfg.Host,
-		Agent: contracts.AgentMetadata{
-			AgentID:      a.agentID,
-			Version:      "v0.1.0",
-			Capabilities: []string{"heartbeat", "metrics"},
-			BootTime:     a.bootTime,
-		},
+	if err := a.ensureTenantCode(ctx); err != nil {
+		return err
 	}
 
-	var resp contracts.RegisterAgentResponse
-	if err := a.postJSON(ctx, masterAPIURL(a.cfg.MasterAPIURL, "agents/register"), payload, &resp); err != nil {
+	client, err := a.grpcControlClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	resp, err := client.RegisterAgent(ctx, &monitorv1.RegisterAgentRequest{
+		Host: &monitorv1.HostIdentity{
+			HostUid:    a.cfg.Host.HostUID,
+			Hostname:   a.cfg.Host.Hostname,
+			PrimaryIp:  a.cfg.Host.PrimaryIP,
+			Ips:        append([]string(nil), a.cfg.Host.IPs...),
+			OsType:     a.cfg.Host.OSType,
+			Arch:       a.cfg.Host.Arch,
+			Region:     a.cfg.Host.Region,
+			Az:         a.cfg.Host.AZ,
+			Env:        a.cfg.Host.Env,
+			Role:       a.cfg.Host.Role,
+			Labels:     cloneStringMap(a.cfg.Host.Labels),
+			TenantCode: a.cfg.Host.TenantCode,
+		},
+		Agent: &monitorv1.AgentMetadata{
+			AgentId:      a.agentID,
+			Version:      "v0.1.0",
+			Capabilities: []string{"metrics", "stream_metrics"},
+			BootTime:     timestamppb.New(a.bootTime),
+		},
+	})
+	if err != nil {
 		return fmt.Errorf("register agent: %w", err)
 	}
 
-	a.hostUID = resp.HostUID
-	if resp.TenantCode != "" && resp.TenantCode != a.cfg.Host.TenantCode {
+	a.hostUID = resp.GetHostUid()
+	if tenantCode := resp.GetTenantCode(); tenantCode != "" && tenantCode != a.cfg.Host.TenantCode {
 		if a.cfg.PersistTenant != nil {
-			if err := a.cfg.PersistTenant(resp.TenantCode); err != nil {
+			if err := a.cfg.PersistTenant(tenantCode); err != nil {
 				return fmt.Errorf("persist tenant: %w", err)
 			}
 		}
-		a.cfg.Host.TenantCode = resp.TenantCode
+		a.cfg.Host.TenantCode = tenantCode
 	}
 	a.logger.Info("agent registered", "host_uid", a.hostUID, "tenant_code", a.cfg.Host.TenantCode)
 	return nil
+}
+
+func (a *Agent) ensureTenantCode(ctx context.Context) error {
+	if a.cfg.Host.TenantCode != "" {
+		return nil
+	}
+
+	tenantCode, err := a.allocateTenantCode(ctx)
+	if err != nil {
+		tenantCode = ids.New("tenant")
+		a.logger.Warn("allocate tenant from master failed, using local tenant", "error", err, "tenant_code", tenantCode)
+	}
+	if tenantCode == "" {
+		tenantCode = ids.New("tenant")
+		a.logger.Warn("master returned empty tenant, using local tenant", "tenant_code", tenantCode)
+	}
+
+	if a.cfg.PersistTenant != nil {
+		if err := a.cfg.PersistTenant(tenantCode); err != nil {
+			return fmt.Errorf("persist tenant: %w", err)
+		}
+	}
+	a.cfg.Host.TenantCode = tenantCode
+	return nil
+}
+
+func (a *Agent) allocateTenantCode(ctx context.Context) (string, error) {
+	if strings.TrimSpace(a.cfg.MasterAPIURL) == "" {
+		return "", fmt.Errorf("master api url is empty")
+	}
+
+	var resp contracts.AllocateInstallTenantResponse
+	if err := a.postJSON(ctx, masterAPIURL(a.cfg.MasterAPIURL, "install/tenant"), map[string]any{}, &resp); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(resp.TenantCode) == "" {
+		return "", fmt.Errorf("tenant allocation response missing tenant_code")
+	}
+	return resp.TenantCode, nil
 }
 
 func (a *Agent) sendCycle(ctx context.Context) {
@@ -137,42 +192,15 @@ func (a *Agent) sendCycle(ctx context.Context) {
 	if err := a.pushMetricsWithDigest(ctx, now, digest); err != nil {
 		a.logger.Error("push metrics failed", "error", err)
 	}
-	if err := a.pushHeartbeat(ctx, now, digest); err != nil {
-		a.logger.Error("push heartbeat failed", "error", err)
-	}
 }
 
-func (a *Agent) pushHeartbeat(ctx context.Context, now time.Time, digest contracts.AgentDigest) error {
+func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest contracts.AgentDigest) error {
 	if a.hostUID == "" {
 		if err := a.register(ctx); err != nil {
 			return err
 		}
 	}
 
-	a.hbSeq++
-	payload := contracts.HeartbeatRequest{
-		HostUID: a.hostUID,
-		AgentID: a.agentID,
-		Seq:     a.hbSeq,
-		TS:      now,
-		Digest:  digest,
-	}
-
-	var resp contracts.HeartbeatResponse
-	if err := a.postJSON(ctx, masterAPIURL(a.cfg.MasterAPIURL, "agents/heartbeat"), payload, &resp); err != nil {
-		var apiErr apiError
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-			a.logger.Warn("heartbeat target missing on server, re-registering", "host_uid", a.hostUID)
-			a.hostUID = ""
-			return a.register(ctx)
-		}
-		return err
-	}
-	a.logger.Info("heartbeat sent", "host_uid", a.hostUID, "seq", a.hbSeq)
-	return nil
-}
-
-func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest contracts.AgentDigest) error {
 	a.metricSeq++
 	payload := contracts.PushMetricBatchRequest{
 		HostUID:     a.hostUID,
@@ -181,7 +209,6 @@ func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest
 		CollectedAt: now,
 		Points: []contracts.MetricPoint{
 			{Name: "runtime_uptime_seconds", Value: time.Since(a.bootTime).Seconds(), TS: now},
-			{Name: "agent_heartbeat_seq", Value: float64(a.hbSeq), TS: now},
 			{Name: "host_cpu_usage_pct", Value: digest.CPUUsagePct, TS: now},
 			{Name: "host_mem_used_pct", Value: digest.MemUsedPct, TS: now},
 			{Name: "host_mem_available_bytes", Value: float64(digest.MemAvailableBytes), TS: now},
@@ -202,6 +229,12 @@ func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest
 	}
 
 	if err := a.pushMetricsGRPC(ctx, payload); err != nil {
+		if grpcstatus.Code(err) == codes.NotFound {
+			a.logger.Warn("metric target missing on server, re-registering", "host_uid", a.hostUID)
+			a.resetMetricStream()
+			a.hostUID = ""
+			return a.register(ctx)
+		}
 		return err
 	}
 	a.logger.Info("metrics sent", "host_uid", a.hostUID, "batch_seq", a.metricSeq)
@@ -209,35 +242,28 @@ func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest
 }
 
 func (a *Agent) pushMetricsGRPC(ctx context.Context, payload contracts.PushMetricBatchRequest) error {
-	client, err := a.grpcIngestClient(ctx)
+	stream, err := a.metricStreamClient(ctx)
 	if err != nil {
 		return err
 	}
 
-	if _, err := client.PushMetricBatch(ctx, toProtoPushMetricBatchRequest(payload)); err != nil {
+	if err := stream.Send(toProtoPushMetricBatchRequest(payload)); err != nil {
+		a.resetMetricStream()
 		return err
 	}
-	return nil
-}
 
-func masterAPIURL(base string, endpoint string) string {
-	return serviceAPIURL(base, "/master", "/master/api/v1", endpoint)
-}
-
-func serviceAPIURL(base string, servicePrefix string, apiPrefix string, endpoint string) string {
-	base = strings.TrimRight(base, "/")
-	endpoint = strings.TrimLeft(endpoint, "/")
-
-	switch {
-	case strings.HasSuffix(base, apiPrefix):
-		return base + "/" + endpoint
-	case strings.HasSuffix(base, servicePrefix):
-		return base + strings.TrimPrefix(apiPrefix, servicePrefix) + "/" + endpoint
-	case strings.HasSuffix(base, "/api/v1"):
-		return base + "/" + endpoint
-	default:
-		return base + apiPrefix + "/" + endpoint
+	ack, err := stream.Recv()
+	if err != nil {
+		a.resetMetricStream()
+		return err
 	}
+	if ack.GetAck() != nil && ack.GetAck().GetCode() != 0 {
+		return fmt.Errorf("metric batch rejected: %s", ack.GetAck().GetMessage())
+	}
+	if batchSeq := ack.GetBatchSeq(); batchSeq != 0 && batchSeq != payload.BatchSeq {
+		return fmt.Errorf("metric batch ack seq mismatch: got %d want %d", batchSeq, payload.BatchSeq)
+	}
+	return nil
 }
 
 func (a *Agent) digest(now time.Time) contracts.AgentDigest {
@@ -262,6 +288,15 @@ func (a *Agent) digest(now time.Time) contracts.AgentDigest {
 		QueueDepth:         0,
 		LastMetricBatchSeq: a.metricSeq,
 	}
+}
+
+type apiError struct {
+	StatusCode int
+	Status     string
+}
+
+func (e apiError) Error() string {
+	return fmt.Sprintf("unexpected status: %s", e.Status)
 }
 
 func (a *Agent) postJSON(ctx context.Context, url string, payload any, out any) error {
@@ -292,13 +327,78 @@ func (a *Agent) postJSON(ctx context.Context, url string, payload any, out any) 
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
+func masterAPIURL(base string, endpoint string) string {
+	return serviceAPIURL(base, "/master", "/master/api/v1", endpoint)
+}
+
+func serviceAPIURL(base string, servicePrefix string, apiPrefix string, endpoint string) string {
+	base = strings.TrimRight(base, "/")
+	endpoint = strings.TrimLeft(endpoint, "/")
+
+	switch {
+	case strings.HasSuffix(base, apiPrefix):
+		return base + "/" + endpoint
+	case strings.HasSuffix(base, servicePrefix):
+		return base + strings.TrimPrefix(apiPrefix, servicePrefix) + "/" + endpoint
+	case strings.HasSuffix(base, "/api/v1"):
+		return base + "/" + endpoint
+	default:
+		return base + apiPrefix + "/" + endpoint
+	}
+}
+
 func (a *Agent) grpcIngestClient(ctx context.Context) (monitorv1.MetricsIngestServiceClient, error) {
 	if a.grpcIngest != nil {
 		return a.grpcIngest, nil
 	}
 
+	conn, err := a.grpcConnOrDial(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	a.grpcIngest = monitorv1.NewMetricsIngestServiceClient(conn)
+	return a.grpcIngest, nil
+}
+
+func (a *Agent) grpcControlClient(ctx context.Context) (monitorv1.AgentControlServiceClient, error) {
+	if a.grpcCtl != nil {
+		return a.grpcCtl, nil
+	}
+
+	conn, err := a.grpcConnOrDial(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	a.grpcCtl = monitorv1.NewAgentControlServiceClient(conn)
+	return a.grpcCtl, nil
+}
+
+func (a *Agent) metricStreamClient(ctx context.Context) (monitorv1.MetricsIngestService_StreamMetricBatchesClient, error) {
+	if a.metricSink != nil {
+		return a.metricSink, nil
+	}
+
+	client, err := a.grpcIngestClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	stream, err := client.StreamMetricBatches(ctx)
+	if err != nil {
+		return nil, err
+	}
+	a.metricSink = stream
+	return a.metricSink, nil
+}
+
+func (a *Agent) grpcConnOrDial(ctx context.Context) (*grpc.ClientConn, error) {
+	if a.grpcConn != nil {
+		return a.grpcConn, nil
+	}
+
 	conn, err := grpc.NewClient(
-		// ctx,
 		a.cfg.IngestGatewayGRPCAddr,
 		grpc.WithTransportCredentials(grpcTransportCredentials(a.cfg.IngestGatewayGRPCAddr)),
 	)
@@ -306,10 +406,15 @@ func (a *Agent) grpcIngestClient(ctx context.Context) (monitorv1.MetricsIngestSe
 		logx.New("agent").Error("failed to create gRPC client", "error", err)
 		return nil, err
 	}
-
 	a.grpcConn = conn
-	a.grpcIngest = monitorv1.NewMetricsIngestServiceClient(conn)
-	return a.grpcIngest, nil
+	return conn, nil
+}
+
+func (a *Agent) resetMetricStream() {
+	if a.metricSink != nil {
+		_ = a.metricSink.CloseSend()
+	}
+	a.metricSink = nil
 }
 
 func grpcTransportCredentials(addr string) credentials.TransportCredentials {

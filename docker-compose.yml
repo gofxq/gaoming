@@ -65,11 +65,15 @@ services:
     environment:
       INGEST_GATEWAY_HTTP_ADDR: :8090
       INGEST_GATEWAY_GRPC_ADDR: :8091
+      INGEST_GATEWAY_POSTGRES_DSN: postgres://gaoming:gaoming@postgres:5432/gaoming?sslmode=disable
+      INGEST_GATEWAY_REDIS_ADDR: redis:6379
     ports:
       - "8090:8090"
       - "8091:8091"
     depends_on:
-      master-api:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8090/ingest/healthz >/dev/null"]
@@ -121,7 +125,6 @@ services:
     container_name: gaoming-agent
     environment:
       MASTER_API_URL: http://master-api:8080
-      INGEST_GATEWAY_URL: http://ingest-gateway:8090
       INGEST_GATEWAY_GRPC_ADDR: ingest-gateway:8091
       AGENT_REGION: local-docker
       AGENT_ENV: docker

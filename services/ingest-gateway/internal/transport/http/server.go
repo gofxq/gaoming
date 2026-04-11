@@ -19,7 +19,6 @@ func NewServer(svc *service.Service) *Server {
 func (s *Server) Handler() nethttp.Handler {
 	mux := nethttp.NewServeMux()
 	mux.HandleFunc("/ingest/healthz", s.handleHealth)
-	mux.HandleFunc("/ingest/api/v1/metrics", s.handleMetrics)
 	mux.HandleFunc("/ingest/api/v1/events", s.handleEvents)
 	mux.HandleFunc("/ingest/api/v1/probes", s.handleProbes)
 	mux.HandleFunc("/ingest/debug/counters", s.handleCounters)
@@ -28,20 +27,6 @@ func (s *Server) Handler() nethttp.Handler {
 
 func (s *Server) handleHealth(w nethttp.ResponseWriter, _ *nethttp.Request) {
 	httpx.WriteJSON(w, nethttp.StatusOK, s.svc.Health())
-}
-
-func (s *Server) handleMetrics(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodPost {
-		httpx.Error(w, nethttp.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	var req contracts.PushMetricBatchRequest
-	if err := httpx.ReadJSON(r, &req); err != nil {
-		httpx.Error(w, nethttp.StatusBadRequest, err.Error())
-		return
-	}
-	httpx.WriteJSON(w, nethttp.StatusAccepted, s.svc.PushMetricBatch(req))
 }
 
 func (s *Server) handleEvents(w nethttp.ResponseWriter, r *nethttp.Request) {

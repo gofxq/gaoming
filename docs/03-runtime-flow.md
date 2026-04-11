@@ -26,14 +26,21 @@
 - 连接 PostgreSQL
 - 连接 Redis
 - 初始化 PostgreSQL 仓储和 Redis 仓储
-- 启动每 5 秒一次的离线对账任务
 
-### 2. `agent` 注册
+### 2. `agent` 获取 tenant 并注册
 
-`agent` 首次启动后调用：
+当本地配置里没有 `tenant_code` 时，`agent` 会先调用：
 
 ```text
-POST /master/api/v1/agents/register
+POST /master/api/v1/install/tenant
+```
+
+如果这一步失败，`agent` 会本地生成一个 `tenant-*` 值并写回配置文件。
+
+随后 `agent` 再调用：
+
+```text
+gRPC ingest-gateway: AgentControlService/RegisterAgent
 ```
 
 当前服务端会：
@@ -43,25 +50,25 @@ POST /master/api/v1/agents/register
 - 初始化或更新 `host_status_current`
 - 发布 `host_upsert` 到 Redis 事件总线
 
-如果服务端分配了 `tenant_code`，agent 会把返回值写回本地配置文件。
+如果 gRPC 注册响应里返回了新的 `tenant_code`，agent 也会把它写回本地配置文件。
 
 ### 3. 周期采集与上报
 
-每个采集周期里，`agent` 会做两件事：
+每个采集周期里，`agent` 会做一件事：
 
-1. 把 metric batch 发给 `ingest-gateway`
-2. 把 heartbeat 发给 `master-api`
+1. 通过 gRPC 双向流把 metric batch 发给 `ingest-gateway`
 
 注意这里的当前真实行为：
 
-- `ingest-gateway` 只负责接收、计数、日志和 `ack`
-- 页面展示所需的当前快照与窗口历史，实际上来自 `heartbeat.digest`
+- `ingest-gateway` 会把 metric batch 还原成当前主机快照
+- `ingest-gateway` 会把 16 个核心指标写入 Redis 窗口
+- `ingest-gateway` 会发布 `host_upsert` 事件
 
-也就是说，当前 Dashboard 的主数据面不依赖 `ingest-gateway`。
+也就是说，当前 Dashboard 的主数据面已经依赖 `ingest-gateway`。
 
-### 4. `master-api` 处理 heartbeat
+### 4. `ingest-gateway` 处理 metric batch
 
-`master-api` 收到 heartbeat 后会：
+`ingest-gateway` 收到 `StreamMetricBatches` 或兼容 unary `PushMetricBatch` 后会：
 
 - 更新 PostgreSQL 中的 agent 实例状态
 - 更新 `host_status_current`
@@ -85,7 +92,7 @@ SSE 首次连接时，`master-api` 会组装：
 
 ### 6. 离线判定
 
-`master-api` 的后台任务每 5 秒执行一次离线对账。
+`ingest-gateway` 的后台任务每 5 秒执行一次离线对账。
 
 当主机满足：
 

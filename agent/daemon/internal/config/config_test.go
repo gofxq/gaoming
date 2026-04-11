@@ -30,11 +30,11 @@ func TestLoadReadsDotEnvAndWritesAgentConfigYAML(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if cfg.MasterAPIURL != "http://example-master:8080" {
-		t.Fatalf("unexpected master api url: %q", cfg.MasterAPIURL)
-	}
 	if cfg.IngestGatewayGRPCAddr != "example-ingest:18091" {
 		t.Fatalf("unexpected ingest grpc addr: %q", cfg.IngestGatewayGRPCAddr)
+	}
+	if cfg.MasterAPIURL != "http://example-master:8080" {
+		t.Fatalf("unexpected master api url: %q", cfg.MasterAPIURL)
 	}
 	expectedPath := filepath.Join(dir, "agent-config.yaml")
 	resolvedExpectedPath, err := filepath.EvalSymlinks(expectedPath)
@@ -54,11 +54,11 @@ func TestLoadReadsDotEnvAndWritesAgentConfigYAML(t *testing.T) {
 		t.Fatalf("read agent-config.yaml: %v", err)
 	}
 	text := string(body)
-	if !strings.Contains(text, `master_api_url: "http://example-master:8080"`) {
-		t.Fatalf("expected saved config to contain master api url, got:\n%s", text)
-	}
 	if !strings.Contains(text, `ingest_gateway_grpc_addr: "example-ingest:18091"`) {
 		t.Fatalf("expected saved config to contain grpc addr, got:\n%s", text)
+	}
+	if !strings.Contains(text, `master_api_url: "http://example-master:8080"`) {
+		t.Fatalf("expected saved config to contain master api url, got:\n%s", text)
 	}
 	if strings.Contains(text, "ingest_gateway_url:") {
 		t.Fatalf("expected saved config not to contain legacy ingest url, got:\n%s", text)
@@ -94,15 +94,12 @@ func TestLoadDoesNotTreatServerHTTPAddrAsAgentBaseURL(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if cfg.MasterAPIURL != "http://127.0.0.1:8080" {
-		t.Fatalf("unexpected master api url: %q", cfg.MasterAPIURL)
-	}
 	if cfg.IngestGatewayGRPCAddr != "127.0.0.1:8091" {
 		t.Fatalf("unexpected ingest grpc addr: %q", cfg.IngestGatewayGRPCAddr)
 	}
 }
 
-func TestLoadRepairsLegacyPersistedMasterURLFromServerHTTPAddr(t *testing.T) {
+func TestLoadDropsLegacyPersistedMasterHTTPAddrAliasOnSave(t *testing.T) {
 	dir := t.TempDir()
 	oldWD, err := os.Getwd()
 	if err != nil {
@@ -135,6 +132,14 @@ func TestLoadRepairsLegacyPersistedMasterURLFromServerHTTPAddr(t *testing.T) {
 	}
 	if cfg.IngestGatewayGRPCAddr != "127.0.0.1:8091" {
 		t.Fatalf("unexpected repaired ingest grpc addr: %q", cfg.IngestGatewayGRPCAddr)
+	}
+
+	saved, err := os.ReadFile("agent-config.yaml")
+	if err != nil {
+		t.Fatalf("read agent-config.yaml: %v", err)
+	}
+	if !strings.Contains(string(saved), `master_api_url: "http://127.0.0.1:8080"`) {
+		t.Fatalf("expected saved config to contain normalized master api url, got:\n%s", string(saved))
 	}
 }
 
@@ -196,11 +201,11 @@ func TestLoadReadsSavedAgentConfigYAMLWithoutDotEnv(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if cfg.MasterAPIURL != "http://saved-master:8080" {
-		t.Fatalf("unexpected master api url: %q", cfg.MasterAPIURL)
-	}
 	if cfg.IngestGatewayGRPCAddr != "saved-ingest:18091" {
 		t.Fatalf("unexpected ingest grpc addr: %q", cfg.IngestGatewayGRPCAddr)
+	}
+	if cfg.MasterAPIURL != "http://saved-master:8080" {
+		t.Fatalf("unexpected master api url: %q", cfg.MasterAPIURL)
 	}
 	if cfg.TenantCode != "tenant-saved" {
 		t.Fatalf("unexpected tenant code: %q", cfg.TenantCode)

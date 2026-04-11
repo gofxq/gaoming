@@ -74,7 +74,7 @@ INGEST_URL=http://127.0.0.1:8090 \
 make smoke-agent
 ```
 
-第一次注册成功后，如果服务端返回了 `tenant_code`，Agent 会把它持久化回 `agent-config.yaml`。
+第一次启动时，如果本地还没有 `tenant_code`，Agent 会先向 `master-api` 申请；申请失败时会本地生成一个并持久化回 `agent-config.yaml`。
 
 `make smoke-agent` 会同时检查：
 

@@ -14,6 +14,7 @@ service AgentControlService {
 
 service MetricsIngestService {
   rpc PushMetricBatch(PushMetricBatchRequest) returns (Ack);
+  rpc StreamMetricBatches(stream PushMetricBatchRequest) returns (stream MetricBatchAck);
   rpc PushEventBatch(PushEventBatchRequest) returns (Ack);
 }
 
@@ -26,6 +27,7 @@ message RegisterAgentResponse {
   Ack ack = 1;
   string host_uid = 2;
   AgentConfig config = 3;
+  string tenant_code = 4;
 }
 
 message GetConfigRequest {
@@ -67,4 +69,9 @@ message PushEventBatchRequest {
   string agent_id = 2;
   int64 batch_seq = 3;
   repeated EventRecord events = 4;
+}
+
+message MetricBatchAck {
+  Ack ack = 1;
+  int64 batch_seq = 2;
 }

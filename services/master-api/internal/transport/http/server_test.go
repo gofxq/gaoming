@@ -12,8 +12,8 @@ import (
 
 	"github.com/gofxq/gaoming/pkg/clock"
 	"github.com/gofxq/gaoming/pkg/contracts"
+	"github.com/gofxq/gaoming/pkg/hostruntime/repository"
 	"github.com/gofxq/gaoming/pkg/state"
-	"github.com/gofxq/gaoming/services/master-api/internal/repository"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 )
 
@@ -34,6 +34,10 @@ func (s stubHostStore) RegisterAgent(context.Context, contracts.RegisterAgentReq
 
 func (s stubHostStore) Heartbeat(context.Context, contracts.HeartbeatRequest, time.Time) (state.HostSnapshot, contracts.AgentConfig, error) {
 	return state.HostSnapshot{}, contracts.AgentConfig{}, nil
+}
+
+func (s stubHostStore) ReportMetrics(context.Context, contracts.PushMetricBatchRequest, contracts.AgentDigest, time.Time) (state.HostSnapshot, error) {
+	return state.HostSnapshot{}, nil
 }
 
 func (s stubHostStore) ListHosts(context.Context, string) ([]state.HostSnapshot, error) {

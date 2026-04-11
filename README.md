@@ -12,9 +12,9 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 
 安装完成后展示：
 ```bash
-master-url [https://gm-metric.gofxq.com/]:
+web-url [https://gm-metric.gofxq.com/]:
 ingest-grpc-addr [gm-rpc.gofxq.com:443]:
-tenant [<auto>]: default
+tenant [<auto>]:
 loop-interval-sec [5]: 1
 [+] downloading gaoming-agent_linux_amd64.tar.gz
 [+] installed gaoming-agent to /opt/gaoming-agent
@@ -43,7 +43,7 @@ loop-interval-sec [5]: 1
 
 ## ✨ 核心能力
 
-- Agent 自动注册、Heartbeat、指标批量上报
+- Agent 自动注册、流式指标上报
 - Dashboard 实时展示主机状态与窗口指标
 - 租户隔离：页面走 `/<tenantCode>`，接口走 `?tenant=...`
 - 支持 Linux / macOS / Windows 安装脚本
@@ -61,12 +61,12 @@ flowchart LR
 
     %% ===== Control Plane =====
     subgraph ControlPlane["master-api (控制 + 状态)"]
-        Master["Master API - 注册/心跳 - 主机状态 - SSE 推送"]
+        Master["Master API - 主机状态查询 - SSE 推送"]
     end
 
     %% ===== Ingest Layer =====
     subgraph IngestLayer["ingest-gateway (数据接入)"]
-        Ingest["Ingest Gateway - metrics/events/probes 接收 - ack"]
+        Ingest["Ingest Gateway - 注册 - metrics stream - 状态写入 - ack"]
     end
 
     %% ===== Compute Layer =====
@@ -80,11 +80,11 @@ flowchart LR
     end
 
     %% ===== Flows =====
-    Agent -->|注册/心跳| Master
-    Agent -->|指标上报| Ingest
+    Agent -->|gRPC 注册/指标流| Ingest
     Master -->|SSE| UI
     Probe -->|探测结果| Ingest
     Ingest -->|数据流| Core
+    Ingest -->|状态数据| Master
     Master -->|状态数据| Core
     Core -->|计算结果| Master
 
@@ -167,9 +167,9 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 
 安装脚本会交互式提示以下参数，直接回车就用默认值：
 
-- `master-url`: `https://gm-metric.gofxq.com/`
-- `ingest-grpc-addr`: `gm-metric.gofxq.com:443`
-- `tenant`: 留空则由服务端自动生成
+- `web-url`: `https://gm-metric.gofxq.com/`
+- `ingest-grpc-addr`: `gm-rpc.gofxq.com:443`
+- `tenant`: 留空则由 Agent 启动后向 `master-api` 获取，失败则本地生成
 - `loop-interval-sec`: `5`
 
 安装完成后，脚本会输出：
@@ -216,8 +216,8 @@ make install-agent-local-service
 
 ## 🧩 服务组成
 
-- `master-api`: Agent 注册、心跳、主机状态查询、SSE 推送
-- `ingest-gateway`: 指标、事件、探测数据接入
+- `master-api`: 主机状态查询、SSE 推送
+- `ingest-gateway`: Agent 注册、指标流、事件、探测数据接入
 - `core-worker`: 后台计算与聚合
 - `probe-worker`: 主动探测
 - `agent`: 主机侧采集与上报

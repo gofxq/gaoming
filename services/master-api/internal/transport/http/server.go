@@ -1,13 +1,11 @@
 package http
 
 import (
-	"errors"
 	nethttp "net/http"
 	"strings"
 
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/httpx"
-	"github.com/gofxq/gaoming/services/master-api/internal/repository"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 )
 
@@ -25,7 +23,6 @@ func (s *Server) Handler() nethttp.Handler {
 	mux.HandleFunc("/master/api/v1/stream/hosts", s.handleHostStream)
 	mux.HandleFunc("/master/api/v1/install/tenant", s.handleAllocateInstallTenant)
 	mux.HandleFunc("/master/api/v1/agents/register", s.handleRegisterAgent)
-	mux.HandleFunc("/master/api/v1/agents/heartbeat", s.handleHeartbeat)
 	mux.HandleFunc("/master/api/v1/hosts", s.handleListHosts)
 	mux.HandleFunc("/master/api/v1/hosts/", s.handleGetHost)
 	mux.HandleFunc("/master/api/v1/ops/maintenance", s.handleCreateMaintenance)
@@ -66,31 +63,6 @@ func (s *Server) handleRegisterAgent(w nethttp.ResponseWriter, r *nethttp.Reques
 
 	resp, err := s.svc.RegisterAgent(r.Context(), req)
 	if err != nil {
-		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
-		return
-	}
-
-	httpx.WriteJSON(w, nethttp.StatusOK, resp)
-}
-
-func (s *Server) handleHeartbeat(w nethttp.ResponseWriter, r *nethttp.Request) {
-	if r.Method != nethttp.MethodPost {
-		httpx.Error(w, nethttp.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	var req contracts.HeartbeatRequest
-	if err := httpx.ReadJSON(r, &req); err != nil {
-		httpx.Error(w, nethttp.StatusBadRequest, err.Error())
-		return
-	}
-
-	resp, err := s.svc.Heartbeat(r.Context(), req)
-	if err != nil {
-		if errors.Is(err, repository.ErrHostNotFound) {
-			httpx.Error(w, nethttp.StatusNotFound, err.Error())
-			return
-		}
 		httpx.Error(w, nethttp.StatusInternalServerError, err.Error())
 		return
 	}

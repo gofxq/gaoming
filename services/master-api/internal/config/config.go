@@ -6,26 +6,28 @@ import (
 )
 
 type Config struct {
-	HTTPAddr       string
-	RuntimeBackend string
-	PostgresDSN    string
-	RedisAddr      string
-	RedisPassword  string
-	RedisDB        int
-	TenantCode     string
-	TenantName     string
+	HTTPAddr              string
+	RuntimeBackend        string
+	PostgresDSN           string
+	RedisAddr             string
+	RedisPassword         string
+	RedisDB               int
+	TenantCode            string
+	TenantName            string
+	AllowCustomTenantCode bool
 }
 
 func Load() Config {
 	return Config{
-		HTTPAddr:       env("MASTER_API_HTTP_ADDR", ":8080"),
-		RuntimeBackend: env("MASTER_API_RUNTIME_BACKEND", "pg_redis"),
-		PostgresDSN:    env("MASTER_API_POSTGRES_DSN", "postgres://gaoming:gaoming@127.0.0.1:5432/gaoming?sslmode=disable"),
-		RedisAddr:      env("MASTER_API_REDIS_ADDR", "127.0.0.1:6379"),
-		RedisPassword:  env("MASTER_API_REDIS_PASSWORD", ""),
-		RedisDB:        envInt("MASTER_API_REDIS_DB", 0),
-		TenantCode:     env("MASTER_API_TENANT_CODE", "default"),
-		TenantName:     env("MASTER_API_TENANT_NAME", "Default Tenant"),
+		HTTPAddr:              env("MASTER_API_HTTP_ADDR", ":8080"),
+		RuntimeBackend:        env("MASTER_API_RUNTIME_BACKEND", "pg_redis"),
+		PostgresDSN:           env("MASTER_API_POSTGRES_DSN", "postgres://gaoming:gaoming@127.0.0.1:5432/gaoming?sslmode=disable"),
+		RedisAddr:             env("MASTER_API_REDIS_ADDR", "127.0.0.1:6379"),
+		RedisPassword:         env("MASTER_API_REDIS_PASSWORD", ""),
+		RedisDB:               envInt("MASTER_API_REDIS_DB", 0),
+		TenantCode:            env("MASTER_API_TENANT_CODE", "default"),
+		TenantName:            env("MASTER_API_TENANT_NAME", "Default Tenant"),
+		AllowCustomTenantCode: envBool("MASTER_API_ALLOW_CUSTOM_TENANT_CODE", true),
 	}
 }
 
@@ -43,6 +45,19 @@ func envInt(key string, fallback int) int {
 	}
 
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envBool(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}

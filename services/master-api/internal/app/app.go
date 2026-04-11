@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/gofxq/gaoming/pkg/clock"
+	postgresrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/postgres"
+	redisrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/redis"
 	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/services/master-api/internal/config"
-	postgresrepo "github.com/gofxq/gaoming/services/master-api/internal/repository/postgres"
-	redisrepo "github.com/gofxq/gaoming/services/master-api/internal/repository/redis"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 	httptransport "github.com/gofxq/gaoming/services/master-api/internal/transport/http"
 	goredis "github.com/redis/go-redis/v9"
@@ -64,8 +64,9 @@ func New() (*App, error) {
 	}
 
 	hostStore, err := postgresrepo.NewStore(initCtx, gormDB, postgresrepo.Config{
-		TenantCode: cfg.TenantCode,
-		TenantName: cfg.TenantName,
+		TenantCode:            cfg.TenantCode,
+		TenantName:            cfg.TenantName,
+		AllowCustomTenantCode: cfg.AllowCustomTenantCode,
 	})
 	if err != nil {
 		_ = sqlDB.Close()
@@ -76,7 +77,7 @@ func New() (*App, error) {
 	eventBus := redisrepo.NewEventBus(redisClient, "")
 	svc := service.New(hostStore, metricStore, hostStore, eventBus, clock.Real{}, logger)
 	handler := httptransport.NewServer(svc).Handler()
-	bgCtx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 
 	app := &App{
 		server: &http.Server{
@@ -90,7 +91,6 @@ func New() (*App, error) {
 		redisClient: redisClient,
 	}
 
-	go app.runOfflineReconciler(bgCtx)
 	return app, nil
 }
 
@@ -111,25 +111,4 @@ func (a *App) Shutdown(ctx context.Context) error {
 		return a.redisClient.Close()
 	}
 	return nil
-}
-
-func (a *App) runOfflineReconciler(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			changed, err := a.svc.ReconcileOfflineHosts(ctx)
-			if err != nil {
-				a.logger.Error("reconcile offline hosts failed", "error", err)
-				continue
-			}
-			if changed > 0 {
-				a.logger.Info("reconciled offline hosts", "count", changed)
-			}
-		}
-	}
 }

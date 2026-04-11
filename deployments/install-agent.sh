@@ -3,7 +3,7 @@ set -eu
 umask 022
 
 # ---------- defaults ----------
-MASTER_API_URL_EXPLICIT="${MASTER_API_URL+1}"
+WEB_BASE_URL_EXPLICIT="${WEB_BASE_URL+1}"
 INGEST_GATEWAY_GRPC_ADDR_EXPLICIT="${INGEST_GATEWAY_GRPC_ADDR+1}"
 AGENT_TENANT_EXPLICIT="${AGENT_TENANT+1}"
 AGENT_LOOP_INTERVAL_SEC_EXPLICIT="${AGENT_LOOP_INTERVAL_SEC+1}"
@@ -15,7 +15,8 @@ SERVICE_NAME="${SERVICE_NAME:-gaoming-agent}"
 SERVICE_USER="${SERVICE_USER:-gaoming-agent}"
 SERVICE_GROUP="${SERVICE_GROUP:-gaoming-agent}"
 
-MASTER_API_URL="${MASTER_API_URL:-https://gm-metric.gofxq.com/}"
+WEB_BASE_URL="${WEB_BASE_URL:-${MASTER_API_URL:-https://gm-metric.gofxq.com/}}"
+MASTER_API_URL="${MASTER_API_URL:-}"
 INGEST_GATEWAY_GRPC_ADDR="${INGEST_GATEWAY_GRPC_ADDR:-gm-rpc.gofxq.com:443}"
 
 AGENT_REGION="${AGENT_REGION:-local}"
@@ -43,9 +44,9 @@ Options:
   --service-name <name>          Service name, default: gaoming-agent
   --service-user <name>          Linux service user, default: gaoming-agent
   --service-group <name>         Linux service group, default: gaoming-agent
-  --master-url <url>             Default: https://gm-metric.gofxq.com/
+  --web-url <url>                Default: https://gm-metric.gofxq.com/
   --ingest-grpc-addr <addr>      Default: gm-rpc.gofxq.com:443
-  --tenant <code>                Default: empty, server generates tenant
+  --tenant <code>                Default: empty, agent gets tenant from master at runtime
   --loop-interval-sec <seconds>  Default: 5
   --region <name>                Default: local
   --env <name>                   Default: prod
@@ -90,8 +91,8 @@ prompt_install_inputs() {
     return 0
   fi
 
-  if [ -z "$MASTER_API_URL_EXPLICIT" ]; then
-    MASTER_API_URL="$(prompt_with_default "master-url" "$MASTER_API_URL" "$MASTER_API_URL")"
+  if [ -z "$WEB_BASE_URL_EXPLICIT" ]; then
+    WEB_BASE_URL="$(prompt_with_default "web-url" "$WEB_BASE_URL" "$WEB_BASE_URL")"
   fi
   if [ -z "$INGEST_GATEWAY_GRPC_ADDR_EXPLICIT" ]; then
     INGEST_GATEWAY_GRPC_ADDR="$(prompt_with_default "ingest-grpc-addr" "$INGEST_GATEWAY_GRPC_ADDR" "$INGEST_GATEWAY_GRPC_ADDR")"
@@ -151,7 +152,8 @@ validate_inputs() {
   validate_name "$SERVICE_NAME" "service-name"
   validate_name "$SERVICE_USER" "service-user"
   validate_name "$SERVICE_GROUP" "service-group"
-  validate_url "$MASTER_API_URL" "master-url"
+  validate_url "$WEB_BASE_URL" "web-url"
+  validate_url "$MASTER_API_URL" "master-api-url"
   validate_non_empty "$INGEST_GATEWAY_GRPC_ADDR" "ingest-grpc-addr"
   validate_positive_int "$AGENT_LOOP_INTERVAL_SEC" "loop-interval-sec"
   validate_abs_path "$INSTALL_DIR" "install-dir"
@@ -167,7 +169,7 @@ parse_args() {
       --service-name)        [ "$#" -ge 2 ] || die "missing value for --service-name"; SERVICE_NAME="$2"; shift 2 ;;
       --service-user)        [ "$#" -ge 2 ] || die "missing value for --service-user"; SERVICE_USER="$2"; shift 2 ;;
       --service-group)       [ "$#" -ge 2 ] || die "missing value for --service-group"; SERVICE_GROUP="$2"; shift 2 ;;
-      --master-url)          [ "$#" -ge 2 ] || die "missing value for --master-url"; MASTER_API_URL="$2"; MASTER_API_URL_EXPLICIT=1; shift 2 ;;
+      --web-url|--master-url) [ "$#" -ge 2 ] || die "missing value for --web-url"; WEB_BASE_URL="$2"; MASTER_API_URL="$2"; WEB_BASE_URL_EXPLICIT=1; shift 2 ;;
       --ingest-grpc-addr)    [ "$#" -ge 2 ] || die "missing value for --ingest-grpc-addr"; INGEST_GATEWAY_GRPC_ADDR="$2"; INGEST_GATEWAY_GRPC_ADDR_EXPLICIT=1; shift 2 ;;
       --tenant)              [ "$#" -ge 2 ] || die "missing value for --tenant"; AGENT_TENANT="$2"; AGENT_TENANT_EXPLICIT=1; shift 2 ;;
       --loop-interval-sec)   [ "$#" -ge 2 ] || die "missing value for --loop-interval-sec"; AGENT_LOOP_INTERVAL_SEC="$2"; AGENT_LOOP_INTERVAL_SEC_EXPLICIT=1; shift 2 ;;
@@ -357,31 +359,12 @@ wait_for_tenant_code() {
 
 build_dashboard_url() {
   tenant_code="$1"
-  printf '%s/%s\n' "${MASTER_API_URL%/}" "$tenant_code"
+  printf '%s/%s\n' "${WEB_BASE_URL%/}" "$tenant_code"
 }
 
 build_hosts_api_url() {
   tenant_code="$1"
-  printf '%s/master/api/v1/hosts?tenant=%s\n' "${MASTER_API_URL%/}" "$tenant_code"
-}
-
-fetch_install_tenant() {
-  response="$(curl -fsSL -X POST "${MASTER_API_URL%/}/master/api/v1/install/tenant")" \
-    || die "failed to allocate tenant from ${MASTER_API_URL%/}/master/api/v1/install/tenant"
-  tenant_code="$(
-    printf '%s' "$response" | tr -d '\n' | sed -n 's/.*"tenant_code"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
-  )"
-  [ -n "$tenant_code" ] || die "tenant allocation response did not include tenant_code"
-  printf '%s\n' "$tenant_code"
-}
-
-ensure_install_tenant() {
-  if [ -n "$AGENT_TENANT" ]; then
-    return 0
-  fi
-
-  log "allocating tenant from master-api"
-  AGENT_TENANT="$(fetch_install_tenant)"
+  printf '%s/master/api/v1/hosts?tenant=%s\n' "${WEB_BASE_URL%/}" "$tenant_code"
 }
 
 render_config() {
@@ -532,15 +515,24 @@ print_summary() {
     return
   fi
 
-  log "tenant_code: ${AGENT_TENANT:-<auto>}"
-  log "dashboard: $(build_dashboard_url "${AGENT_TENANT}")"
-  log "hosts api: $(build_hosts_api_url "${AGENT_TENANT}")"
+  if [ -n "$AGENT_TENANT" ]; then
+    log "tenant_code: ${AGENT_TENANT}"
+    log "dashboard: $(build_dashboard_url "${AGENT_TENANT}")"
+    log "hosts api: $(build_hosts_api_url "${AGENT_TENANT}")"
+    return
+  fi
+
+  log "tenant_code: <pending>"
+  log "tenant_code will be requested from master-api at runtime; if that fails, agent will generate one locally"
 }
 
 main() {
   parse_args "$@"
   prepare_platform
   prompt_install_inputs
+  if [ -z "$MASTER_API_URL" ]; then
+    MASTER_API_URL="$WEB_BASE_URL"
+  fi
   validate_inputs
   require_root
 
@@ -552,7 +544,6 @@ main() {
   need_cmd install
   need_cmd mktemp
 
-  ensure_install_tenant
   make_tmpdir
   download_assets
   verify_checksum

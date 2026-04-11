@@ -4,16 +4,17 @@
 
 当前代码里已经稳定落地的主路径是：
 
-- `agent` 向 `master-api` 注册，并在每个周期上报 `heartbeat`
-- `master-api` 将主机当前状态落到 PostgreSQL
-- `master-api` 将最近窗口指标写入 Redis
-- `master-api` 通过 Redis Pub/Sub 广播 `host_upsert` 事件
+- `agent` 在本地没有 `tenant_code` 时，先向 `master-api` 申请，失败则本地生成
+- `agent` 通过 gRPC 向 `ingest-gateway` 注册，并在同一条 gRPC 连接上持续流式上报指标
+- `ingest-gateway` 将主机当前状态落到 PostgreSQL
+- `ingest-gateway` 将最近窗口指标写入 Redis
+- `ingest-gateway` 通过 Redis Pub/Sub 发布 `host_upsert` 事件，`master-api` 负责订阅并转发给浏览器
 - Web SPA 通过 `SSE` 订阅主机增量事件，并按 `tenant` 展示实时状态
 
 需要特别说明的当前事实：
 
-- 页面上的窗口趋势数据，来自 `heartbeat.digest -> master-api -> Redis` 这条链路
-- `ingest-gateway` 当前会接收 `metrics / events / probes`，但只做计数、日志和 `ack`
+- 页面上的窗口趋势数据，来自 `metric batch -> ingest-gateway -> Redis` 这条链路
+- `ingest-gateway` 当前已经接管 agent 指标驱动的主机状态更新与窗口写入
 - `probe-worker` 已经会真实发起 HTTP 探测，但探测结果目前还没有写回 `master-api` 的主机状态
 - `core-worker` 仍是占位循环，还没有接管状态计算和告警流程
 
@@ -48,19 +49,22 @@ Web 位于 [`web/`](../web)，当前主要入口有：
 ## 当前服务边界
 
 - `master-api`
-  - Agent 注册、心跳、主机查询、维护窗、告警 ACK
+  - 主机查询、维护窗、告警 ACK
   - 从 PostgreSQL 读取主机当前快照
   - 从 Redis 读取主机最近窗口指标
   - 对浏览器提供 `SSE`
 - `ingest-gateway`
-  - 接收 `metrics / events / probes`
-  - 当前只做计数和日志，不写持久化状态
+  - Agent gRPC 注册
+  - Agent metric stream 接入
+  - 写入主机当前状态与 Redis 指标窗口
 - `core-worker`
   - 当前只定时打印占位日志
 - `probe-worker`
   - 周期性探测目标 URL，并把结果上报到 `ingest-gateway`
 - `agent`
-  - 宿主机指标采集、注册、heartbeat、metric batch 上报
+  - 宿主机指标采集
+  - gRPC 注册
+  - 流式指标上报
 
 ## 当前持久化状态
 

@@ -125,10 +125,10 @@ browser -> master-api -> PostgreSQL(current) + Redis(history)
 1. 让 `ingest-gateway` 的 `metrics / events / probes` 进入可消费的持久化或消息队列
 2. 让 `core-worker` 消费这些输入并统一计算状态
 3. 把 probe 结果并回 `host_status_current`
-4. 让页面逐步消费“真实统一状态”，而不只依赖 heartbeat digest
+4. 让页面逐步消费“真实统一状态”，而不只依赖 agent metric batch 派生的当前快照
 
 在这些步骤完成前，当前仓库最可靠的实时监控闭环仍然是：
 
 ```text
-agent heartbeat -> master-api -> PostgreSQL/Redis -> SSE -> web
+agent metric batch -> ingest-gateway -> PostgreSQL/Redis -> SSE -> web
 ```

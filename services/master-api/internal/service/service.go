@@ -2,15 +2,14 @@ package service
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/gofxq/gaoming/pkg/clock"
 	"github.com/gofxq/gaoming/pkg/contracts"
+	"github.com/gofxq/gaoming/pkg/hostruntime/repository"
 	"github.com/gofxq/gaoming/pkg/ids"
 	"github.com/gofxq/gaoming/pkg/state"
-	"github.com/gofxq/gaoming/services/master-api/internal/repository"
 )
 
 type Service struct {
@@ -69,29 +68,6 @@ func (s *Service) AllocateInstallTenant(ctx context.Context) (contracts.Allocate
 		RequestID:  ids.New("req"),
 		Message:    "tenant allocated",
 		TenantCode: tenantCode,
-	}, nil
-}
-
-func (s *Service) Heartbeat(ctx context.Context, req contracts.HeartbeatRequest) (contracts.HeartbeatResponse, error) {
-	snapshot, config, err := s.hostStore.Heartbeat(ctx, req, s.clock.Now())
-	if err != nil {
-		if errors.Is(err, repository.ErrHostNotFound) {
-			return contracts.HeartbeatResponse{}, err
-		}
-		return contracts.HeartbeatResponse{}, err
-	}
-	if err := s.metricStore.AppendHeartbeatMetrics(ctx, req.HostUID, s.clock.Now(), req.Digest); err != nil {
-		return contracts.HeartbeatResponse{}, err
-	}
-	if err := s.eventBus.PublishHostUpsert(ctx, snapshot); err != nil {
-		return contracts.HeartbeatResponse{}, err
-	}
-
-	return contracts.HeartbeatResponse{
-		RequestID:                ids.New("req"),
-		Message:                  "heartbeat accepted",
-		NextHeartbeatIntervalSec: config.HeartbeatIntervalSec,
-		DesiredConfigVersion:     config.ConfigVersion,
 	}, nil
 }
 

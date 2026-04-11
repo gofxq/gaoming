@@ -74,13 +74,12 @@ Agent 与服务之间的 HTTP/JSON 契约位于 [`pkg/contracts/api.go`](../pkg/
 其中最重要的几类对象是：
 
 - `RegisterAgentRequest / Response`
-- `HeartbeatRequest / Response`
 - `PushMetricBatchRequest`
 - `PushEventBatchRequest`
 - `ReportProbeResultsRequest`
 - `AckResponse`
 
-`HeartbeatRequest.Digest` 与 `HostSnapshot` 的多数指标字段是一一对应的。当前页面展示的窗口趋势，正是由这份 `digest` 衍生出来。
+`PushMetricBatchRequest` 中的 host 级指标点与 `HostSnapshot` 的多数指标字段一一对应。当前页面展示的窗口趋势，正是由这批指标衍生出来。
 
 ## 当前存储落点
 
@@ -125,5 +124,5 @@ Agent 与服务之间的 HTTP/JSON 契约位于 [`pkg/contracts/api.go`](../pkg/
 所以目前最可靠的实时信号仍然是：
 
 - `register`
-- `heartbeat`
-- `heartbeat.digest`
+- `metric batch`
+- `metric batch` 中的 host 级指标点

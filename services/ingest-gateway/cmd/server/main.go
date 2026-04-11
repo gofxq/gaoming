@@ -14,7 +14,10 @@ import (
 )
 
 func main() {
-	application := app.New()
+	application, err := app.New()
+	if err != nil {
+		panic(err)
+	}
 
 	go func() {
 		if err := application.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, grpc.ErrServerStopped) {

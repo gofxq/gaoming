@@ -84,5 +84,8 @@ web-install:
 web-dev: web-install
 	cd web && VITE_PROXY_TARGET=$(WEB_API_ORIGIN) $(YARN) dev
 
+web-local: web-install
+	cd web && VITE_PROXY_TARGET=http://localhost:8080 $(YARN) dev
+
 web-build:
 	cd web && VITE_API_ORIGIN=$(WEB_API_ORIGIN) $(YARN) build

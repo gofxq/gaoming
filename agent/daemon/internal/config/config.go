@@ -31,9 +31,8 @@ func Load() (Config, error) {
 	fileState := loadConfigFile(configPath)
 	envFile := loadDotEnv(defaultEnvPath())
 	fileState.MasterAPIURL = normalizeLegacyURL(fileState.MasterAPIURL, "MASTER_API_URL", "MASTER_API_HTTP_ADDR", envFile)
-
 	masterAPIURL := strings.TrimRight(valueString([]string{"MASTER_API_URL"}, envFile, fileState.MasterAPIURL, "http://127.0.0.1:8080"), "/")
-	legacyIngestGatewayURL := strings.TrimRight(valueString([]string{"INGEST_GATEWAY_URL"}, envFile, fileState.LegacyIngestGatewayURL, masterAPIURL), "/")
+	legacyIngestGatewayURL := strings.TrimRight(valueString([]string{"INGEST_GATEWAY_URL"}, envFile, fileState.LegacyIngestGatewayURL, "http://127.0.0.1:8090"), "/")
 	ingestGatewayGRPCAddr := normalizeGRPCAddr(valueString([]string{"INGEST_GATEWAY_GRPC_ADDR"}, envFile, fileState.IngestGatewayGRPCAddr, defaultGRPCAddrForURL(legacyIngestGatewayURL)))
 
 	cfg := Config{
@@ -74,7 +73,7 @@ func Save(cfg Config) error {
 	}
 
 	body := renderConfigFile(persistedConfig{
-		MasterAPIURL:          cfg.MasterAPIURL,
+		MasterAPIURL:          strings.TrimRight(cfg.MasterAPIURL, "/"),
 		IngestGatewayGRPCAddr: cfg.IngestGatewayGRPCAddr,
 		Region:                cfg.Region,
 		Env:                   cfg.Env,
@@ -251,7 +250,7 @@ func valueInt(key string, envFile map[string]string, fileValue int, fallback int
 
 func renderConfigFile(cfg persistedConfig) string {
 	var b strings.Builder
-	writeYAMLString(&b, "master_api_url", cfg.MasterAPIURL)
+	writeYAMLString(&b, "master_api_url", strings.TrimRight(cfg.MasterAPIURL, "/"))
 	writeYAMLString(&b, "ingest_gateway_grpc_addr", normalizeGRPCAddr(cfg.IngestGatewayGRPCAddr))
 	writeYAMLString(&b, "region", cfg.Region)
 	writeYAMLString(&b, "env", cfg.Env)

@@ -2,9 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
+	nethttp "net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,39 +16,113 @@ import (
 	"google.golang.org/grpc"
 )
 
-func TestMasterAPIURL(t *testing.T) {
-	tests := []struct {
-		name     string
-		base     string
-		endpoint string
-		want     string
-	}{
-		{
-			name:     "root base",
-			base:     "http://127.0.0.1:8080",
-			endpoint: "agents/register",
-			want:     "http://127.0.0.1:8080/master/api/v1/agents/register",
+func TestRegisterGRPC(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	server := grpc.NewServer()
+	defer server.Stop()
+
+	recorder := &recordingIngestServer{}
+	monitorv1.RegisterAgentControlServiceServer(server, recorder)
+	monitorv1.RegisterMetricsIngestServiceServer(server, recorder)
+
+	go func() {
+		_ = server.Serve(listener)
+	}()
+
+	masterServer := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		if r.Method != nethttp.MethodPost || r.URL.Path != "/master/api/v1/install/tenant" {
+			w.WriteHeader(nethttp.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tenant_code": "tenant-master",
+		})
+	}))
+	defer masterServer.Close()
+
+	persistedTenant := ""
+	agent := New(Config{
+		MasterAPIURL:          masterServer.URL,
+		IngestGatewayGRPCAddr: listener.Addr().String(),
+		LoopInterval:          time.Second,
+		PersistTenant: func(value string) error {
+			persistedTenant = value
+			return nil
 		},
-		{
-			name:     "service base",
-			base:     "http://127.0.0.1:8080/master",
-			endpoint: "agents/register",
-			want:     "http://127.0.0.1:8080/master/api/v1/agents/register",
-		},
-		{
-			name:     "api base",
-			base:     "http://127.0.0.1:8080/master/api/v1",
-			endpoint: "agents/register",
-			want:     "http://127.0.0.1:8080/master/api/v1/agents/register",
-		},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	defer agent.Close()
+
+	if err := agent.register(context.Background()); err != nil {
+		t.Fatalf("register: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := masterAPIURL(tt.base, tt.endpoint); got != tt.want {
-				t.Fatalf("masterAPIURL(%q, %q) = %q, want %q", tt.base, tt.endpoint, got, tt.want)
-			}
-		})
+	if recorder.lastRegister == nil {
+		t.Fatal("expected register request to be recorded")
+	}
+	if recorder.lastRegister.GetHost().GetTenantCode() != "tenant-master" {
+		t.Fatalf("unexpected tenant code sent to ingest: %q", recorder.lastRegister.GetHost().GetTenantCode())
+	}
+	if agent.hostUID != "host-test" {
+		t.Fatalf("unexpected host uid: %q", agent.hostUID)
+	}
+	if persistedTenant != "tenant-master" {
+		t.Fatalf("unexpected persisted tenant: %q", persistedTenant)
+	}
+}
+
+func TestRegisterGRPCFallsBackToLocalTenantWhenMasterFails(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	server := grpc.NewServer()
+	defer server.Stop()
+
+	recorder := &recordingIngestServer{}
+	monitorv1.RegisterAgentControlServiceServer(server, recorder)
+	monitorv1.RegisterMetricsIngestServiceServer(server, recorder)
+
+	go func() {
+		_ = server.Serve(listener)
+	}()
+
+	masterServer := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+		nethttp.Error(w, "boom", nethttp.StatusInternalServerError)
+	}))
+	defer masterServer.Close()
+
+	persistedTenant := ""
+	agent := New(Config{
+		MasterAPIURL:          masterServer.URL,
+		IngestGatewayGRPCAddr: listener.Addr().String(),
+		LoopInterval:          time.Second,
+		PersistTenant: func(value string) error {
+			persistedTenant = value
+			return nil
+		},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	defer agent.Close()
+
+	if err := agent.register(context.Background()); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	if recorder.lastRegister == nil {
+		t.Fatal("expected register request to be recorded")
+	}
+	tenantCode := recorder.lastRegister.GetHost().GetTenantCode()
+	if !strings.HasPrefix(tenantCode, "tenant-") {
+		t.Fatalf("expected fallback tenant code, got %q", tenantCode)
+	}
+	if persistedTenant != tenantCode {
+		t.Fatalf("expected persisted tenant %q, got %q", tenantCode, persistedTenant)
 	}
 }
 
@@ -59,6 +137,7 @@ func TestPushMetricsWithDigestGRPC(t *testing.T) {
 	defer server.Stop()
 
 	recorder := &recordingIngestServer{}
+	monitorv1.RegisterAgentControlServiceServer(server, recorder)
 	monitorv1.RegisterMetricsIngestServiceServer(server, recorder)
 
 	go func() {
@@ -84,7 +163,7 @@ func TestPushMetricsWithDigestGRPC(t *testing.T) {
 	}
 
 	if recorder.lastRequest == nil {
-		t.Fatal("expected grpc request to be recorded")
+		t.Fatal("expected stream request to be recorded")
 	}
 	if recorder.lastRequest.HostUid != "host-test" {
 		t.Fatalf("unexpected host uid: %q", recorder.lastRequest.HostUid)
@@ -104,8 +183,21 @@ func (fixedSampler) Sample(time.Time) systemMetrics {
 }
 
 type recordingIngestServer struct {
+	monitorv1.UnimplementedAgentControlServiceServer
 	monitorv1.UnimplementedMetricsIngestServiceServer
-	lastRequest *monitorv1.PushMetricBatchRequest
+	lastRegister *monitorv1.RegisterAgentRequest
+	lastRequest  *monitorv1.PushMetricBatchRequest
+	tenantCode   string
+}
+
+func (s *recordingIngestServer) RegisterAgent(_ context.Context, req *monitorv1.RegisterAgentRequest) (*monitorv1.RegisterAgentResponse, error) {
+	copied := *req
+	s.lastRegister = &copied
+	return &monitorv1.RegisterAgentResponse{
+		Ack:        &monitorv1.Ack{},
+		HostUid:    "host-test",
+		TenantCode: s.tenantCode,
+	}, nil
 }
 
 func (s *recordingIngestServer) PushMetricBatch(_ context.Context, req *monitorv1.PushMetricBatchRequest) (*monitorv1.Ack, error) {
@@ -113,6 +205,20 @@ func (s *recordingIngestServer) PushMetricBatch(_ context.Context, req *monitorv
 	copied.Points = append([]*monitorv1.MetricPoint(nil), req.Points...)
 	s.lastRequest = &copied
 	return &monitorv1.Ack{}, nil
+}
+
+func (s *recordingIngestServer) StreamMetricBatches(stream monitorv1.MetricsIngestService_StreamMetricBatchesServer) error {
+	req, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	copied := *req
+	copied.Points = append([]*monitorv1.MetricPoint(nil), req.Points...)
+	s.lastRequest = &copied
+	return stream.Send(&monitorv1.MetricBatchAck{
+		Ack:      &monitorv1.Ack{},
+		BatchSeq: req.GetBatchSeq(),
+	})
 }
 
 func (s *recordingIngestServer) PushEventBatch(context.Context, *monitorv1.PushEventBatchRequest) (*monitorv1.Ack, error) {

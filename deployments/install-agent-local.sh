@@ -202,16 +202,16 @@ echo "source binary: ${BIN_PATH}"
 echo "installed binary: ${INSTALL_DIR}/gaoming-agent"
 echo "config: ${INSTALL_DIR}/agent-config.yaml"
 
-master_api_url="$(read_config_value "master_api_url" "${INSTALL_DIR}/agent-config.yaml" 2>/dev/null || true)"
 tenant_code="$(wait_for_tenant_code "${INSTALL_DIR}/agent-config.yaml" || true)"
+ingest_grpc_addr="$(read_config_value "ingest_gateway_grpc_addr" "${INSTALL_DIR}/agent-config.yaml" 2>/dev/null || true)"
 
-if [ -n "$tenant_code" ] && [ -n "$master_api_url" ]; then
+if [ -n "$ingest_grpc_addr" ]; then
+  echo "ingest_grpc_addr: ${ingest_grpc_addr}"
+fi
+
+if [ -n "$tenant_code" ]; then
   echo "tenant_code: ${tenant_code}"
-  echo "dashboard: $(build_dashboard_url "$master_api_url" "$tenant_code")"
-  echo "hosts api: $(build_hosts_api_url "$master_api_url" "$tenant_code")"
-elif [ -n "$master_api_url" ]; then
+else
   echo "tenant_code: <auto>"
-  echo "dashboard: ${master_api_url%/}/<tenant_code>"
-  echo "hosts api: $(build_hosts_api_url "$master_api_url" "<tenant_code>")"
   echo "tenant_code is not available yet; wait for the agent to register and then check ${INSTALL_DIR}/agent-config.yaml"
 fi

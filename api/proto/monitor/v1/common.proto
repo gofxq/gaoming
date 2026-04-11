@@ -52,6 +52,7 @@ message HostIdentity {
   string env = 9;
   string role = 10;
   map<string, string> labels = 11;
+  string tenant_code = 12;
 }
 
 message AgentMetadata {
