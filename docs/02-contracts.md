@@ -5,7 +5,6 @@
 当前运行态分成两类：
 
 - 浏览器查询与 SSE 以 `master-api` 的 HTTP/JSON 为准
-- Agent 在缺省租户场景下会先向 `master-api` 申请 `tenant_code`
 - Agent 控制面和指标面都以 `ingest-gateway` 的 gRPC 为准
 
 Proto 文件位于 [`api/proto/monitor/v1/`](../api/proto/monitor/v1)，其中 `MetricsIngestService` 已经用于当前服务的指标接入。
@@ -27,7 +26,7 @@ Proto 文件位于 [`api/proto/monitor/v1/`](../api/proto/monitor/v1)，其中 `
 
 - `GET /master/api/v1/hosts` 和 `GET /master/api/v1/hosts/{host_uid}` 支持 `?tenant=<tenantCode>`
 - `GET /master/api/v1/stream/hosts` 也支持 `?tenant=<tenantCode>`
-- `POST /master/api/v1/install/tenant` 用于 Agent 运行时申请 `tenant_code`
+- `POST /master/api/v1/install/tenant` 当前更适合作为安装期或外部流程分配租户的入口
 
 ## `ingest-gateway`
 
@@ -45,8 +44,8 @@ Proto 文件位于 [`api/proto/monitor/v1/`](../api/proto/monitor/v1)，其中 `
 
 当前行为：
 
-- gRPC `RegisterAgent` 会注册主机并确认 `tenant_code`
 - gRPC `StreamMetricBatches` 是当前 Agent 默认指标上报通道
+- 首个 metric batch 会携带主机身份和 agent 元数据，服务端会在这里校验 `tenant_code`
 - gRPC `PushMetricBatch` 会更新主机当前状态
 - gRPC `PushMetricBatch` 会把最近窗口指标写入 Redis
 - gRPC `PushMetricBatch` 会发布 `host_upsert` 事件
@@ -54,36 +53,16 @@ Proto 文件位于 [`api/proto/monitor/v1/`](../api/proto/monitor/v1)，其中 `
 
 ## Agent 上游地址
 
-Agent 运行时需要：
+Agent 运行时从 `agent-config.yaml` 读取：
 
-- `MASTER_API_URL`
-- `INGEST_GATEWAY_GRPC_ADDR`
+- `master_api_url`
+- `ingest_gateway_grpc_addr`
 
 默认情况下，远端 gRPC 地址按 TLS 连接；`localhost` / `127.0.0.1` / `::1` 会自动降级为本地明文连接，方便本机联调。
 
 ## 关键请求对象
 
 定义见 [`pkg/contracts/api.go`](../pkg/contracts/api.go)。
-
-### Agent 注册
-
-gRPC `monitor.v1.AgentControlService/RegisterAgent`
-
-请求主体由两部分组成：
-
-- `host`
-  - 主机身份、地域、系统、标签、租户
-- `agent`
-  - `agent_id`
-  - `version`
-  - `capabilities`
-  - `boot_time`
-
-响应返回：
-
-- `host_uid`
-- `tenant_code`
-- `config`
 
 ### Metrics / Events / Probes
 
@@ -94,7 +73,7 @@ gRPC `monitor.v1.AgentControlService/RegisterAgent`
 - HTTP `PushEventBatchRequest`
 - HTTP `ReportProbeResultsRequest`
 
-其中 `StreamMetricBatches` 是 Agent 默认写入路径，`PushMetricBatchRequest` 保留为兼容 unary 入口。
+其中 `StreamMetricBatches` 是 Agent 默认写入路径，`PushMetricBatchRequest` 保留为兼容 unary 入口。首次 metric batch 会额外带上 `host` 和 `agent`，用于建档和租户校验。
 
 ## SSE 事件
 

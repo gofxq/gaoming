@@ -117,12 +117,19 @@ make docker-up
 make run-agent
 ```
 
-如果要从宿主机验证标准 gRPC 上报：
+如果要从宿主机验证标准 gRPC 上报，先准备当前目录下的 `agent-config.yaml`：
 
 ```bash
-MASTER_API_URL=http://127.0.0.1:8080 \
-INGEST_GATEWAY_GRPC_ADDR=127.0.0.1:8091 \
-AGENT_CONFIG_PATH=/tmp/gaoming-agent-grpc.yaml \
+cat > agent-config.yaml <<'EOF'
+master_api_url: "http://127.0.0.1:8080"
+ingest_gateway_grpc_addr: "127.0.0.1:8091"
+region: "local"
+env: "dev"
+role: "node"
+tenant_code: "default"
+loop_interval_sec: 1
+EOF
+
 make run-agent
 ```
 
@@ -169,7 +176,7 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 
 - `web-url`: `https://gm-metric.gofxq.com/`
 - `ingest-grpc-addr`: `gm-rpc.gofxq.com:443`
-- `tenant`: 留空则由 Agent 启动后向 `master-api` 获取，失败则本地生成
+- `tenant`: 留空则由安装脚本调用 `master-api` 申请，失败则本地生成
 - `loop-interval-sec`: `5`
 
 安装完成后，脚本会输出：

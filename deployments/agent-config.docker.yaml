@@ -1,0 +1,7 @@
+master_api_url: "http://localhost:8080"
+ingest_gateway_grpc_addr: "localhost:8091"
+region: "local-docker"
+env: "docker"
+role: "node"
+tenant_code: "default"
+loop_interval_sec: 1

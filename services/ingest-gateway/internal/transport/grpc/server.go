@@ -36,6 +36,9 @@ func (s *Server) RegisterAgent(ctx context.Context, req *monitorv1.RegisterAgent
 func (s *Server) PushMetricBatch(ctx context.Context, req *monitorv1.PushMetricBatchRequest) (*monitorv1.Ack, error) {
 	resp, err := s.svc.PushMetricBatch(ctx, fromProtoPushMetricBatchRequest(req))
 	if err != nil {
+		if err == hostruntime.ErrTenantNotFound {
+			return nil, grpcstatus.Error(codes.FailedPrecondition, err.Error())
+		}
 		if err == hostruntime.ErrHostNotFound {
 			return nil, grpcstatus.Error(codes.NotFound, err.Error())
 		}
@@ -56,6 +59,9 @@ func (s *Server) StreamMetricBatches(stream monitorv1.MetricsIngestService_Strea
 
 		resp, err := s.svc.PushMetricBatch(stream.Context(), fromProtoPushMetricBatchRequest(req))
 		if err != nil {
+			if err == hostruntime.ErrTenantNotFound {
+				return grpcstatus.Error(codes.FailedPrecondition, err.Error())
+			}
 			if err == hostruntime.ErrHostNotFound {
 				return grpcstatus.Error(codes.NotFound, err.Error())
 			}
@@ -102,6 +108,15 @@ func fromProtoRegisterAgentRequest(req *monitorv1.RegisterAgentRequest) contract
 }
 
 func fromProtoPushMetricBatchRequest(req *monitorv1.PushMetricBatchRequest) contracts.PushMetricBatchRequest {
+	hostUID := req.GetHostUid()
+	if hostUID == "" {
+		hostUID = req.GetHost().GetHostUid()
+	}
+	agentID := req.GetAgentId()
+	if agentID == "" {
+		agentID = req.GetAgent().GetAgentId()
+	}
+
 	points := make([]contracts.MetricPoint, 0, len(req.GetPoints()))
 	for _, point := range req.GetPoints() {
 		points = append(points, contracts.MetricPoint{
@@ -113,11 +128,31 @@ func fromProtoPushMetricBatchRequest(req *monitorv1.PushMetricBatchRequest) cont
 	}
 
 	return contracts.PushMetricBatchRequest{
-		HostUID:     req.GetHostUid(),
-		AgentID:     req.GetAgentId(),
+		HostUID:     hostUID,
+		AgentID:     agentID,
 		BatchSeq:    req.GetBatchSeq(),
 		CollectedAt: asTime(req.GetCollectedAt()),
-		Points:      points,
+		Host: contracts.HostIdentity{
+			HostUID:    req.GetHost().GetHostUid(),
+			TenantCode: req.GetHost().GetTenantCode(),
+			Hostname:   req.GetHost().GetHostname(),
+			PrimaryIP:  req.GetHost().GetPrimaryIp(),
+			IPs:        append([]string(nil), req.GetHost().GetIps()...),
+			OSType:     req.GetHost().GetOsType(),
+			Arch:       req.GetHost().GetArch(),
+			Region:     req.GetHost().GetRegion(),
+			AZ:         req.GetHost().GetAz(),
+			Env:        req.GetHost().GetEnv(),
+			Role:       req.GetHost().GetRole(),
+			Labels:     cloneStringMap(req.GetHost().GetLabels()),
+		},
+		Agent: contracts.AgentMetadata{
+			AgentID:      req.GetAgent().GetAgentId(),
+			Version:      req.GetAgent().GetVersion(),
+			Capabilities: append([]string(nil), req.GetAgent().GetCapabilities()...),
+			BootTime:     asTime(req.GetAgent().GetBootTime()),
+		},
+		Points: points,
 	}
 }
 

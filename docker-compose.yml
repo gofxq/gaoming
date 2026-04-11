@@ -123,13 +123,8 @@ services:
       args:
         SERVICE_PATH: ./agent/daemon/cmd/agent
     container_name: gaoming-agent
-    environment:
-      MASTER_API_URL: http://master-api:8080
-      INGEST_GATEWAY_GRPC_ADDR: ingest-gateway:8091
-      AGENT_REGION: local-docker
-      AGENT_ENV: docker
-      AGENT_ROLE: node
-      AGENT_LOOP_INTERVAL_SEC: 1
+    volumes:
+      - ./deployments/agent-config.docker.yaml:/app/agent-config.yaml:ro
     depends_on:
       master-api:
         condition: service_healthy

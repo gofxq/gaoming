@@ -62,6 +62,8 @@ message PushMetricBatchRequest {
   int64 batch_seq = 3;
   google.protobuf.Timestamp collected_at = 4;
   repeated MetricPoint points = 5;
+  HostIdentity host = 6;
+  AgentMetadata agent = 7;
 }
 
 message PushEventBatchRequest {

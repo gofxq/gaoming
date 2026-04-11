@@ -27,30 +27,23 @@
 - 连接 Redis
 - 初始化 PostgreSQL 仓储和 Redis 仓储
 
-### 2. `agent` 获取 tenant 并注册
+### 2. `agent` 首次 metric batch 建档
 
-当本地配置里没有 `tenant_code` 时，`agent` 会先调用：
+`agent` 启动后不会先走单独的注册流程，而是直接通过 gRPC 指标流上报首个 metric batch。
 
-```text
-POST /master/api/v1/install/tenant
-```
+这个首包除了指标，还会携带：
 
-如果这一步失败，`agent` 会本地生成一个 `tenant-*` 值并写回配置文件。
+- `host_uid`
+- `tenant_code`
+- 主机身份信息
+- agent 元数据
 
-随后 `agent` 再调用：
+当前服务端会先做两件事：
 
-```text
-gRPC ingest-gateway: AgentControlService/RegisterAgent
-```
+- 校验 `tenant_code` 是否已经存在
+- 如果租户存在，则 upsert 主机和 agent 实例，并初始化 `host_status_current`
 
-当前服务端会：
-
-- upsert 主机身份到 PostgreSQL
-- upsert agent 实例到 PostgreSQL
-- 初始化或更新 `host_status_current`
-- 发布 `host_upsert` 到 Redis 事件总线
-
-如果 gRPC 注册响应里返回了新的 `tenant_code`，agent 也会把它写回本地配置文件。
+如果租户不存在，`ingest-gateway` 会拒绝本次上报，Agent 收到致命错误后直接退出。
 
 ### 3. 周期采集与上报
 
@@ -70,6 +63,7 @@ gRPC ingest-gateway: AgentControlService/RegisterAgent
 
 `ingest-gateway` 收到 `StreamMetricBatches` 或兼容 unary `PushMetricBatch` 后会：
 
+- 在首次看到该 `host_uid` 时，用首包里的身份信息建档
 - 更新 PostgreSQL 中的 agent 实例状态
 - 更新 `host_status_current`
 - 把 `digest` 中的 16 个指标写入 Redis 窗口

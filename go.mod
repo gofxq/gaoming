@@ -5,6 +5,7 @@ go 1.25.8
 require (
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/shirou/gopsutil/v4 v4.24.12
+	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/postgres v1.5.7
 	gorm.io/gorm v1.25.10
 )

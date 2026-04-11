@@ -46,7 +46,7 @@ Options:
   --service-group <name>         Linux service group, default: gaoming-agent
   --web-url <url>                Default: https://gm-metric.gofxq.com/
   --ingest-grpc-addr <addr>      Default: gm-rpc.gofxq.com:443
-  --tenant <code>                Default: empty, agent gets tenant from master at runtime
+  --tenant <code>                Default: empty, installer requests one from master or generates one locally
   --loop-interval-sec <seconds>  Default: 5
   --region <name>                Default: local
   --env <name>                   Default: prod
@@ -357,6 +357,65 @@ wait_for_tenant_code() {
   return 1
 }
 
+normalize_master_api_base() {
+  base="${1%/}"
+  case "$base" in
+    */master/api/v1) printf '%s\n' "$base" ;;
+    */master) printf '%s/api/v1\n' "$base" ;;
+    *) printf '%s/master/api/v1\n' "$base" ;;
+  esac
+}
+
+extract_json_string() {
+  key="$1"
+  awk -v key="$key" '
+    BEGIN {
+      pattern = "\"" key "\"[[:space:]]*:[[:space:]]*\""
+    }
+    match($0, pattern "[^\"]*") {
+      value = substr($0, RSTART, RLENGTH)
+      sub("^.*:[[:space:]]*\"", "", value)
+      print value
+      exit
+    }
+  '
+}
+
+generate_local_tenant_code() {
+  if command -v od >/dev/null 2>&1; then
+    suffix="$(od -An -N6 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
+  else
+    suffix="$(date +%s)"
+  fi
+  printf 'tenant-local-%s\n' "$suffix"
+}
+
+request_tenant_code_from_master() {
+  api_base="$(normalize_master_api_base "$MASTER_API_URL")"
+  body="$(curl -fsS -X POST "${api_base}/install/tenant" 2>/dev/null || true)"
+  [ -n "$body" ] || return 1
+
+  tenant_code="$(printf '%s\n' "$body" | extract_json_string "tenant_code")"
+  [ -n "$tenant_code" ] || return 1
+  printf '%s\n' "$tenant_code"
+}
+
+resolve_agent_tenant() {
+  if [ -n "$AGENT_TENANT" ]; then
+    return 0
+  fi
+
+  tenant_code="$(request_tenant_code_from_master || true)"
+  if [ -n "$tenant_code" ]; then
+    AGENT_TENANT="$tenant_code"
+    log "allocated tenant_code from master-api: ${AGENT_TENANT}"
+    return 0
+  fi
+
+  AGENT_TENANT="$(generate_local_tenant_code)"
+  warn "failed to allocate tenant_code from master-api; using local tenant_code: ${AGENT_TENANT}"
+}
+
 build_dashboard_url() {
   tenant_code="$1"
   printf '%s/%s\n' "${WEB_BASE_URL%/}" "$tenant_code"
@@ -522,8 +581,8 @@ print_summary() {
     return
   fi
 
-  log "tenant_code: <pending>"
-  log "tenant_code will be requested from master-api at runtime; if that fails, agent will generate one locally"
+  log "tenant_code: <missing>"
+  log "tenant_code allocation did not complete; update agent-config.yaml before starting the agent"
 }
 
 main() {
@@ -534,6 +593,7 @@ main() {
     MASTER_API_URL="$WEB_BASE_URL"
   fi
   validate_inputs
+  resolve_agent_tenant
   require_root
 
   need_cmd curl

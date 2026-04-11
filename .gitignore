@@ -20,10 +20,7 @@ agent-config.yaml
 *.swo
 *~
 .DS_Store
-
-docker-compose.override.yml
-deployments/deploy-remote.local.env
-deployments/deploy-agent.local.env
+private/
 agent-config.yaml
 docs/plans/
 web/node_modules/
@@ -32,4 +29,4 @@ web/.vite/
 web/.env
 web/.env.local
 web/.env.*.local
-deployments/
+AGENTS.md

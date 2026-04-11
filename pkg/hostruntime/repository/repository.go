@@ -10,6 +10,7 @@ import (
 )
 
 var ErrHostNotFound = errors.New("host not found")
+var ErrTenantNotFound = errors.New("tenant not found")
 
 type MaintenanceWindow struct {
 	ID        string    `json:"id"`

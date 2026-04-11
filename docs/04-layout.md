@@ -75,7 +75,7 @@
 - `internal/app`
   - 进程装配
 - `internal/config`
-  - 读取 `.env` 与 `agent-config.yaml`
+  - 读取 `agent-config.yaml`
 - `internal/identity`
   - 主机身份采集
 - `internal/service`

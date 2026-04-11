@@ -1,18 +1,17 @@
 package config
 
 import (
-	"bufio"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	MasterAPIURL          string
 	IngestGatewayGRPCAddr string
 	Region                string
 	Env                   string
@@ -23,44 +22,40 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	configPath := os.Getenv("AGENT_CONFIG_PATH")
-	if configPath == "" {
-		configPath = defaultConfigPath()
+	configPath := defaultConfigPath()
+
+	fileState, err := loadConfigFile(configPath)
+	if err != nil {
+		return Config{}, err
 	}
 
-	fileState := loadConfigFile(configPath)
-	envFile := loadDotEnv(defaultEnvPath())
-	fileState.MasterAPIURL = normalizeLegacyURL(fileState.MasterAPIURL, "MASTER_API_URL", "MASTER_API_HTTP_ADDR", envFile)
-	masterAPIURL := strings.TrimRight(valueString([]string{"MASTER_API_URL"}, envFile, fileState.MasterAPIURL, "http://127.0.0.1:8080"), "/")
-	legacyIngestGatewayURL := strings.TrimRight(valueString([]string{"INGEST_GATEWAY_URL"}, envFile, fileState.LegacyIngestGatewayURL, "http://127.0.0.1:8090"), "/")
-	ingestGatewayGRPCAddr := normalizeGRPCAddr(valueString([]string{"INGEST_GATEWAY_GRPC_ADDR"}, envFile, fileState.IngestGatewayGRPCAddr, defaultGRPCAddrForURL(legacyIngestGatewayURL)))
+	ingestGatewayGRPCAddr := strings.TrimSpace(fileState.IngestGatewayGRPCAddr)
+	if ingestGatewayGRPCAddr == "" {
+		ingestGatewayGRPCAddr = defaultGRPCAddrForURL(fileState.LegacyIngestGatewayURL)
+	}
+	ingestGatewayGRPCAddr = normalizeGRPCAddr(ingestGatewayGRPCAddr)
 
 	cfg := Config{
-		MasterAPIURL:          masterAPIURL,
 		IngestGatewayGRPCAddr: ingestGatewayGRPCAddr,
-		Region:                valueString([]string{"AGENT_REGION"}, envFile, fileState.Region, "local"),
-		Env:                   valueString([]string{"AGENT_ENV"}, envFile, fileState.Env, "dev"),
-		Role:                  valueString([]string{"AGENT_ROLE"}, envFile, fileState.Role, "node"),
-		TenantCode:            valueString([]string{"AGENT_TENANT"}, envFile, fileState.TenantCode, ""),
+		Region:                fileString(fileState.Region, "local"),
+		Env:                   fileString(fileState.Env, "dev"),
+		Role:                  fileString(fileState.Role, "node"),
+		TenantCode:            strings.TrimSpace(fileState.TenantCode),
 		ConfigPath:            configPath,
-		LoopIntervalSec:       valueInt("AGENT_LOOP_INTERVAL_SEC", envFile, fileState.LoopIntervalSec, 1),
-	}
-
-	if err := Save(cfg); err != nil {
-		return Config{}, err
+		LoopIntervalSec:       fileInt(fileState.LoopIntervalSec, 1),
 	}
 	return cfg, nil
 }
 
 type persistedConfig struct {
-	MasterAPIURL           string
-	LegacyIngestGatewayURL string
-	IngestGatewayGRPCAddr  string
-	Region                 string
-	Env                    string
-	Role                   string
-	TenantCode             string
-	LoopIntervalSec        int
+	MasterAPIURL           string `yaml:"master_api_url"`
+	LegacyIngestGatewayURL string `yaml:"ingest_gateway_url"`
+	IngestGatewayGRPCAddr  string `yaml:"ingest_gateway_grpc_addr"`
+	Region                 string `yaml:"region"`
+	Env                    string `yaml:"env"`
+	Role                   string `yaml:"role"`
+	TenantCode             string `yaml:"tenant_code"`
+	LoopIntervalSec        int    `yaml:"loop_interval_sec"`
 }
 
 func Save(cfg Config) error {
@@ -72,15 +67,17 @@ func Save(cfg Config) error {
 		return err
 	}
 
-	body := renderConfigFile(persistedConfig{
-		MasterAPIURL:          strings.TrimRight(cfg.MasterAPIURL, "/"),
-		IngestGatewayGRPCAddr: cfg.IngestGatewayGRPCAddr,
+	body, err := renderConfigFile(persistedConfig{
+		IngestGatewayGRPCAddr: normalizeGRPCAddr(cfg.IngestGatewayGRPCAddr),
 		Region:                cfg.Region,
 		Env:                   cfg.Env,
 		Role:                  cfg.Role,
 		TenantCode:            cfg.TenantCode,
 		LoopIntervalSec:       cfg.LoopIntervalSec,
 	})
+	if err != nil {
+		return err
+	}
 	return os.WriteFile(cfg.ConfigPath, []byte(body), 0o600)
 }
 
@@ -89,17 +86,23 @@ func SaveTenant(path string, tenantCode string) error {
 		return nil
 	}
 
-	state := loadConfigFile(path)
+	state, err := loadConfigFile(path)
+	if err != nil {
+		return err
+	}
+	ingestGatewayGRPCAddr := strings.TrimSpace(state.IngestGatewayGRPCAddr)
+	if ingestGatewayGRPCAddr == "" {
+		ingestGatewayGRPCAddr = defaultGRPCAddrForURL(state.LegacyIngestGatewayURL)
+	}
 	state.TenantCode = tenantCode
 	cfg := Config{
-		MasterAPIURL:          state.MasterAPIURL,
-		IngestGatewayGRPCAddr: state.IngestGatewayGRPCAddr,
-		Region:                state.Region,
-		Env:                   state.Env,
-		Role:                  state.Role,
+		IngestGatewayGRPCAddr: normalizeGRPCAddr(ingestGatewayGRPCAddr),
+		Region:                fileString(state.Region, "local"),
+		Env:                   fileString(state.Env, "dev"),
+		Role:                  fileString(state.Role, "node"),
 		TenantCode:            state.TenantCode,
 		ConfigPath:            path,
-		LoopIntervalSec:       state.LoopIntervalSec,
+		LoopIntervalSec:       fileInt(state.LoopIntervalSec, 1),
 	}
 	return Save(cfg)
 }
@@ -112,53 +115,20 @@ func defaultConfigPath() string {
 	return filepath.Join(wd, "agent-config.yaml")
 }
 
-func defaultEnvPath() string {
-	wd, err := os.Getwd()
-	if err != nil || wd == "" {
-		return ".env"
-	}
-	return filepath.Join(wd, ".env")
-}
-
-func loadConfigFile(path string) persistedConfig {
+func loadConfigFile(path string) (persistedConfig, error) {
 	body, err := os.ReadFile(path)
 	if err != nil {
-		return persistedConfig{}
+		return persistedConfig{}, fmt.Errorf("read agent config %q: %w", path, err)
 	}
 
 	var cfg persistedConfig
-	scanner := bufio.NewScanner(strings.NewReader(string(body)))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, ok := splitKeyValue(line)
-		if !ok {
-			continue
-		}
-		switch key {
-		case "master_api_url":
-			cfg.MasterAPIURL = value
-		case "ingest_gateway_url":
-			cfg.LegacyIngestGatewayURL = value
-		case "ingest_gateway_grpc_addr":
-			cfg.IngestGatewayGRPCAddr = value
-		case "region":
-			cfg.Region = value
-		case "env":
-			cfg.Env = value
-		case "role":
-			cfg.Role = value
-		case "tenant_code":
-			cfg.TenantCode = value
-		case "loop_interval_sec":
-			if parsed, err := strconv.Atoi(value); err == nil {
-				cfg.LoopIntervalSec = parsed
-			}
-		}
+	if len(body) == 0 {
+		return cfg, nil
 	}
-	return cfg
+	if err := yaml.Unmarshal(body, &cfg); err != nil {
+		return persistedConfig{}, fmt.Errorf("parse agent config %q: %w", path, err)
+	}
+	return cfg, nil
 }
 
 func defaultGRPCAddrForURL(raw string) string {
@@ -179,105 +149,40 @@ func normalizeGRPCAddr(value string) string {
 	if value == "" {
 		return "127.0.0.1:8091"
 	}
+	if host, port, err := net.SplitHostPort(value); err == nil && host != "" && port != "" {
+		return value
+	}
+	if ip := net.ParseIP(strings.Trim(value, "[]")); ip != nil {
+		return net.JoinHostPort(ip.String(), "443")
+	}
+	if !strings.Contains(value, ":") {
+		return net.JoinHostPort(value, "443")
+	}
 	return value
 }
 
-func loadDotEnv(path string) map[string]string {
-	body, err := os.ReadFile(path)
+func fileString(value string, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value != "" {
+		return value
+	}
+	return fallback
+}
+
+func fileInt(value int, fallback int) int {
+	if value > 0 {
+		return value
+	}
+	return fallback
+}
+
+func renderConfigFile(cfg persistedConfig) (string, error) {
+	cfg.MasterAPIURL = strings.TrimRight(cfg.MasterAPIURL, "/")
+	cfg.IngestGatewayGRPCAddr = normalizeGRPCAddr(cfg.IngestGatewayGRPCAddr)
+
+	body, err := yaml.Marshal(&cfg)
 	if err != nil {
-		return nil
+		return "", fmt.Errorf("marshal agent config: %w", err)
 	}
-
-	values := make(map[string]string)
-	scanner := bufio.NewScanner(strings.NewReader(string(body)))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, ok := splitKeyValue(line)
-		if !ok {
-			continue
-		}
-		values[key] = value
-	}
-	return values
-}
-
-func splitKeyValue(line string) (string, string, bool) {
-	line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
-	idx := strings.IndexAny(line, "=:")
-	if idx <= 0 {
-		return "", "", false
-	}
-	key := strings.TrimSpace(line[:idx])
-	value := strings.TrimSpace(line[idx+1:])
-	value = strings.Trim(value, `"'`)
-	return key, value, true
-}
-
-func valueString(keys []string, envFile map[string]string, fileValue string, fallback string) string {
-	for _, key := range keys {
-		if value := os.Getenv(key); value != "" {
-			return value
-		}
-		if value := envFile[key]; value != "" {
-			return value
-		}
-	}
-	if fileValue != "" {
-		return fileValue
-	}
-	return fallback
-}
-
-func valueInt(key string, envFile map[string]string, fileValue int, fallback int) int {
-	if value := os.Getenv(key); value != "" {
-		if parsed, err := strconv.Atoi(value); err == nil {
-			return parsed
-		}
-	}
-	if value := envFile[key]; value != "" {
-		if parsed, err := strconv.Atoi(value); err == nil {
-			return parsed
-		}
-	}
-	if fileValue != 0 {
-		return fileValue
-	}
-	return fallback
-}
-
-func renderConfigFile(cfg persistedConfig) string {
-	var b strings.Builder
-	writeYAMLString(&b, "master_api_url", strings.TrimRight(cfg.MasterAPIURL, "/"))
-	writeYAMLString(&b, "ingest_gateway_grpc_addr", normalizeGRPCAddr(cfg.IngestGatewayGRPCAddr))
-	writeYAMLString(&b, "region", cfg.Region)
-	writeYAMLString(&b, "env", cfg.Env)
-	writeYAMLString(&b, "role", cfg.Role)
-	writeYAMLString(&b, "tenant_code", cfg.TenantCode)
-	fmt.Fprintf(&b, "loop_interval_sec: %d\n", cfg.LoopIntervalSec)
-	return b.String()
-}
-
-func writeYAMLString(b *strings.Builder, key string, value string) {
-	fmt.Fprintf(b, "%s: %s\n", key, strconv.Quote(value))
-}
-
-func normalizeLegacyURL(fileValue string, urlKey string, httpAddrKey string, envFile map[string]string) string {
-	fileValue = strings.TrimRight(fileValue, "/")
-	if fileValue == "" {
-		return ""
-	}
-	if os.Getenv(urlKey) != "" || envFile[urlKey] != "" {
-		return fileValue
-	}
-	legacy := strings.TrimRight(os.Getenv(httpAddrKey), "/")
-	if legacy == "" {
-		legacy = strings.TrimRight(envFile[httpAddrKey], "/")
-	}
-	if fileValue == legacy {
-		return ""
-	}
-	return fileValue
+	return string(body), nil
 }

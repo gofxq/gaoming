@@ -106,6 +106,8 @@ type PushMetricBatchRequest struct {
 	AgentID     string        `json:"agent_id"`
 	BatchSeq    int64         `json:"batch_seq"`
 	CollectedAt time.Time     `json:"collected_at"`
+	Host        HostIdentity  `json:"host"`
+	Agent       AgentMetadata `json:"agent"`
 	Points      []MetricPoint `json:"points"`
 }
 

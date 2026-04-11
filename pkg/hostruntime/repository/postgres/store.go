@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofxq/gaoming/pkg/contracts"
@@ -158,6 +159,9 @@ func (s *Store) ReportMetrics(ctx context.Context, req contracts.PushMetricBatch
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		hostID, _, err := s.lookupAgentInstance(ctx, tx, req.HostUID, req.AgentID)
+		if errors.Is(err, hostruntime.ErrHostNotFound) {
+			hostID, err = s.bootstrapHostForMetric(ctx, tx, req, now)
+		}
 		if err != nil {
 			return err
 		}
@@ -184,6 +188,45 @@ func (s *Store) ReportMetrics(ctx context.Context, req contracts.PushMetricBatch
 	}
 
 	return snapshot, nil
+}
+
+func (s *Store) bootstrapHostForMetric(ctx context.Context, db *gorm.DB, req contracts.PushMetricBatchRequest, now time.Time) (int64, error) {
+	registerReq := contracts.RegisterAgentRequest{
+		Host:  req.Host,
+		Agent: req.Agent,
+	}
+	registerReq.Host.HostUID = strings.TrimSpace(registerReq.Host.HostUID)
+	if registerReq.Host.HostUID == "" {
+		registerReq.Host.HostUID = strings.TrimSpace(req.HostUID)
+	}
+	registerReq.Agent.AgentID = strings.TrimSpace(registerReq.Agent.AgentID)
+	if registerReq.Agent.AgentID == "" {
+		registerReq.Agent.AgentID = strings.TrimSpace(req.AgentID)
+	}
+	if registerReq.Host.HostUID == "" || registerReq.Agent.AgentID == "" {
+		return 0, hostruntime.ErrHostNotFound
+	}
+
+	tenantID, tenantCode, err := s.resolveTenantForMetric(ctx, db, registerReq.Host.HostUID, registerReq.Host.TenantCode)
+	if err != nil {
+		return 0, err
+	}
+	registerReq.Host.TenantCode = tenantCode
+
+	hostID, err := s.upsertHost(ctx, db, tenantID, registerReq.Host.HostUID, registerReq, now)
+	if err != nil {
+		return 0, err
+	}
+	if err := s.replaceLabels(ctx, db, hostID, registerReq.Host.Labels); err != nil {
+		return 0, err
+	}
+	if _, err := s.upsertAgentInstance(ctx, db, hostID, registerReq, now); err != nil {
+		return 0, err
+	}
+	if err := s.upsertRegisteredStatus(ctx, db, hostID, now); err != nil {
+		return 0, err
+	}
+	return hostID, nil
 }
 
 func (s *Store) ListHosts(ctx context.Context, tenantCode string) ([]state.HostSnapshot, error) {
@@ -304,6 +347,35 @@ func (s *Store) resolveTenantForRegister(ctx context.Context, db *gorm.DB, hostU
 		return 0, "", err
 	}
 	return tenant.ID, tenantCode, nil
+}
+
+func (s *Store) resolveTenantForMetric(ctx context.Context, db *gorm.DB, hostUID string, tenantCode string) (int64, string, error) {
+	existingTenantCode, err := s.lookupTenantCodeByHostUID(ctx, db, hostUID)
+	if err != nil {
+		return 0, "", err
+	}
+	if existingTenantCode != "" {
+		tenantCode = existingTenantCode
+	} else if !s.allowCustomTenantCode {
+		tenantCode = ""
+	}
+	tenantCode = strings.TrimSpace(tenantCode)
+	if tenantCode == "" {
+		return 0, "", hostruntime.ErrTenantNotFound
+	}
+
+	var tenant tenantModel
+	err = firstOrNotFound(
+		db.WithContext(ctx).Where(&tenantModel{TenantCode: tenantCode}).Order("id"),
+		&tenant,
+	)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, "", hostruntime.ErrTenantNotFound
+		}
+		return 0, "", err
+	}
+	return tenant.ID, tenant.TenantCode, nil
 }
 
 func (s *Store) lookupTenantCodeByHostUID(ctx context.Context, db *gorm.DB, hostUID string) (string, error) {

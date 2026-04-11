@@ -4,8 +4,8 @@
 
 当前代码里已经稳定落地的主路径是：
 
-- `agent` 在本地没有 `tenant_code` 时，先向 `master-api` 申请，失败则本地生成
-- `agent` 通过 gRPC 向 `ingest-gateway` 注册，并在同一条 gRPC 连接上持续流式上报指标
+- `agent` 从本地配置读取 `tenant_code`，并通过 gRPC 持续流式上报指标
+- `ingest-gateway` 在收到首个 metric batch 时校验租户是否存在；存在则建档，不存在则拒绝并让 agent 退出
 - `ingest-gateway` 将主机当前状态落到 PostgreSQL
 - `ingest-gateway` 将最近窗口指标写入 Redis
 - `ingest-gateway` 通过 Redis Pub/Sub 发布 `host_upsert` 事件，`master-api` 负责订阅并转发给浏览器

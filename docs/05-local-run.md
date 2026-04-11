@@ -39,29 +39,19 @@ curl -v 127.0.0.1:8091
 make run-agent
 ```
 
-Agent 当前配置来源优先级是：
-
-1. 环境变量
-2. 当前目录下 `.env`
-3. 当前目录下 `agent-config.yaml`
-4. 代码默认值
-
-几个常用变量：
-
-- `MASTER_API_URL`
-- `INGEST_GATEWAY_GRPC_ADDR`
-- `AGENT_REGION`
-- `AGENT_ENV`
-- `AGENT_ROLE`
-- `AGENT_TENANT`
-- `AGENT_LOOP_INTERVAL_SEC`
-
-如果要从宿主机测试 gRPC 上报，可以直接这样跑：
+Agent 当前只读取当前目录下的 `agent-config.yaml`。如果要从宿主机测试 gRPC 上报，可直接写成：
 
 ```bash
-MASTER_API_URL=http://127.0.0.1:8080 \
-INGEST_GATEWAY_GRPC_ADDR=127.0.0.1:8091 \
-AGENT_CONFIG_PATH=/tmp/gaoming-agent-grpc.yaml \
+cat > agent-config.yaml <<'EOF'
+master_api_url: "http://127.0.0.1:8080"
+ingest_gateway_grpc_addr: "127.0.0.1:8091"
+region: "local"
+env: "dev"
+role: "node"
+tenant_code: "default"
+loop_interval_sec: 1
+EOF
+
 make run-agent
 ```
 
@@ -74,7 +64,7 @@ INGEST_URL=http://127.0.0.1:8090 \
 make smoke-agent
 ```
 
-第一次启动时，如果本地还没有 `tenant_code`，Agent 会先向 `master-api` 申请；申请失败时会本地生成一个并持久化回 `agent-config.yaml`。
+首次上报时服务端会校验 `tenant_code` 是否存在；如果租户不存在，会拒绝上报并让 Agent 退出。
 
 `make smoke-agent` 会同时检查：
 

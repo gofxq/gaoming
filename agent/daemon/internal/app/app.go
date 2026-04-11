@@ -24,7 +24,6 @@ func New() (*App, error) {
 	host.TenantCode = cfg.TenantCode
 
 	agent := service.New(service.Config{
-		MasterAPIURL:          cfg.MasterAPIURL,
 		IngestGatewayGRPCAddr: cfg.IngestGatewayGRPCAddr,
 		LoopInterval:          time.Duration(cfg.LoopIntervalSec) * time.Second,
 		Host:                  host,

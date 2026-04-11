@@ -52,6 +52,7 @@ func New(cfg Config, logger *slog.Logger) *Agent {
 		logger:   logger,
 		client:   &http.Client{Timeout: 5 * time.Second},
 		agentID:  ids.New("agent"),
+		hostUID:  cfg.Host.HostUID,
 		bootTime: time.Now().UTC(),
 		sampler:  newSystemSampler(),
 	}
@@ -68,145 +69,52 @@ func (a *Agent) Close() error {
 }
 
 func (a *Agent) Run(ctx context.Context) error {
-	for {
-		if err := a.register(ctx); err == nil {
-			break
-		} else {
-			a.logger.Warn("register agent failed, retrying", "error", err)
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(3 * time.Second):
-		}
-	}
-
 	ticker := time.NewTicker(a.cfg.LoopInterval)
 	defer ticker.Stop()
 
-	a.sendCycle(ctx)
+	if err := a.sendCycle(ctx); err != nil {
+		if isFatalMetricError(err) {
+			return err
+		}
+		a.logger.Error("push metrics failed", "error", err)
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			a.logger.Info("agent stopped")
 			return nil
 		case <-ticker.C:
-			a.sendCycle(ctx)
-		}
-	}
-}
-
-func (a *Agent) register(ctx context.Context) error {
-	if err := a.ensureTenantCode(ctx); err != nil {
-		return err
-	}
-
-	client, err := a.grpcControlClient(ctx)
-	if err != nil {
-		return err
-	}
-
-	resp, err := client.RegisterAgent(ctx, &monitorv1.RegisterAgentRequest{
-		Host: &monitorv1.HostIdentity{
-			HostUid:    a.cfg.Host.HostUID,
-			Hostname:   a.cfg.Host.Hostname,
-			PrimaryIp:  a.cfg.Host.PrimaryIP,
-			Ips:        append([]string(nil), a.cfg.Host.IPs...),
-			OsType:     a.cfg.Host.OSType,
-			Arch:       a.cfg.Host.Arch,
-			Region:     a.cfg.Host.Region,
-			Az:         a.cfg.Host.AZ,
-			Env:        a.cfg.Host.Env,
-			Role:       a.cfg.Host.Role,
-			Labels:     cloneStringMap(a.cfg.Host.Labels),
-			TenantCode: a.cfg.Host.TenantCode,
-		},
-		Agent: &monitorv1.AgentMetadata{
-			AgentId:      a.agentID,
-			Version:      "v0.1.0",
-			Capabilities: []string{"metrics", "stream_metrics"},
-			BootTime:     timestamppb.New(a.bootTime),
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("register agent: %w", err)
-	}
-
-	a.hostUID = resp.GetHostUid()
-	if tenantCode := resp.GetTenantCode(); tenantCode != "" && tenantCode != a.cfg.Host.TenantCode {
-		if a.cfg.PersistTenant != nil {
-			if err := a.cfg.PersistTenant(tenantCode); err != nil {
-				return fmt.Errorf("persist tenant: %w", err)
+			if err := a.sendCycle(ctx); err != nil {
+				if isFatalMetricError(err) {
+					return err
+				}
+				a.logger.Error("push metrics failed", "error", err)
 			}
 		}
-		a.cfg.Host.TenantCode = tenantCode
 	}
-	a.logger.Info("agent registered", "host_uid", a.hostUID, "tenant_code", a.cfg.Host.TenantCode)
-	return nil
 }
 
-func (a *Agent) ensureTenantCode(ctx context.Context) error {
-	if a.cfg.Host.TenantCode != "" {
-		return nil
-	}
-
-	tenantCode, err := a.allocateTenantCode(ctx)
-	if err != nil {
-		tenantCode = ids.New("tenant")
-		a.logger.Warn("allocate tenant from master failed, using local tenant", "error", err, "tenant_code", tenantCode)
-	}
-	if tenantCode == "" {
-		tenantCode = ids.New("tenant")
-		a.logger.Warn("master returned empty tenant, using local tenant", "tenant_code", tenantCode)
-	}
-
-	if a.cfg.PersistTenant != nil {
-		if err := a.cfg.PersistTenant(tenantCode); err != nil {
-			return fmt.Errorf("persist tenant: %w", err)
-		}
-	}
-	a.cfg.Host.TenantCode = tenantCode
-	return nil
-}
-
-func (a *Agent) allocateTenantCode(ctx context.Context) (string, error) {
-	if strings.TrimSpace(a.cfg.MasterAPIURL) == "" {
-		return "", fmt.Errorf("master api url is empty")
-	}
-
-	var resp contracts.AllocateInstallTenantResponse
-	if err := a.postJSON(ctx, masterAPIURL(a.cfg.MasterAPIURL, "install/tenant"), map[string]any{}, &resp); err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(resp.TenantCode) == "" {
-		return "", fmt.Errorf("tenant allocation response missing tenant_code")
-	}
-	return resp.TenantCode, nil
-}
-
-func (a *Agent) sendCycle(ctx context.Context) {
+func (a *Agent) sendCycle(ctx context.Context) error {
 	now := time.Now().UTC()
 	digest := a.digest(now)
 
-	if err := a.pushMetricsWithDigest(ctx, now, digest); err != nil {
-		a.logger.Error("push metrics failed", "error", err)
-	}
+	return a.pushMetricsWithDigest(ctx, now, digest)
 }
 
 func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest contracts.AgentDigest) error {
-	if a.hostUID == "" {
-		if err := a.register(ctx); err != nil {
-			return err
-		}
-	}
-
 	a.metricSeq++
 	payload := contracts.PushMetricBatchRequest{
 		HostUID:     a.hostUID,
 		AgentID:     a.agentID,
 		BatchSeq:    a.metricSeq,
 		CollectedAt: now,
+		Host:        a.cfg.Host,
+		Agent: contracts.AgentMetadata{
+			AgentID:      a.agentID,
+			Version:      "v0.1.0",
+			Capabilities: []string{"metrics", "stream_metrics"},
+			BootTime:     a.bootTime,
+		},
 		Points: []contracts.MetricPoint{
 			{Name: "runtime_uptime_seconds", Value: time.Since(a.bootTime).Seconds(), TS: now},
 			{Name: "host_cpu_usage_pct", Value: digest.CPUUsagePct, TS: now},
@@ -229,12 +137,6 @@ func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest
 	}
 
 	if err := a.pushMetricsGRPC(ctx, payload); err != nil {
-		if grpcstatus.Code(err) == codes.NotFound {
-			a.logger.Warn("metric target missing on server, re-registering", "host_uid", a.hostUID)
-			a.resetMetricStream()
-			a.hostUID = ""
-			return a.register(ctx)
-		}
 		return err
 	}
 	a.logger.Info("metrics sent", "host_uid", a.hostUID, "batch_seq", a.metricSeq)
@@ -264,6 +166,10 @@ func (a *Agent) pushMetricsGRPC(ctx context.Context, payload contracts.PushMetri
 		return fmt.Errorf("metric batch ack seq mismatch: got %d want %d", batchSeq, payload.BatchSeq)
 	}
 	return nil
+}
+
+func isFatalMetricError(err error) bool {
+	return grpcstatus.Code(err) == codes.FailedPrecondition
 }
 
 func (a *Agent) digest(now time.Time) contracts.AgentDigest {
@@ -451,7 +357,27 @@ func toProtoPushMetricBatchRequest(req contracts.PushMetricBatchRequest) *monito
 		AgentId:     req.AgentID,
 		BatchSeq:    req.BatchSeq,
 		CollectedAt: timestamppb.New(req.CollectedAt),
-		Points:      points,
+		Host: &monitorv1.HostIdentity{
+			HostUid:    req.Host.HostUID,
+			Hostname:   req.Host.Hostname,
+			PrimaryIp:  req.Host.PrimaryIP,
+			Ips:        append([]string(nil), req.Host.IPs...),
+			OsType:     req.Host.OSType,
+			Arch:       req.Host.Arch,
+			Region:     req.Host.Region,
+			Az:         req.Host.AZ,
+			Env:        req.Host.Env,
+			Role:       req.Host.Role,
+			Labels:     cloneStringMap(req.Host.Labels),
+			TenantCode: req.Host.TenantCode,
+		},
+		Agent: &monitorv1.AgentMetadata{
+			AgentId:      req.Agent.AgentID,
+			Version:      req.Agent.Version,
+			Capabilities: append([]string(nil), req.Agent.Capabilities...),
+			BootTime:     timestamppb.New(req.Agent.BootTime),
+		},
+		Points: points,
 	}
 }
 
