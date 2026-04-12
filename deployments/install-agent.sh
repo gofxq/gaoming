@@ -4,9 +4,13 @@ umask 022
 
 # ---------- defaults ----------
 WEB_BASE_URL_EXPLICIT="${WEB_BASE_URL+1}"
+MASTER_API_URL_EXPLICIT="${MASTER_API_URL+1}"
 INGEST_GATEWAY_GRPC_ADDR_EXPLICIT="${INGEST_GATEWAY_GRPC_ADDR+1}"
 AGENT_TENANT_EXPLICIT="${AGENT_TENANT+1}"
 AGENT_LOOP_INTERVAL_SEC_EXPLICIT="${AGENT_LOOP_INTERVAL_SEC+1}"
+AGENT_REGION_EXPLICIT="${AGENT_REGION+1}"
+AGENT_ENV_EXPLICIT="${AGENT_ENV+1}"
+AGENT_ROLE_EXPLICIT="${AGENT_ROLE+1}"
 
 REPO="${REPO:-gofxq/gaoming}"
 VERSION="${VERSION:-latest}"
@@ -26,6 +30,11 @@ AGENT_TENANT="${AGENT_TENANT:-}"
 AGENT_LOOP_INTERVAL_SEC="${AGENT_LOOP_INTERVAL_SEC:-5}"
 
 INSTALL_DIR="${INSTALL_DIR:-}"
+INSTALL_MODE="${INSTALL_MODE:-auto}"
+
+if [ -n "$MASTER_API_URL_EXPLICIT" ] && [ -z "$WEB_BASE_URL_EXPLICIT" ]; then
+  WEB_BASE_URL_EXPLICIT=1
+fi
 
 OS=""
 ARCH=""
@@ -51,6 +60,8 @@ Options:
   --region <name>                Default: local
   --env <name>                   Default: prod
   --role <name>                  Default: node
+  --update-binary                Keep current config and update binary only
+  --reinstall                    Replace binary and rewrite config
   --help, -h                     Show this help
 EOF
 }
@@ -105,6 +116,132 @@ prompt_install_inputs() {
   fi
 }
 
+prompt_install_mode() {
+  config_path="$1"
+
+  if ! has_tty_prompt; then
+    INSTALL_MODE="update-binary"
+    return 0
+  fi
+
+  while :; do
+    printf 'existing config found: %s\n' "$config_path" >/dev/tty
+    printf 'choose install mode: [1] update binary only (default), [2] reinstall: ' >/dev/tty
+    if ! IFS= read -r input </dev/tty; then
+      INSTALL_MODE="update-binary"
+      return 0
+    fi
+
+    case "$input" in
+      ''|1|u|U|update|update-binary)
+        INSTALL_MODE="update-binary"
+        return 0
+        ;;
+      2|r|R|reinstall)
+        INSTALL_MODE="reinstall"
+        return 0
+        ;;
+    esac
+  done
+}
+
+read_config_value() {
+  key="$1"
+  path="$2"
+  [ -f "$path" ] || return 1
+
+  awk -F: -v key="$key" '
+    $1 == key {
+      value = substr($0, index($0, ":") + 1)
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      gsub(/^"/, "", value)
+      gsub(/"$/, "", value)
+      print value
+      exit
+    }
+  ' "$path"
+}
+
+load_existing_config_defaults() {
+  config_path="${INSTALL_DIR}/agent-config.yaml"
+  [ -f "$config_path" ] || return 0
+
+  existing_master_api_url="$(read_config_value "master_api_url" "$config_path" 2>/dev/null || true)"
+  if [ -z "$WEB_BASE_URL_EXPLICIT" ] && [ -z "$MASTER_API_URL_EXPLICIT" ] && [ -n "$existing_master_api_url" ]; then
+    WEB_BASE_URL="$existing_master_api_url"
+    MASTER_API_URL="$existing_master_api_url"
+  fi
+
+  if [ -z "$INGEST_GATEWAY_GRPC_ADDR_EXPLICIT" ]; then
+    existing_ingest_addr="$(read_config_value "ingest_gateway_grpc_addr" "$config_path" 2>/dev/null || true)"
+    if [ -n "$existing_ingest_addr" ]; then
+      INGEST_GATEWAY_GRPC_ADDR="$existing_ingest_addr"
+    fi
+  fi
+
+  if [ -z "$AGENT_TENANT_EXPLICIT" ] && [ -z "$AGENT_TENANT" ]; then
+    existing_tenant_code="$(read_config_value "tenant_code" "$config_path" 2>/dev/null || true)"
+    if [ -n "$existing_tenant_code" ]; then
+      AGENT_TENANT="$existing_tenant_code"
+    fi
+  fi
+
+  if [ -z "$AGENT_LOOP_INTERVAL_SEC_EXPLICIT" ]; then
+    existing_loop_interval="$(read_config_value "loop_interval_sec" "$config_path" 2>/dev/null || true)"
+    if [ -n "$existing_loop_interval" ]; then
+      AGENT_LOOP_INTERVAL_SEC="$existing_loop_interval"
+    fi
+  fi
+
+  if [ -z "$AGENT_REGION_EXPLICIT" ]; then
+    existing_region="$(read_config_value "region" "$config_path" 2>/dev/null || true)"
+    if [ -n "$existing_region" ]; then
+      AGENT_REGION="$existing_region"
+    fi
+  fi
+
+  if [ -z "$AGENT_ENV_EXPLICIT" ]; then
+    existing_env="$(read_config_value "env" "$config_path" 2>/dev/null || true)"
+    if [ -n "$existing_env" ]; then
+      AGENT_ENV="$existing_env"
+    fi
+  fi
+
+  if [ -z "$AGENT_ROLE_EXPLICIT" ]; then
+    existing_role="$(read_config_value "role" "$config_path" 2>/dev/null || true)"
+    if [ -n "$existing_role" ]; then
+      AGENT_ROLE="$existing_role"
+    fi
+  fi
+}
+
+choose_install_mode() {
+  config_path="${INSTALL_DIR}/agent-config.yaml"
+
+  case "$INSTALL_MODE" in
+    auto|update-binary|reinstall) ;;
+    *)
+      die "install mode must be one of: auto, update-binary, reinstall"
+      ;;
+  esac
+
+  if [ "$INSTALL_MODE" = "update-binary" ] && [ ! -f "$config_path" ]; then
+    die "cannot update binary only; installed config not found: ${config_path}"
+  fi
+
+  if [ "$INSTALL_MODE" = "reinstall" ]; then
+    return 0
+  fi
+
+  if [ ! -f "$config_path" ]; then
+    INSTALL_MODE="reinstall"
+    return 0
+  fi
+
+  prompt_install_mode "$config_path"
+}
+
 # ---------- validation ----------
 validate_repo() {
   case "$1" in
@@ -147,16 +284,19 @@ validate_abs_path() {
   esac
 }
 
-validate_inputs() {
+validate_common_inputs() {
   validate_repo "$REPO"
   validate_name "$SERVICE_NAME" "service-name"
   validate_name "$SERVICE_USER" "service-user"
   validate_name "$SERVICE_GROUP" "service-group"
+  validate_abs_path "$INSTALL_DIR" "install-dir"
+}
+
+validate_config_inputs() {
   validate_url "$WEB_BASE_URL" "web-url"
   validate_url "$MASTER_API_URL" "master-api-url"
   validate_non_empty "$INGEST_GATEWAY_GRPC_ADDR" "ingest-grpc-addr"
   validate_positive_int "$AGENT_LOOP_INTERVAL_SEC" "loop-interval-sec"
-  validate_abs_path "$INSTALL_DIR" "install-dir"
 }
 
 # ---------- args ----------
@@ -169,13 +309,15 @@ parse_args() {
       --service-name)        [ "$#" -ge 2 ] || die "missing value for --service-name"; SERVICE_NAME="$2"; shift 2 ;;
       --service-user)        [ "$#" -ge 2 ] || die "missing value for --service-user"; SERVICE_USER="$2"; shift 2 ;;
       --service-group)       [ "$#" -ge 2 ] || die "missing value for --service-group"; SERVICE_GROUP="$2"; shift 2 ;;
-      --web-url|--master-url) [ "$#" -ge 2 ] || die "missing value for --web-url"; WEB_BASE_URL="$2"; MASTER_API_URL="$2"; WEB_BASE_URL_EXPLICIT=1; shift 2 ;;
+      --web-url|--master-url) [ "$#" -ge 2 ] || die "missing value for --web-url"; WEB_BASE_URL="$2"; MASTER_API_URL="$2"; WEB_BASE_URL_EXPLICIT=1; MASTER_API_URL_EXPLICIT=1; shift 2 ;;
       --ingest-grpc-addr)    [ "$#" -ge 2 ] || die "missing value for --ingest-grpc-addr"; INGEST_GATEWAY_GRPC_ADDR="$2"; INGEST_GATEWAY_GRPC_ADDR_EXPLICIT=1; shift 2 ;;
       --tenant)              [ "$#" -ge 2 ] || die "missing value for --tenant"; AGENT_TENANT="$2"; AGENT_TENANT_EXPLICIT=1; shift 2 ;;
       --loop-interval-sec)   [ "$#" -ge 2 ] || die "missing value for --loop-interval-sec"; AGENT_LOOP_INTERVAL_SEC="$2"; AGENT_LOOP_INTERVAL_SEC_EXPLICIT=1; shift 2 ;;
-      --region)              [ "$#" -ge 2 ] || die "missing value for --region"; AGENT_REGION="$2"; shift 2 ;;
-      --env)                 [ "$#" -ge 2 ] || die "missing value for --env"; AGENT_ENV="$2"; shift 2 ;;
-      --role)                [ "$#" -ge 2 ] || die "missing value for --role"; AGENT_ROLE="$2"; shift 2 ;;
+      --region)              [ "$#" -ge 2 ] || die "missing value for --region"; AGENT_REGION="$2"; AGENT_REGION_EXPLICIT=1; shift 2 ;;
+      --env)                 [ "$#" -ge 2 ] || die "missing value for --env"; AGENT_ENV="$2"; AGENT_ENV_EXPLICIT=1; shift 2 ;;
+      --role)                [ "$#" -ge 2 ] || die "missing value for --role"; AGENT_ROLE="$2"; AGENT_ROLE_EXPLICIT=1; shift 2 ;;
+      --update-binary)       INSTALL_MODE="update-binary"; shift ;;
+      --reinstall)           INSTALL_MODE="reinstall"; shift ;;
       --help|-h)             usage; exit 0 ;;
       *)                     usage >&2; die "unknown argument: $1" ;;
     esac
@@ -322,24 +464,6 @@ write_file() {
   mv "$tmp" "$path"
 }
 
-read_config_value() {
-  key="$1"
-  path="$2"
-  [ -f "$path" ] || return 1
-
-  awk -F: -v key="$key" '
-    $1 == key {
-      value = substr($0, index($0, ":") + 1)
-      sub(/^[[:space:]]+/, "", value)
-      sub(/[[:space:]]+$/, "", value)
-      gsub(/^"/, "", value)
-      gsub(/"$/, "", value)
-      print value
-      exit
-    }
-  ' "$path"
-}
-
 wait_for_tenant_code() {
   config_path="${INSTALL_DIR}/agent-config.yaml"
   attempts=0
@@ -417,13 +541,15 @@ resolve_agent_tenant() {
 }
 
 build_dashboard_url() {
-  tenant_code="$1"
-  printf '%s/%s\n' "${WEB_BASE_URL%/}" "$tenant_code"
+  base_url="$1"
+  tenant_code="$2"
+  printf '%s/%s\n' "${base_url%/}" "$tenant_code"
 }
 
 build_hosts_api_url() {
-  tenant_code="$1"
-  printf '%s/master/api/v1/hosts?tenant=%s\n' "${WEB_BASE_URL%/}" "$tenant_code"
+  base_url="$1"
+  tenant_code="$2"
+  printf '%s/master/api/v1/hosts?tenant=%s\n' "${base_url%/}" "$tenant_code"
 }
 
 render_config() {
@@ -530,7 +656,12 @@ install_files() {
   tar -xzf "${TMP_DIR}/${ASSET}" -C "$TMP_DIR"
   [ -f "${TMP_DIR}/gaoming-agent" ] || die "gaoming-agent not found in archive"
   install -m 0755 "${TMP_DIR}/gaoming-agent" "${INSTALL_DIR}/gaoming-agent"
-  render_config | write_file "${INSTALL_DIR}/agent-config.yaml" 0644
+  if [ "$INSTALL_MODE" = "reinstall" ]; then
+    render_config | write_file "${INSTALL_DIR}/agent-config.yaml" 0644
+    return 0
+  fi
+
+  [ -f "${INSTALL_DIR}/agent-config.yaml" ] || die "installed config not found: ${INSTALL_DIR}/agent-config.yaml"
 }
 
 install_linux_service() {
@@ -562,22 +693,34 @@ install_service() {
 }
 
 print_summary() {
+  config_path="${INSTALL_DIR}/agent-config.yaml"
+  summary_web_base_url="$(read_config_value "master_api_url" "$config_path" 2>/dev/null || true)"
+  summary_ingest_addr="$(read_config_value "ingest_gateway_grpc_addr" "$config_path" 2>/dev/null || true)"
   tenant_code="$(wait_for_tenant_code || true)"
 
+  if [ -z "$summary_web_base_url" ]; then
+    summary_web_base_url="$WEB_BASE_URL"
+  fi
+
+  if [ -z "$summary_ingest_addr" ]; then
+    summary_ingest_addr="$INGEST_GATEWAY_GRPC_ADDR"
+  fi
+
   log "installed ${SERVICE_NAME} to ${INSTALL_DIR}"
-  log "config: ${INSTALL_DIR}/agent-config.yaml"
-  log "ingest_grpc_addr: ${INGEST_GATEWAY_GRPC_ADDR}"
+  log "install mode: ${INSTALL_MODE}"
+  log "config: ${config_path}"
+  log "ingest_grpc_addr: ${summary_ingest_addr}"
   if [ -n "$tenant_code" ]; then
     log "tenant_code: ${tenant_code}"
-    log "dashboard: $(build_dashboard_url "$tenant_code")"
-    log "hosts api: $(build_hosts_api_url "$tenant_code")"
+    log "dashboard: $(build_dashboard_url "$summary_web_base_url" "$tenant_code")"
+    log "hosts api: $(build_hosts_api_url "$summary_web_base_url" "$tenant_code")"
     return
   fi
 
   if [ -n "$AGENT_TENANT" ]; then
     log "tenant_code: ${AGENT_TENANT}"
-    log "dashboard: $(build_dashboard_url "${AGENT_TENANT}")"
-    log "hosts api: $(build_hosts_api_url "${AGENT_TENANT}")"
+    log "dashboard: $(build_dashboard_url "$summary_web_base_url" "${AGENT_TENANT}")"
+    log "hosts api: $(build_hosts_api_url "$summary_web_base_url" "${AGENT_TENANT}")"
     return
   fi
 
@@ -588,12 +731,19 @@ print_summary() {
 main() {
   parse_args "$@"
   prepare_platform
-  prompt_install_inputs
-  if [ -z "$MASTER_API_URL" ]; then
-    MASTER_API_URL="$WEB_BASE_URL"
+  load_existing_config_defaults
+  choose_install_mode
+  if [ "$INSTALL_MODE" = "reinstall" ]; then
+    prompt_install_inputs
+    if [ -z "$MASTER_API_URL" ]; then
+      MASTER_API_URL="$WEB_BASE_URL"
+    fi
   fi
-  validate_inputs
-  resolve_agent_tenant
+  validate_common_inputs
+  if [ "$INSTALL_MODE" = "reinstall" ]; then
+    validate_config_inputs
+    resolve_agent_tenant
+  fi
   require_root
 
   need_cmd curl

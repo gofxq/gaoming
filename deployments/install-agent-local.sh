@@ -1,24 +1,68 @@
 #!/bin/sh
 set -eu
 
-BIN_PATH="${BIN_PATH:-$(pwd)/gaoming-agent}"
-CONFIG_PATH="${CONFIG_PATH:-$(pwd)/agent-config.yaml}"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)
+BIN_PATH_EXPLICIT="${BIN_PATH+1}"
+
+resolve_default_bin_path() {
+  for candidate in \
+    "${REPO_ROOT}/.tmp/gaoming-agent" \
+    "${REPO_ROOT}/gaoming-agent" \
+    "$(pwd)/.tmp/gaoming-agent" \
+    "$(pwd)/gaoming-agent"
+  do
+    if [ -f "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  printf '%s\n' "${REPO_ROOT}/.tmp/gaoming-agent"
+}
+
+has_tty_prompt() {
+  [ -r /dev/tty ] && [ -w /dev/tty ]
+}
+
+build_local_binary_if_needed() {
+  if [ -f "$BIN_PATH" ] || [ -n "$BIN_PATH_EXPLICIT" ]; then
+    return 0
+  fi
+
+  if [ ! -f "${REPO_ROOT}/go.mod" ] || ! command -v go >/dev/null 2>&1; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$BIN_PATH")"
+  echo "building local agent binary: ${BIN_PATH}"
+  (
+    cd "$REPO_ROOT"
+    go build -o "$BIN_PATH" ./agent/daemon/cmd/agent
+  )
+}
+
+BIN_PATH="${BIN_PATH:-$(resolve_default_bin_path)}"
+CONFIG_PATH="${CONFIG_PATH:-${REPO_ROOT}/agent-config.yaml}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/gaoming-agent}"
 SERVICE_NAME="${SERVICE_NAME:-gaoming-agent}"
 SERVICE_USER="${SERVICE_USER:-gaoming-agent}"
 SERVICE_GROUP="${SERVICE_GROUP:-gaoming-agent}"
+INSTALL_MODE="${INSTALL_MODE:-auto}"
 
 usage() {
   cat <<'EOF'
 usage: install-agent-local.sh [options]
 
 Options:
-  --bin <path>                     Agent binary path, default: ./gaoming-agent
-  --config <path>                  Config file, default: ./agent-config.yaml
+  --bin <path>                     Agent binary path, default: repo/.tmp/gaoming-agent when present
+  --config <path>                  Config file, default: repo/agent-config.yaml
   --install-dir <path>             Install dir, default: /opt/gaoming-agent
   --service-name <name>            systemd service name, default: gaoming-agent
   --service-user <name>            service user, default: gaoming-agent
   --service-group <name>           service group, default: gaoming-agent
+  --update-binary                  Keep current config and update binary only
+  --reinstall                      Replace binary and config
   --help                           Show this help
 EOF
 }
@@ -49,6 +93,14 @@ while [ "$#" -gt 0 ]; do
       SERVICE_GROUP="$2"
       shift 2
       ;;
+    --update-binary)
+      INSTALL_MODE="update-binary"
+      shift
+      ;;
+    --reinstall)
+      INSTALL_MODE="reinstall"
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -61,6 +113,59 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+choose_install_mode() {
+  installed_config_path="${INSTALL_DIR}/agent-config.yaml"
+
+  case "$INSTALL_MODE" in
+    auto|update-binary|reinstall) ;;
+    *)
+      echo "invalid install mode: ${INSTALL_MODE}" >&2
+      exit 1
+      ;;
+  esac
+
+  if [ "$INSTALL_MODE" = "update-binary" ] && [ ! -f "$installed_config_path" ]; then
+    echo "cannot update binary only; installed config not found: ${installed_config_path}" >&2
+    exit 1
+  fi
+
+  if [ "$INSTALL_MODE" = "reinstall" ]; then
+    return 0
+  fi
+
+  if [ ! -f "$installed_config_path" ]; then
+    INSTALL_MODE="reinstall"
+    return 0
+  fi
+
+  if ! has_tty_prompt; then
+    INSTALL_MODE="update-binary"
+    return 0
+  fi
+
+  while :; do
+    printf 'existing config found: %s\n' "$installed_config_path" >/dev/tty
+    printf 'choose install mode: [1] update binary only (default), [2] reinstall: ' >/dev/tty
+    if ! IFS= read -r answer </dev/tty; then
+      INSTALL_MODE="update-binary"
+      return 0
+    fi
+
+    case "$answer" in
+      ''|1|u|U|update|update-binary)
+        INSTALL_MODE="update-binary"
+        return 0
+        ;;
+      2|r|R|reinstall)
+        INSTALL_MODE="reinstall"
+        return 0
+        ;;
+    esac
+  done
+}
+
+build_local_binary_if_needed
+
 if [ "$(id -u)" -ne 0 ]; then
   if ! command -v sudo >/dev/null 2>&1; then
     echo "sudo is required to install the service" >&2
@@ -69,6 +174,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exec sudo env BIN_PATH="$BIN_PATH" CONFIG_PATH="$CONFIG_PATH" \
     INSTALL_DIR="$INSTALL_DIR" SERVICE_NAME="$SERVICE_NAME" \
     SERVICE_USER="$SERVICE_USER" SERVICE_GROUP="$SERVICE_GROUP" \
+    INSTALL_MODE="$INSTALL_MODE" \
     sh "$0" "$@"
 fi
 
@@ -87,7 +193,9 @@ if [ ! -x "$BIN_PATH" ]; then
   exit 1
 fi
 
-if [ ! -f "$CONFIG_PATH" ]; then
+choose_install_mode
+
+if [ "$INSTALL_MODE" = "reinstall" ] && [ ! -f "$CONFIG_PATH" ]; then
   echo "config file not found: ${CONFIG_PATH}" >&2
   exit 1
 fi
@@ -170,7 +278,9 @@ ensure_user
 
 mkdir -p "$INSTALL_DIR"
 install -m 0755 "$BIN_PATH" "${INSTALL_DIR}/gaoming-agent"
-install -m 0644 "$CONFIG_PATH" "${INSTALL_DIR}/agent-config.yaml"
+if [ "$INSTALL_MODE" = "reinstall" ]; then
+  install -m 0644 "$CONFIG_PATH" "${INSTALL_DIR}/agent-config.yaml"
+fi
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
 
 cat >"/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
@@ -198,12 +308,14 @@ systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
 systemctl restart "$SERVICE_NAME" >/dev/null 2>&1 || systemctl start "$SERVICE_NAME"
 
 echo "installed ${SERVICE_NAME}"
+echo "install mode: ${INSTALL_MODE}"
 echo "source binary: ${BIN_PATH}"
 echo "installed binary: ${INSTALL_DIR}/gaoming-agent"
 echo "config: ${INSTALL_DIR}/agent-config.yaml"
 
 tenant_code="$(wait_for_tenant_code "${INSTALL_DIR}/agent-config.yaml" || true)"
 ingest_grpc_addr="$(read_config_value "ingest_gateway_grpc_addr" "${INSTALL_DIR}/agent-config.yaml" 2>/dev/null || true)"
+master_api_url="$(read_config_value "master_api_url" "${INSTALL_DIR}/agent-config.yaml" 2>/dev/null || true)"
 
 if [ -n "$ingest_grpc_addr" ]; then
   echo "ingest_grpc_addr: ${ingest_grpc_addr}"
@@ -211,6 +323,10 @@ fi
 
 if [ -n "$tenant_code" ]; then
   echo "tenant_code: ${tenant_code}"
+  if [ -n "$master_api_url" ]; then
+    echo "dashboard: $(build_dashboard_url "$master_api_url" "$tenant_code")"
+    echo "hosts api: $(build_hosts_api_url "$master_api_url" "$tenant_code")"
+  fi
 else
   echo "tenant_code: <auto>"
   echo "tenant_code is not available yet; wait for the agent to register and then check ${INSTALL_DIR}/agent-config.yaml"

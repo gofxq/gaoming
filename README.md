@@ -183,6 +183,11 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 - `tenant`: 留空则由安装脚本调用 `master-api` 申请，失败则本地生成
 - `loop-interval-sec`: `5`
 
+如果安装目录里已经存在 `agent-config.yaml`，脚本会给出两个选项：
+
+- `update binary only`: 仅更新二进制，保留当前配置
+- `reinstall`: 重装并重写配置；现有配置值会作为默认值回填到提示里
+
 安装完成后，脚本会输出：
 
 - `tenant_code`
@@ -193,7 +198,7 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 
 - Linux 注册为 `systemd` 服务
 - macOS 注册为 `launchd` 服务
-- Windows 使用 PowerShell 安装脚本
+- Windows 使用 PowerShell 安装脚本，通过 `WinSW` 注册为 Windows Service，默认安装到 `%LOCALAPPDATA%\GaomingAgent`，脚本会自动弹出 UAC 提权
 
 Windows 安装：
 
@@ -201,7 +206,13 @@ Windows 安装：
 powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.ps1 -UseBasicParsing | iex"
 ```
 
-卸载：
+Windows 卸载：
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/uninstall-agent.ps1 -UseBasicParsing | iex"
+```
+
+Linux / macOS 卸载：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/uninstall-agent.sh | sudo sh
@@ -217,6 +228,12 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/inst
 
 ```bash
 make install-agent-local-service
+```
+
+直接运行本地安装脚本时，会优先查找仓库内的 `.tmp/gaoming-agent`；如果没有显式传 `--bin`，脚本也会尝试自动执行：
+
+```bash
+go build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
 ```
 
 相关脚本：
