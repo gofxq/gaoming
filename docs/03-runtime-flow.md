@@ -22,7 +22,8 @@
 
 启动时会：
 
-- 校验 `MASTER_API_RUNTIME_BACKEND=pg_redis`
+- 读取 `config/master-api.yml`
+- 校验 `runtime_backend: pg_redis`
 - 连接 PostgreSQL
 - 连接 Redis
 - 初始化 PostgreSQL 仓储和 Redis 仓储
@@ -53,6 +54,7 @@
 
 注意这里的当前真实行为：
 
+- `ingest-gateway` 会先读取 `config/ingest-gateway.yml`
 - `ingest-gateway` 会把 metric batch 还原成当前主机快照
 - `ingest-gateway` 会把 16 个核心指标写入 Redis 窗口
 - `ingest-gateway` 会发布 `host_upsert` 事件
@@ -99,15 +101,16 @@ SSE 首次连接时，`master-api` 会组装：
 
 `probe-worker` 当前会：
 
-- 定时请求 `PROBE_TARGET_URL`
+- 从 `config/probe-worker.yml` 读取配置
+- 定时请求 `target_url`
 - 生成 `ProbeResult`
-- POST 到 `PROBE_REPORT_URL`
+- POST 到 `report_url`
 
 但当前这条链路只到 `ingest-gateway` 为止，还没有把探测结果并回主机当前状态。
 
 ### 8. `core-worker`
 
-`core-worker` 当前只会按配置周期打印一次占位日志：
+`core-worker` 当前会从 `config/core-worker.yml` 读取配置，并按配置周期打印一次占位日志：
 
 - `status-engine`
 - `alert-engine`

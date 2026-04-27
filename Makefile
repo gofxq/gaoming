@@ -3,7 +3,7 @@ DOCKER_COMPOSE ?= docker compose
 YARN ?= yarn
 WEB_API_ORIGIN ?= https://gm-metric.gofxq.com
 
-.PHONY: fmt build test check clean run-master run-ingest run-core run-probe run-agent proto-check proto-lint compose-config docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent deploy-agent-service install-agent-local-service db-update web-install web-dev web-build h5-install h5-dev h5-local h5-build
+.PHONY: fmt build test check clean master ingest core probe agent proto-check proto-lint compose-config up docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent deploy-agent-service install-agent-local-service db-update web-install web-dev web-local web-build h5-install h5-dev h5-local h5-build
 
 fmt:
 	$(GO) fmt ./...
@@ -19,19 +19,19 @@ check: fmt test build proto-check
 clean:
 	rm -rf bin dist tmp .tmp coverage cover.out
 
-run-master:
+master:
 	$(GO) run ./services/master-api/cmd/server
 
-run-ingest:
+ingest:
 	$(GO) run ./services/ingest-gateway/cmd/server
 
-run-core:
+core:
 	$(GO) run ./services/core-worker/cmd/worker
 
-run-probe:
+probe:
 	$(GO) run ./services/probe-worker/cmd/worker
 
-run-agent:
+agent:
 	$(GO) run ./agent/daemon/cmd/agent
 
 proto-check:
@@ -49,8 +49,11 @@ proto-lint:
 compose-config:
 	$(DOCKER_COMPOSE) config >/dev/null
 
+up:
+	$(DOCKER_COMPOSE) --profile web up -d --build
+
 docker-up:
-	$(DOCKER_COMPOSE) up -d --build
+	$(DOCKER_COMPOSE) --profile web up -d --build
 
 docker-up-full:
 	$(DOCKER_COMPOSE) --profile container-agent --profile web --profile h5 up -d --build

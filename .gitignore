@@ -39,3 +39,6 @@ h5/.env
 h5/.env.local
 h5/.env.*.local
 AGENTS.md
+
+config/
+.codex

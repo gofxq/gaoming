@@ -1,57 +1,101 @@
 package config
 
 import (
+	"fmt"
 	"os"
-	"strconv"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
+const DefaultConfigFile = "config/ingest-gateway.yml"
+
 type Config struct {
-	HTTPAddr              string
-	GRPCAddr              string
-	PostgresDSN           string
-	RedisAddr             string
-	RedisPassword         string
-	RedisDB               int
-	TenantCode            string
-	TenantName            string
-	AllowCustomTenantCode bool
+	HTTPAddr              string `yaml:"http_addr"`
+	GRPCAddr              string `yaml:"grpc_addr"`
+	PostgresDSN           string `yaml:"postgres_dsn"`
+	RedisAddr             string `yaml:"redis_addr"`
+	RedisPassword         string `yaml:"redis_password"`
+	RedisDB               int    `yaml:"redis_db"`
+	TenantCode            string `yaml:"tenant_code"`
+	TenantName            string `yaml:"tenant_name"`
+	AllowCustomTenantCode bool   `yaml:"allow_custom_tenant_code"`
 }
 
-func Load() Config {
+func Load() (Config, error) {
+	return LoadFromFile(DefaultConfigFile)
+}
+
+func LoadFromFile(path string) (Config, error) {
+	cfg := defaultConfig()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("read ingest-gateway config %q: %w", path, err)
+	}
+
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		return Config{}, fmt.Errorf("parse ingest-gateway config %q: %w", path, err)
+	}
+
+	cfg.applyDefaults()
+	if err := cfg.Validate(); err != nil {
+		return Config{}, fmt.Errorf("validate ingest-gateway config %q: %w", path, err)
+	}
+	return cfg, nil
+}
+
+func defaultConfig() Config {
 	return Config{
-		HTTPAddr:              env("INGEST_GATEWAY_HTTP_ADDR", ":8090"),
-		GRPCAddr:              env("INGEST_GATEWAY_GRPC_ADDR", ":8091"),
-		PostgresDSN:           env("INGEST_GATEWAY_POSTGRES_DSN", env("MASTER_API_POSTGRES_DSN", "postgres://gaoming:gaoming@127.0.0.1:5432/gaoming?sslmode=disable")),
-		RedisAddr:             env("INGEST_GATEWAY_REDIS_ADDR", env("MASTER_API_REDIS_ADDR", "127.0.0.1:6379")),
-		RedisPassword:         env("INGEST_GATEWAY_REDIS_PASSWORD", env("MASTER_API_REDIS_PASSWORD", "")),
-		RedisDB:               envInt("INGEST_GATEWAY_REDIS_DB", envInt("MASTER_API_REDIS_DB", 0)),
-		TenantCode:            env("INGEST_GATEWAY_TENANT_CODE", env("MASTER_API_TENANT_CODE", "default")),
-		TenantName:            env("INGEST_GATEWAY_TENANT_NAME", env("MASTER_API_TENANT_NAME", "Default Tenant")),
-		AllowCustomTenantCode: envBool("INGEST_GATEWAY_ALLOW_CUSTOM_TENANT_CODE", envBool("MASTER_API_ALLOW_CUSTOM_TENANT_CODE", true)),
+		HTTPAddr:              ":8090",
+		GRPCAddr:              ":8091",
+		PostgresDSN:           "postgres://gaoming:gaoming@127.0.0.1:5432/gaoming?sslmode=disable",
+		RedisAddr:             "127.0.0.1:6379",
+		RedisPassword:         "",
+		RedisDB:               0,
+		TenantCode:            "default",
+		TenantName:            "Default Tenant",
+		AllowCustomTenantCode: true,
 	}
 }
 
-func env(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+func (c *Config) applyDefaults() {
+	defaults := defaultConfig()
+	if strings.TrimSpace(c.HTTPAddr) == "" {
+		c.HTTPAddr = defaults.HTTPAddr
 	}
-	return fallback
+	if strings.TrimSpace(c.GRPCAddr) == "" {
+		c.GRPCAddr = defaults.GRPCAddr
+	}
+	if strings.TrimSpace(c.PostgresDSN) == "" {
+		c.PostgresDSN = defaults.PostgresDSN
+	}
+	if strings.TrimSpace(c.RedisAddr) == "" {
+		c.RedisAddr = defaults.RedisAddr
+	}
+	if strings.TrimSpace(c.TenantCode) == "" {
+		c.TenantCode = defaults.TenantCode
+	}
+	if strings.TrimSpace(c.TenantName) == "" {
+		c.TenantName = defaults.TenantName
+	}
 }
 
-func envInt(key string, fallback int) int {
-	if value := os.Getenv(key); value != "" {
-		if parsed, err := strconv.Atoi(value); err == nil {
-			return parsed
-		}
+func (c Config) Validate() error {
+	switch {
+	case strings.TrimSpace(c.HTTPAddr) == "":
+		return fmt.Errorf("http_addr is required")
+	case strings.TrimSpace(c.GRPCAddr) == "":
+		return fmt.Errorf("grpc_addr is required")
+	case strings.TrimSpace(c.PostgresDSN) == "":
+		return fmt.Errorf("postgres_dsn is required")
+	case strings.TrimSpace(c.RedisAddr) == "":
+		return fmt.Errorf("redis_addr is required")
+	case strings.TrimSpace(c.TenantCode) == "":
+		return fmt.Errorf("tenant_code is required")
+	case strings.TrimSpace(c.TenantName) == "":
+		return fmt.Errorf("tenant_name is required")
+	default:
+		return nil
 	}
-	return fallback
-}
-
-func envBool(key string, fallback bool) bool {
-	if value := os.Getenv(key); value != "" {
-		if parsed, err := strconv.ParseBool(value); err == nil {
-			return parsed
-		}
-	}
-	return fallback
 }

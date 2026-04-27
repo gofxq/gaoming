@@ -300,3 +300,48 @@ create table audit_logs (
 
 create index idx_audit_logs_actor on audit_logs(actor, created_at desc);
 create index idx_audit_logs_resource on audit_logs(resource_type, resource_id, created_at desc);
+
+create table users (
+    id                  bigserial primary key,
+    tenant_id           bigint not null references tenants(id),
+    display_name        varchar(128) not null,
+    avatar_url          varchar(1024),
+    role                varchar(32) not null default 'member',
+    status              varchar(32) not null default 'active',
+    last_login_at       timestamptz,
+    created_at          timestamptz not null default now(),
+    updated_at          timestamptz not null default now()
+);
+
+create index idx_users_tenant on users(tenant_id, created_at desc);
+create index idx_users_tenant_role on users(tenant_id, role);
+
+create table user_identities (
+    id                  bigserial primary key,
+    user_id             bigint not null references users(id) on delete cascade,
+    provider            varchar(32) not null,
+    provider_user_id    varchar(128) not null,
+    union_id            varchar(128),
+    raw_profile         jsonb not null default '{}'::jsonb,
+    created_at          timestamptz not null default now(),
+    updated_at          timestamptz not null default now(),
+    unique (provider, provider_user_id)
+);
+
+create index idx_user_identities_user on user_identities(user_id);
+create index idx_user_identities_union on user_identities(provider, union_id);
+
+create table user_sessions (
+    id                  bigserial primary key,
+    user_id             bigint not null references users(id) on delete cascade,
+    token_hash          varchar(64) not null unique,
+    expires_at          timestamptz not null,
+    last_seen_at        timestamptz,
+    last_seen_ip        varchar(64),
+    user_agent          varchar(512),
+    created_at          timestamptz not null default now(),
+    updated_at          timestamptz not null default now()
+);
+
+create index idx_user_sessions_user on user_sessions(user_id, expires_at desc);
+create index idx_user_sessions_expires on user_sessions(expires_at);

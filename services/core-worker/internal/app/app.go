@@ -13,11 +13,14 @@ type App struct {
 	runner *service.Runner
 }
 
-func New() *App {
-	cfg := config.Load()
+func New() (*App, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
 	logger := logx.New("core-worker")
 	runner := service.NewRunner(logger, time.Duration(cfg.LoopIntervalSec)*time.Second)
-	return &App{runner: runner}
+	return &App{runner: runner}, nil
 }
 
 func (a *App) Run(ctx context.Context) error {

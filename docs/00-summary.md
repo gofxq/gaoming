@@ -30,6 +30,18 @@
 - Agent 采集的是宿主机真实 CPU、内存、磁盘和网络数据
 - React SPA 独立开发，不由 `master-api` 直接托管静态文件
 
+当前后端服务配置统一收拢在仓库根目录的 `config/`：
+
+- `config/master-api.yml`
+- `config/ingest-gateway.yml`
+- `config/core-worker.yml`
+- `config/probe-worker.yml`
+
+同目录还提供：
+
+- `*.demo.yml`：可复制的示例模板
+- `*.docker.yml`：`docker compose` 联调用配置
+
 ## 当前页面能力
 
 Web 位于 [`web/`](../web)，当前主要入口有：

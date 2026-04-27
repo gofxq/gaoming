@@ -1,8 +1,16 @@
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useNavigate } from "react-router-dom";
+import { useAuth } from "../../app/providers/AuthProvider";
 import { useTenant } from "../../app/providers/TenantProvider";
 
 export function Shell() {
   const { tenantCode } = useTenant();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleSignOut() {
+    await signOut();
+    navigate(`/${tenantCode}/login`, { replace: true });
+  }
 
   return (
     <div className="shell">
@@ -14,13 +22,28 @@ export function Shell() {
             单页面 React 应用，优先承接核心指标、窗口趋势和 H5 展示。
           </p>
         </div>
-        <div className="shell-badges">
-          <span className="meta-pill">SPA</span>
-          <span className="meta-pill">H5 Ready</span>
-          <Link to={`/${tenantCode}/pwa`} className="meta-pill">
-            Tenant PWA
-          </Link>
-          <span className="meta-pill">Tenant: {tenantCode}</span>
+        <div className="shell-actions">
+          <nav className="shell-badges">
+            <Link to={`/${tenantCode}`} className="meta-pill">
+              Dashboard
+            </Link>
+            {user?.role === "admin" ? (
+              <Link to={`/${tenantCode}/users`} className="meta-pill">
+                Users
+              </Link>
+            ) : null}
+            <Link to={`/${tenantCode}/pwa`} className="meta-pill">
+              Tenant PWA
+            </Link>
+            <span className="meta-pill">Tenant: {tenantCode}</span>
+          </nav>
+          <div className="shell-user">
+            <span className="meta-pill">{user?.display_name || "未登录"}</span>
+            <span className="meta-pill">{user?.role === "admin" ? "管理员" : "成员"}</span>
+            <button type="button" className="meta-pill meta-pill-button" onClick={() => void handleSignOut()}>
+              退出登录
+            </button>
+          </div>
         </div>
       </header>
 

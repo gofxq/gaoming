@@ -10,6 +10,7 @@ import (
 	"github.com/gofxq/gaoming/pkg/ids"
 	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/pkg/state"
+	"github.com/gofxq/gaoming/services/master-api/internal/auth"
 )
 
 type Service struct {
@@ -17,8 +18,17 @@ type Service struct {
 	metricStore repository.MetricWindowStore
 	opsStore    repository.OperationsStore
 	eventBus    repository.EventBus
+	authStore   auth.Store
+	weChatOAuth auth.WeChatOAuthClient
+	authConfig  AuthConfig
 	clock       clock.Clock
 	logger      *logx.Logger
+}
+
+type AuthConfig struct {
+	SessionTTL        time.Duration
+	SessionCookieName string
+	SessionSecret     string
 }
 
 type HostEvent = repository.HostEvent
@@ -28,12 +38,15 @@ const (
 	HostEventDelete = repository.HostEventDelete
 )
 
-func New(hostStore repository.HostStateStore, metricStore repository.MetricWindowStore, opsStore repository.OperationsStore, eventBus repository.EventBus, clk clock.Clock, logger *logx.Logger) *Service {
+func New(hostStore repository.HostStateStore, metricStore repository.MetricWindowStore, opsStore repository.OperationsStore, eventBus repository.EventBus, authStore auth.Store, weChatOAuth auth.WeChatOAuthClient, authConfig AuthConfig, clk clock.Clock, logger *logx.Logger) *Service {
 	return &Service{
 		hostStore:   hostStore,
 		metricStore: metricStore,
 		opsStore:    opsStore,
 		eventBus:    eventBus,
+		authStore:   authStore,
+		weChatOAuth: weChatOAuth,
+		authConfig:  authConfig,
 		clock:       clk,
 		logger:      logger,
 	}

@@ -55,7 +55,9 @@ export function useLiveHostsData(props: {
 
     async function loadHosts() {
       try {
-        const response = await fetch(hostsUrl);
+        const response = await fetch(hostsUrl, {
+          credentials: "include",
+        });
         if (!response.ok) {
           return;
         }
@@ -81,7 +83,9 @@ export function useLiveHostsData(props: {
   }, [hostsUrl]);
 
   useEffect(() => {
-    const stream = new EventSource(streamUrl);
+    const stream = new EventSource(streamUrl, {
+      withCredentials: true,
+    });
 
     stream.addEventListener("open", () => {
       setStreamState("实时推送中");

@@ -93,7 +93,7 @@ func (stubOpsStore) AckAlert(context.Context, string, string, time.Time) error {
 func newTestServer(hostStore repository.HostStateStore) *Server {
 	_ = io.Discard
 	logger := logx.NewNop()
-	svc := service.New(hostStore, stubMetricStore{}, stubOpsStore{}, stubEventBus{}, clock.Real{}, logger)
+	svc := service.New(hostStore, stubMetricStore{}, stubOpsStore{}, stubEventBus{}, nil, nil, service.AuthConfig{}, clock.Real{}, logger)
 	return NewServer(svc, logger)
 }
 

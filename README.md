@@ -110,6 +110,15 @@ flowchart LR
 - 后端服务走 Docker
 - Agent 直接运行在宿主机，采集真实宿主机数据
 
+后端服务配置统一放在仓库根目录的 `config/` 下：
+
+- `config/master-api.yml`
+- `config/ingest-gateway.yml`
+- `config/core-worker.yml`
+- `config/probe-worker.yml`
+
+如果需要示例模板或 Docker 联调配置，可直接使用同目录下的 `*.demo.yml` 和 `*.docker.yml`。
+
 启动：
 
 ```bash

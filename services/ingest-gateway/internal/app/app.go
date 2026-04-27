@@ -36,7 +36,10 @@ type App struct {
 }
 
 func New() (*App, error) {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
 	logger := logx.New("ingest-gateway")
 	initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer initCancel()

@@ -11,6 +11,7 @@ import (
 	postgresrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/postgres"
 	redisrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/redis"
 	"github.com/gofxq/gaoming/pkg/logx"
+	"github.com/gofxq/gaoming/services/master-api/internal/auth"
 	"github.com/gofxq/gaoming/services/master-api/internal/config"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 	httptransport "github.com/gofxq/gaoming/services/master-api/internal/transport/http"
@@ -29,7 +30,10 @@ type App struct {
 }
 
 func New() (*App, error) {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
 	logger := logx.New("master-api")
 	if cfg.RuntimeBackend != "pg_redis" {
 		return nil, fmt.Errorf("unsupported runtime backend %q", cfg.RuntimeBackend)
@@ -74,7 +78,28 @@ func New() (*App, error) {
 	}
 	metricStore := redisrepo.NewMetricWindowStore(redisClient, "", 60, 2*time.Hour)
 	eventBus := redisrepo.NewEventBus(redisClient, "")
-	svc := service.New(hostStore, metricStore, hostStore, eventBus, clock.Real{}, logger)
+	authStore := auth.NewStore(gormDB)
+	weChatOAuth := auth.NewWeChatOAuthClient(
+		cfg.WeChatAppID,
+		cfg.WeChatAppSecret,
+		cfg.WeChatRedirectURL,
+		cfg.WeChatScope,
+	)
+	svc := service.New(
+		hostStore,
+		metricStore,
+		hostStore,
+		eventBus,
+		authStore,
+		weChatOAuth,
+		service.AuthConfig{
+			SessionTTL:        time.Duration(cfg.SessionTTLHours) * time.Hour,
+			SessionCookieName: cfg.SessionCookieName,
+			SessionSecret:     cfg.SessionSecret,
+		},
+		clock.Real{},
+		logger,
+	)
 	handler := httptransport.NewServer(svc, logger).Handler()
 	_, cancel := context.WithCancel(context.Background())
 

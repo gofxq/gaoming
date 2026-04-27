@@ -9,17 +9,20 @@
 对应命令：
 
 ```bash
-make docker-up
+make up
 make smoke
 make run-agent
 make smoke-agent
-make web-dev WEB_API_ORIGIN=http://127.0.0.1:8080
 ```
 
 页面入口：
 
-- `http://127.0.0.1:5173/default`
-- `http://127.0.0.1:5173/default/pwa`
+- Docker 前端：`http://127.0.0.1:5173/default`
+- Docker 前端：`http://127.0.0.1:5173/default/pwa`
+
+`make up` 会同时启动后端依赖、后端服务和前端容器。
+
+注意：Docker 模式下每个服务会把 `config/*.docker.yml` 挂载到容器内对应的 `config/*.yml` 路径，避免容器误用本机配置里的 `127.0.0.1` 地址。
 
 ## 后端健康检查
 
@@ -82,16 +85,27 @@ make smoke-agent
 
 如果你不想跑容器，也可以直接启动各服务，但要先准备 PostgreSQL 和 Redis。
 
-`master-api` 默认连的是：
+`master-api` 默认从 `config/master-api.yml` 读取配置。
+
+默认示例文件里配置的是：
 
 - PostgreSQL `127.0.0.1:5432`
 - Redis `127.0.0.1:6379`
 
-如果你复用 `docker compose` 暴露的端口，则需要显式覆盖：
+仓库同时提供：
+
+- `config/master-api.yml`：本机开发默认配置
+- `config/master-api.demo.yml`：可复制的示例模板
+- `config/master-api.docker.yml`：`docker compose` 专用配置
+
+如果你复用 `docker compose` 暴露的端口，`config/master-api.yml` 已经默认指向：
+
+- PostgreSQL `127.0.0.1:35432`
+- Redis `127.0.0.1:36379`
+
+直接运行：
 
 ```bash
-MASTER_API_POSTGRES_DSN='postgres://gaoming:gaoming@127.0.0.1:35432/gaoming?sslmode=disable' \
-MASTER_API_REDIS_ADDR='127.0.0.1:36379' \
 make run-master
 ```
 
@@ -103,6 +117,18 @@ make run-core
 make run-probe
 ```
 
+对应配置文件为：
+
+- `config/ingest-gateway.yml`
+- `config/core-worker.yml`
+- `config/probe-worker.yml`
+
+仓库同样提供各自的 demo 和容器版本：
+
+- `config/ingest-gateway.demo.yml` / `config/ingest-gateway.docker.yml`
+- `config/core-worker.demo.yml` / `config/core-worker.docker.yml`
+- `config/probe-worker.demo.yml` / `config/probe-worker.docker.yml`
+
 ## 当前页面链路
 
 Web 页面当前不由 `master-api` 直接托管。
@@ -112,7 +138,7 @@ Web 页面当前不由 `master-api` 直接托管。
 - `Vite` 运行在 `5173`
 - `/master/*` 通过代理转发到 `WEB_API_ORIGIN`
 
-因此本地看页面时，应访问 `5173`，不是 `8080`。
+因此本地看页面时，应访问 `5173`，不是 `8080`。如果你不想用 Docker 内的前端，也可以单独运行 `make web-dev WEB_API_ORIGIN=http://127.0.0.1:8080`。
 
 ## 关键验证点
 
