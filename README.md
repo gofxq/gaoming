@@ -117,6 +117,8 @@ make docker-up
 make run-agent
 ```
 
+`docker-compose.yml` 已配置 `restart: unless-stopped`，宿主机关机重启后，Docker daemon 恢复时会自动拉起这些服务；如果你手工 `docker compose stop`，则不会强制重启。
+
 如果要从宿主机验证标准 gRPC 上报，先准备当前目录下的 `agent-config.yaml`：
 
 ```bash
