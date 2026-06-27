@@ -1,0 +1,16 @@
+:root {
+  --ion-color-primary: #0f766e;
+  --ion-color-primary-rgb: 15, 118, 110;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #0d6861;
+  --ion-color-primary-tint: #27847d;
+  --ion-color-secondary: #b7791f;
+  --ion-color-tertiary: #2563eb;
+  --ion-color-success: #0f766e;
+  --ion-color-warning: #b7791f;
+  --ion-color-danger: #c2410c;
+  --ion-background-color: #f6f0e5;
+  --ion-text-color: #1c1814;
+  --ion-font-family: "IBM Plex Sans", "Noto Sans SC", system-ui, sans-serif;
+}

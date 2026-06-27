@@ -3,7 +3,7 @@ DOCKER_COMPOSE ?= docker compose
 YARN ?= yarn
 WEB_API_ORIGIN ?= https://gm-metric.gofxq.com
 
-.PHONY: fmt build test check clean run-master run-ingest run-core run-probe run-agent proto-check proto-lint compose-config docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent deploy-agent-service install-agent-local-service db-update web-install web-dev web-build
+.PHONY: fmt build test check clean run-master run-ingest run-core run-probe run-agent proto-check proto-lint compose-config docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent deploy-agent-service install-agent-local-service db-update web-install web-dev web-build h5-install h5-dev h5-local h5-build
 
 fmt:
 	$(GO) fmt ./...
@@ -53,7 +53,7 @@ docker-up:
 	$(DOCKER_COMPOSE) up -d --build
 
 docker-up-full:
-	$(DOCKER_COMPOSE) --profile container-agent --profile web up -d --build
+	$(DOCKER_COMPOSE) --profile container-agent --profile web --profile h5 up -d --build
 
 docker-down:
 	$(DOCKER_COMPOSE) down --remove-orphans
@@ -89,3 +89,15 @@ web-local: web-install
 
 web-build:
 	cd web && VITE_API_ORIGIN=$(WEB_API_ORIGIN) $(YARN) build
+
+h5-install:
+	cd h5 && $(YARN) install
+
+h5-dev: h5-install
+	cd h5 && VITE_PROXY_TARGET=$(WEB_API_ORIGIN) $(YARN) dev
+
+h5-local: h5-install
+	cd h5 && VITE_PROXY_TARGET=http://localhost:8080 $(YARN) dev
+
+h5-build:
+	cd h5 && VITE_API_ORIGIN=$(WEB_API_ORIGIN) $(YARN) build

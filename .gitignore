@@ -29,4 +29,13 @@ web/.vite/
 web/.env
 web/.env.local
 web/.env.*.local
+h5/node_modules/
+h5/dist/
+h5/.vite/
+h5/*.tsbuildinfo
+h5/vite.config.js
+h5/vite.config.d.ts
+h5/.env
+h5/.env.local
+h5/.env.*.local
 AGENTS.md

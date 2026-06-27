@@ -159,5 +159,26 @@ services:
       timeout: 5s
       retries: 10
 
+  h5:
+    profiles:
+      - h5
+    build:
+      context: .
+      dockerfile: deployments/docker/h5.Dockerfile
+    container_name: gaoming-h5
+    restart: unless-stopped
+    environment:
+      VITE_PROXY_TARGET: http://master-api:8080
+    ports:
+      - "5174:5174"
+    depends_on:
+      master-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5174/ >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres_data:

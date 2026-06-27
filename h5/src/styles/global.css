@@ -1,0 +1,220 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.18), transparent 28%),
+    linear-gradient(180deg, #fbf7ef 0%, #f6f0e5 100%);
+}
+
+ion-content {
+  --background:
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 28%),
+    linear-gradient(180deg, #fbf7ef 0%, #f6f0e5 100%);
+}
+
+ion-toolbar {
+  --background: rgba(255, 251, 245, 0.94);
+  --border-color: rgba(58, 43, 25, 0.12);
+}
+
+.page-hero,
+.detail-hero {
+  padding: 20px 18px 8px;
+}
+
+.page-hero h1,
+.detail-hero h1 {
+  margin: 6px 0 10px;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.detail-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 10px 8px;
+}
+
+.summary-grid ion-card,
+.metric-card,
+.host-card,
+.detail-meta-card,
+.trend-card,
+.detail-empty {
+  border: 1px solid rgba(58, 43, 25, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 12px 34px rgba(38, 28, 14, 0.1);
+}
+
+.summary-grid ion-card {
+  margin: 0;
+}
+
+.summary-grid ion-card-content,
+.metric-card ion-card-content {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.summary-grid span,
+.metric-label,
+.detail-meta-grid ion-text {
+  font-size: 12px;
+}
+
+.summary-grid strong,
+.metric-card strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.host-list {
+  background: transparent;
+  padding: 0 10px 4px;
+}
+
+.host-card {
+  margin: 10px 0;
+}
+
+.host-card ion-item {
+  --background: transparent;
+}
+
+.host-metric-grid,
+.detail-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.host-metric-grid span,
+.detail-meta-grid span {
+  display: grid;
+  gap: 4px;
+}
+
+.host-metric-grid strong,
+.detail-meta-grid strong {
+  font-size: 15px;
+}
+
+.host-card-link {
+  display: block;
+  margin-top: 10px;
+  color: var(--ion-color-primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.sparkline {
+  display: block;
+  width: 100%;
+  height: 72px;
+  margin-top: 10px;
+}
+
+.sparkline-area {
+  fill: rgba(15, 118, 110, 0.14);
+}
+
+.sparkline-line {
+  fill: none;
+  stroke: #0f766e;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.sparkline-empty,
+.empty-state {
+  color: #655b50;
+  font-size: 14px;
+  text-align: center;
+}
+
+.page-footnote,
+.detail-window-note {
+  margin: 8px 18px 22px;
+  color: #655b50;
+  font-size: 13px;
+}
+
+.detail-meta-card,
+.trend-card {
+  margin: 10px;
+}
+
+.window-segment {
+  margin: 12px 10px 0;
+}
+
+.detail-metric-grid {
+  padding: 0 4px;
+}
+
+.detail-metric-grid ion-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.metric-card {
+  margin: 6px;
+}
+
+.metric-card small {
+  color: #655b50;
+}
+
+.metric-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.12);
+}
+
+.metric-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ion-color-primary);
+}
+
+.trend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 360px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-metric-grid ion-row {
+    grid-template-columns: 1fr;
+  }
+}
