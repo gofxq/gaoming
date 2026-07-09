@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react";
 import {
   listToHostMap,
   mergeLatestHistory,
@@ -40,6 +40,20 @@ export function useLiveHostsData(props: {
     [streamPath, tenantCode],
   );
 
+  const reloadHosts = useCallback(async () => {
+    const response = await fetch(hostsUrl, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load hosts: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as { items?: HostSnapshot[] };
+    startTransition(() => {
+      setAgents(listToHostMap(payload.items || []));
+    });
+  }, [hostsUrl]);
+
   useEffect(() => {
     startTransition(() => {
       setAgents({});
@@ -53,34 +67,16 @@ export function useLiveHostsData(props: {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadHosts() {
-      try {
-        const response = await fetch(hostsUrl, {
-          credentials: "include",
-        });
-        if (!response.ok) {
-          return;
-        }
-
-        const payload = (await response.json()) as { items?: HostSnapshot[] };
-        if (cancelled) {
-          return;
-        }
-
-        startTransition(() => {
-          setAgents(listToHostMap(payload.items || []));
-        });
-      } catch {
-        // The dashboard can still bootstrap from SSE sync.
+    reloadHosts().catch(() => {
+      if (!cancelled) {
+        setStreamState("等待实时流");
       }
-    }
-
-    void loadHosts();
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [hostsUrl]);
+  }, [reloadHosts]);
 
   useEffect(() => {
     const stream = new EventSource(streamUrl, {
@@ -175,6 +171,7 @@ export function useLiveHostsData(props: {
     agents,
     histories,
     lastUpdated,
+    reloadHosts,
     sortedHosts,
     streamEventCount,
     streamState,

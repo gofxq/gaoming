@@ -39,10 +39,14 @@ export function Shell() {
           </nav>
           <div className="shell-user">
             <span className="meta-pill">{user?.display_name || "未登录"}</span>
-            <span className="meta-pill">{user?.role === "admin" ? "管理员" : "成员"}</span>
-            <button type="button" className="meta-pill meta-pill-button" onClick={() => void handleSignOut()}>
-              退出登录
-            </button>
+            {user ? (
+              <>
+                <span className="meta-pill">{user.role === "admin" ? "管理员" : "成员"}</span>
+                <button type="button" className="meta-pill meta-pill-button" onClick={() => void handleSignOut()}>
+                  退出登录
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       </header>

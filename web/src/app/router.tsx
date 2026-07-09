@@ -62,17 +62,16 @@ export const router = createBrowserRouter([
     element: <MobilePwaRedirect />,
   },
   {
-    path: "/:tenantCode/pwa",
-    element: <MobileAgentPage />,
-  },
-  {
-    path: "/:tenantCode/pwa/:hostUID",
-    element: <MobileAgentPage />,
-  },
-  {
     path: "/:tenantCode",
-    element: <RequireAuth />,
     children: [
+      {
+        path: "pwa",
+        element: <MobileAgentPage />,
+      },
+      {
+        path: "pwa/:hostUID",
+        element: <MobileAgentPage />,
+      },
       {
         element: <TenantEntry />,
         children: [
@@ -80,8 +79,13 @@ export const router = createBrowserRouter([
             index: true,
             element: <DashboardPage />,
           },
+        ],
+      },
+      {
+        path: "users",
+        element: <RequireAuth />,
+        children: [
           {
-            path: "users",
             element: <RequireAdmin />,
             children: [
               {

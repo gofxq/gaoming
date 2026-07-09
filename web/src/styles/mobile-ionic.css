@@ -1,124 +1,115 @@
-html,
-body,
-#root {
-  height: 100%;
-}
-
-body {
+.mobile-ion-app {
   background:
-    radial-gradient(circle at top right, rgba(20, 184, 166, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 28%),
     linear-gradient(180deg, #fbf7ef 0%, #f6f0e5 100%);
 }
 
-ion-content {
+.mobile-ion-page,
+.mobile-ion-content {
   --background:
     radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 28%),
     linear-gradient(180deg, #fbf7ef 0%, #f6f0e5 100%);
 }
 
-ion-toolbar {
+.mobile-ion-page ion-toolbar {
   --background: rgba(255, 251, 245, 0.94);
   --border-color: rgba(58, 43, 25, 0.12);
 }
 
-.page-hero,
-.detail-hero {
+.mobile-ion-hero,
+.mobile-ion-detail-hero {
   padding: 20px 18px 8px;
 }
 
-.page-hero h1,
-.detail-hero h1 {
+.mobile-ion-hero h1,
+.mobile-ion-detail-hero h1 {
   margin: 6px 0 10px;
   font-size: 34px;
   line-height: 1;
+  letter-spacing: 0;
 }
 
-.detail-hero {
+.mobile-ion-detail-hero {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.hero-chips {
+.mobile-ion-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.summary-grid {
+.mobile-ion-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 0 10px 8px;
 }
 
-.summary-grid ion-card,
-.metric-card,
-.host-card,
-.detail-meta-card,
-.trend-card,
-.detail-empty {
+.mobile-ion-card {
   border: 1px solid rgba(58, 43, 25, 0.12);
   border-radius: 16px;
   box-shadow: 0 12px 34px rgba(38, 28, 14, 0.1);
 }
 
-.summary-grid ion-card {
+.mobile-ion-summary-card {
   margin: 0;
 }
 
-.summary-grid ion-card-content,
-.metric-card ion-card-content {
+.mobile-ion-summary-card ion-card-content,
+.mobile-ion-metric-card ion-card-content {
   display: grid;
   gap: 6px;
   padding: 14px;
 }
 
-.summary-grid span,
-.metric-label,
-.detail-meta-grid ion-text {
+.mobile-ion-summary-card span,
+.mobile-ion-metric-label,
+.mobile-ion-detail-meta-grid ion-text {
   font-size: 12px;
 }
 
-.summary-grid strong,
-.metric-card strong {
+.mobile-ion-summary-card strong,
+.mobile-ion-metric-card strong {
   font-size: 22px;
   line-height: 1;
 }
 
-.host-list {
+.mobile-ion-host-list {
   background: transparent;
   padding: 0 10px 4px;
 }
 
-.host-card {
+.mobile-ion-host-card {
   margin: 10px 0;
 }
 
-.host-card ion-item {
+.mobile-ion-host-card ion-item {
   --background: transparent;
 }
 
-.host-metric-grid,
-.detail-meta-grid {
+.mobile-ion-host-metric-grid,
+.mobile-ion-detail-meta-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.host-metric-grid span,
-.detail-meta-grid span {
+.mobile-ion-host-metric-grid span,
+.mobile-ion-detail-meta-grid span {
   display: grid;
   gap: 4px;
 }
 
-.host-metric-grid strong,
-.detail-meta-grid strong {
+.mobile-ion-host-metric-grid strong,
+.mobile-ion-detail-meta-grid strong {
   font-size: 15px;
 }
 
-.host-card-link {
+.mobile-ion-card-link {
   display: block;
   margin-top: 10px;
   color: var(--ion-color-primary);
@@ -127,18 +118,18 @@ ion-toolbar {
   text-decoration: none;
 }
 
-.sparkline {
+.mobile-ion-sparkline {
   display: block;
   width: 100%;
   height: 72px;
   margin-top: 10px;
 }
 
-.sparkline-area {
+.mobile-ion-sparkline-area {
   fill: rgba(15, 118, 110, 0.14);
 }
 
-.sparkline-line {
+.mobile-ion-sparkline-line {
   fill: none;
   stroke: #0f766e;
   stroke-linecap: round;
@@ -146,62 +137,58 @@ ion-toolbar {
   stroke-width: 4;
 }
 
-.sparkline-empty,
-.empty-state {
+.mobile-ion-sparkline-empty,
+.mobile-ion-empty {
   color: #655b50;
   font-size: 14px;
   text-align: center;
 }
 
-.page-footnote,
-.detail-window-note {
+.mobile-ion-footnote {
   margin: 8px 18px 22px;
   color: #655b50;
   font-size: 13px;
 }
 
-.detail-meta-card,
-.trend-card {
+.mobile-ion-detail-meta-card,
+.mobile-ion-trend-card,
+.mobile-ion-detail-empty {
   margin: 10px;
 }
 
-.window-segment {
+.mobile-ion-window-segment {
   margin: 12px 10px 0;
 }
 
-.detail-metric-grid {
+.mobile-ion-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 0 4px;
 }
 
-.detail-metric-grid ion-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  width: 100%;
-}
-
-.metric-card {
+.mobile-ion-metric-card {
   margin: 6px;
 }
 
-.metric-card small {
+.mobile-ion-metric-card small {
   color: #655b50;
 }
 
-.metric-bar {
+.mobile-ion-metric-bar {
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(15, 118, 110, 0.12);
 }
 
-.metric-bar span {
+.mobile-ion-metric-bar span {
   display: block;
   height: 100%;
   border-radius: inherit;
   background: var(--ion-color-primary);
 }
 
-.trend-head {
+.mobile-ion-trend-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -210,11 +197,8 @@ ion-toolbar {
 }
 
 @media (max-width: 360px) {
-  .summary-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .detail-metric-grid ion-row {
+  .mobile-ion-summary-grid,
+  .mobile-ion-metric-grid {
     grid-template-columns: 1fr;
   }
 }

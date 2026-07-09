@@ -36,18 +36,18 @@ func (s *Server) Handler() nethttp.Handler {
 
 	authGroup := engine.Group("/master/api/v1/auth")
 	authGroup.GET("/session", s.handleSession)
-	authGroup.GET("/wechat/url", s.handleWeChatLoginURL)
-	authGroup.GET("/wechat/callback", s.handleWeChatCallback)
 	authGroup.POST("/logout", s.handleLogout)
 
 	engine.POST("/master/api/v1/install/tenant", s.handleAllocateInstallTenant)
 	engine.POST("/master/api/v1/agents/register", s.handleRegisterAgent)
 
+	public := engine.Group("/master/api/v1")
+	public.GET("/stream/hosts", s.handleHostStream)
+	public.GET("/hosts", s.handleListHosts)
+	public.GET("/hosts/:hostUID", s.handleGetHost)
+
 	protected := engine.Group("/master/api/v1")
 	protected.Use(s.requireSession())
-	protected.GET("/stream/hosts", s.handleHostStream)
-	protected.GET("/hosts", s.handleListHosts)
-	protected.GET("/hosts/:hostUID", s.handleGetHost)
 	protected.POST("/ops/maintenance", s.handleCreateMaintenance)
 	protected.POST("/ops/alerts/:alertID/ack", s.handleAckAlert)
 
@@ -158,34 +158,6 @@ func (s *Server) handleSession(c *gin.Context) {
 		return
 	}
 	c.JSON(nethttp.StatusOK, resp)
-}
-
-func (s *Server) handleWeChatLoginURL(c *gin.Context) {
-	resp, err := s.svc.GetWeChatLoginURL(
-		c.Query("return_to"),
-		strings.TrimSpace(c.Query("tenant")),
-	)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
-	c.JSON(nethttp.StatusOK, resp)
-}
-
-func (s *Server) handleWeChatCallback(c *gin.Context) {
-	session, returnTo, err := s.svc.HandleWeChatCallback(
-		c.Request.Context(),
-		c.Query("code"),
-		c.Query("state"),
-		c.ClientIP(),
-		c.Request.UserAgent(),
-	)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
-	setSessionCookie(c, s.cookieName(), session.Token, session.ExpiresAt)
-	c.Redirect(nethttp.StatusFound, returnTo)
 }
 
 func (s *Server) handleLogout(c *gin.Context) {
@@ -316,8 +288,6 @@ func writeError(c *gin.Context, err error) {
 		c.JSON(nethttp.StatusForbidden, gin.H{"error": err.Error()})
 	case errors.Is(err, service.ErrAuthNotConfigured):
 		c.JSON(nethttp.StatusServiceUnavailable, gin.H{"error": err.Error()})
-	case errors.Is(err, service.ErrInvalidAuthState):
-		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
 		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
 	}

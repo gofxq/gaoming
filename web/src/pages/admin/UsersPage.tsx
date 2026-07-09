@@ -88,7 +88,7 @@ export function UsersPage() {
             <div className="eyebrow">Users</div>
             <h2>用户管理</h2>
           </div>
-          <p className="panel-note">管理员可查看微信登录用户，并调整角色与启用状态。</p>
+          <p className="panel-note">管理员可查看用户，并调整角色与启用状态。</p>
         </div>
 
         <div className="hero-meta">
@@ -117,7 +117,7 @@ export function UsersPage() {
                   <div>
                     <strong>{item.display_name}</strong>
                     <span>
-                      {item.provider || "wechat"} · {item.provider_user_id || "自动创建"}
+                      {item.provider || "本地用户"} · {item.provider_user_id || "手动创建"}
                     </span>
                   </div>
                 </div>

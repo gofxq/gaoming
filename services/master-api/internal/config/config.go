@@ -23,10 +23,6 @@ type Config struct {
 	SessionCookieName     string `yaml:"session_cookie_name"`
 	SessionSecret         string `yaml:"session_secret"`
 	SessionTTLHours       int    `yaml:"session_ttl_hours"`
-	WeChatAppID           string `yaml:"wechat_app_id"`
-	WeChatAppSecret       string `yaml:"wechat_app_secret"`
-	WeChatRedirectURL     string `yaml:"wechat_redirect_url"`
-	WeChatScope           string `yaml:"wechat_scope"`
 }
 
 func Load() (Config, error) {
@@ -66,10 +62,6 @@ func defaultConfig() Config {
 		SessionCookieName:     "gaoming_session",
 		SessionSecret:         "change-me",
 		SessionTTLHours:       168,
-		WeChatAppID:           "",
-		WeChatAppSecret:       "",
-		WeChatRedirectURL:     "",
-		WeChatScope:           "snsapi_login",
 	}
 }
 
@@ -101,9 +93,6 @@ func (c *Config) applyDefaults() {
 	}
 	if c.SessionTTLHours <= 0 {
 		c.SessionTTLHours = defaults.SessionTTLHours
-	}
-	if strings.TrimSpace(c.WeChatScope) == "" {
-		c.WeChatScope = defaults.WeChatScope
 	}
 }
 
