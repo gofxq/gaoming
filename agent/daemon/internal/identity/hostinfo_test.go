@@ -1,6 +1,10 @@
 package identity
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gofxq/gaoming/pkg/contracts"
+)
 
 func TestStableHostUIDIsDeterministic(t *testing.T) {
 	got1 := stableHostUID(
@@ -43,5 +47,24 @@ func TestStableHostUIDFallsBackWithoutMachineIDOrMAC(t *testing.T) {
 	got := stableHostUID("node-a", "", nil)
 	if got == "" {
 		t.Fatal("expected fallback host uid")
+	}
+}
+
+func TestWithHostnameOverridesHostnameAndUID(t *testing.T) {
+	base := contracts.HostIdentity{
+		HostUID:  "host-original",
+		Hostname: "original",
+	}
+
+	got := WithHostname(base, "air-agent-1")
+
+	if got.Hostname != "air-agent-1" {
+		t.Fatalf("unexpected hostname: %q", got.Hostname)
+	}
+	if got.HostUID == "" || got.HostUID == base.HostUID {
+		t.Fatalf("expected derived host uid, got %q", got.HostUID)
+	}
+	if again := WithHostname(base, "air-agent-1"); again.HostUID != got.HostUID {
+		t.Fatalf("expected stable host uid, got %q and %q", got.HostUID, again.HostUID)
 	}
 }

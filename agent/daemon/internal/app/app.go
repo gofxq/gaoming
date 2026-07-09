@@ -21,6 +21,7 @@ func New() (*App, error) {
 	}
 	logger := logx.New("agent")
 	host := identity.Discover(cfg.Region, cfg.Env, cfg.Role)
+	host = identity.WithHostname(host, cfg.Hostname)
 	host.TenantCode = cfg.TenantCode
 
 	agent := service.New(service.Config{

@@ -42,6 +42,16 @@ func Discover(region string, env string, role string) contracts.HostIdentity {
 	}
 }
 
+func WithHostname(host contracts.HostIdentity, hostname string) contracts.HostIdentity {
+	hostname = strings.TrimSpace(hostname)
+	if hostname == "" {
+		return host
+	}
+	host.Hostname = hostname
+	host.HostUID = stableHostUID(hostname, "", nil)
+	return host
+}
+
 func listIPs() []string {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {

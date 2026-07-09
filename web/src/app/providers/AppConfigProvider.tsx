@@ -6,7 +6,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { METRICS, type MetricKey } from "../../pages/dashboard/dashboard";
+import { METRICS, type MetricKey } from "../../features/hosts/model";
 
 const APP_CONFIG_STORAGE_KEY = "gaoming:web:app-config:v2";
 

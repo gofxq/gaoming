@@ -9,7 +9,7 @@ import {
   type HostSnapshot,
   type HostSyncPayload,
   type HostUpsertPayload,
-} from "./dashboard";
+} from "./model";
 
 const HISTORY_RETENTION_SEC = 3600;
 

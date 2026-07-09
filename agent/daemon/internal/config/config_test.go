@@ -22,13 +22,14 @@ func TestLoadRequiresAgentConfigYAML(t *testing.T) {
 }
 
 func TestLoadReadsAgentConfigYAML(t *testing.T) {
-	dir := withTempWorkingDir(t)
+	withTempWorkingDir(t)
 	writeAgentConfig(t, ""+
 		"master_api_url: \"http://saved-master:8080\"\n"+
 		"ingest_gateway_grpc_addr: \"saved-ingest:18091\"\n"+
 		"region: \"saved-region\"\n"+
 		"env: \"saved-env\"\n"+
 		"role: \"saved-role\"\n"+
+		"hostname: \"saved-host\"\n"+
 		"tenant_code: \"tenant-saved\"\n"+
 		"loop_interval_sec: 9\n")
 
@@ -43,15 +44,56 @@ func TestLoadReadsAgentConfigYAML(t *testing.T) {
 	if cfg.Region != "saved-region" || cfg.Env != "saved-env" || cfg.Role != "saved-role" {
 		t.Fatalf("unexpected host metadata: %+v", cfg)
 	}
+	if cfg.Hostname != "saved-host" {
+		t.Fatalf("unexpected hostname: %q", cfg.Hostname)
+	}
 	if cfg.TenantCode != "tenant-saved" {
 		t.Fatalf("unexpected tenant code: %q", cfg.TenantCode)
 	}
 	if cfg.LoopIntervalSec != 9 {
 		t.Fatalf("unexpected loop interval: %d", cfg.LoopIntervalSec)
 	}
-	expectedPath := filepath.Join(dir, "agent-config.yaml")
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedPath := filepath.Join(wd, "agent-config.yaml")
 	if cfg.ConfigPath != expectedPath {
 		t.Fatalf("unexpected config path: %q", cfg.ConfigPath)
+	}
+}
+
+func TestLoadUsesExplicitConfigPath(t *testing.T) {
+	dir := withTempWorkingDir(t)
+	configPath := filepath.Join(dir, "config", "agent-1.yml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(""+
+		"ingest_gateway_grpc_addr: \"127.0.0.1:8091\"\n"+
+		"region: \"local\"\n"+
+		"env: \"dev\"\n"+
+		"role: \"node-1\"\n"+
+		"hostname: \"air-agent-1\"\n"+
+		"tenant_code: \"default\"\n"+
+		"loop_interval_sec: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvConfigPath, configPath)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.ConfigPath != configPath {
+		t.Fatalf("unexpected config path: %q", cfg.ConfigPath)
+	}
+	if cfg.Role != "node-1" {
+		t.Fatalf("unexpected role: %q", cfg.Role)
+	}
+	if cfg.Hostname != "air-agent-1" {
+		t.Fatalf("unexpected hostname: %q", cfg.Hostname)
 	}
 }
 

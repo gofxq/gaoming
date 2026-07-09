@@ -1,19 +1,12 @@
 import { Navigate, Outlet, createBrowserRouter, useLocation, useParams } from "react-router-dom";
-import { shouldUsePwaLayout } from "./device";
 import { useAuth } from "./providers/AuthProvider";
 import { Shell } from "../components/layout/Shell";
-import { DashboardPage } from "../pages/dashboard/DashboardPage";
-import { MobileAgentPage } from "../pages/mobile/MobileAgentPage";
 import { LoginPage } from "../pages/auth/LoginPage";
 import { UsersPage } from "../pages/admin/UsersPage";
+import { PcDashboardPage } from "../pc/PcDashboardPage";
 
 function RootRedirect() {
-  return <Navigate to={shouldUsePwaLayout() ? "/default/pwa" : "/default"} replace />;
-}
-
-function MobilePwaRedirect() {
-  const { tenantCode = "default" } = useParams();
-  return <Navigate to={`/${tenantCode}/pwa`} replace />;
+  return <Navigate to="/default" replace />;
 }
 
 function RequireAuth() {
@@ -44,11 +37,6 @@ function RequireAdmin() {
 }
 
 function TenantEntry() {
-  const { tenantCode = "default" } = useParams();
-  if (shouldUsePwaLayout()) {
-    return <Navigate to={`/${tenantCode}/pwa`} replace />;
-  }
-
   return <Shell />;
 }
 
@@ -58,26 +46,14 @@ export const router = createBrowserRouter([
     element: <RootRedirect />,
   },
   {
-    path: "/:tenantCode/mobile",
-    element: <MobilePwaRedirect />,
-  },
-  {
     path: "/:tenantCode",
     children: [
-      {
-        path: "pwa",
-        element: <MobileAgentPage />,
-      },
-      {
-        path: "pwa/:hostUID",
-        element: <MobileAgentPage />,
-      },
       {
         element: <TenantEntry />,
         children: [
           {
             index: true,
-            element: <DashboardPage />,
+            element: <PcDashboardPage />,
           },
         ],
       },

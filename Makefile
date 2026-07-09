@@ -1,9 +1,10 @@
 GO ?= go
 DOCKER_COMPOSE ?= docker compose
 YARN ?= yarn
+AIR ?= air
 WEB_API_ORIGIN ?= https://gm-metric.gofxq.com
 
-.PHONY: fmt build test check clean
+.PHONY: fmt build test check clean air
 .PHONY: master ingest core probe agent
 .PHONY: proto-check proto-lint
 .PHONY: compose-config up up-full down docker-up docker-up-full docker-down docker-logs docker-ps
@@ -24,6 +25,9 @@ check: fmt test build proto-check
 
 clean:
 	rm -rf bin dist tmp .tmp coverage cover.out web/dist
+
+air: web-install
+	GO="$(GO)" AIR="$(AIR)" YARN="$(YARN)" sh ./scripts/dev-air.sh
 
 master:
 	$(GO) run ./services/master-api/cmd/server
