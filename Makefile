@@ -64,12 +64,6 @@ up-full:
 down:
 	$(DOCKER_COMPOSE) down --remove-orphans
 
-docker-up: up
-
-docker-up-full: up-full
-
-docker-down: down
-
 docker-logs:
 	$(DOCKER_COMPOSE) logs -f --tail=200
 
