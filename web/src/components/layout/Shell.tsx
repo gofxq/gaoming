@@ -1,6 +1,14 @@
-import { Link, Outlet, useNavigate } from "react-router-dom";
-import { Button, Select, Space } from "@douyinfe/semi-ui";
+import { Button, Select, Tooltip } from "@douyinfe/semi-ui";
+import {
+  IconExit,
+  IconHomeStroked,
+  IconPulse,
+  IconRefresh,
+  IconServerStroked,
+  IconUserGroup,
+} from "@douyinfe/semi-icons";
 import { useEffect, useMemo, useState } from "react";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAppConfig } from "../../app/providers/AppConfigProvider";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { useTenant } from "../../app/providers/TenantProvider";
@@ -27,10 +35,6 @@ export function Shell() {
     tenantCode,
   });
 
-  const totalCount = hostData.sortedHosts.length;
-  const onlineCount = hostData.sortedHosts.filter((host) => host.overall_state !== 4).length;
-  const warningCount = hostData.sortedHosts.filter((host) => host.overall_state === 2 || host.overall_state === 3).length;
-  const offlineCount = hostData.sortedHosts.filter((host) => host.overall_state === 4).length;
   const outletContext: ShellOutletContext = {
     ...hostData,
     selectedWindowSec,
@@ -46,12 +50,11 @@ export function Shell() {
       })),
     [hostData.sortedHosts],
   );
+  const isStreaming = hostData.streamState === "实时推送中";
 
   useEffect(() => {
-    document.body.classList.add("desktop-scroll");
-    return () => {
-      document.body.classList.remove("desktop-scroll");
-    };
+    document.body.classList.add("app-scroll");
+    return () => document.body.classList.remove("app-scroll");
   }, []);
 
   useEffect(() => {
@@ -71,80 +74,86 @@ export function Shell() {
 
   return (
     <div className="shell">
-      <header className="topbar">
-        <div>
-          <div className="eyebrow">Gaoming Web</div>
-          <h1 className="headline">监控看板</h1>
-          <div className="topbar-stream-line">
-            Tenant {tenantCode} · {hostData.streamState} · {hostData.streamEventCount} events
-          </div>
-          <div className="topbar-host-stats" aria-label="host summary">
-            <span className="topbar-stat-pill blue">
-              <span>主机</span>
-              <strong>{totalCount}</strong>
+      <header className="topbar glass-panel">
+        <div className="topbar-primary">
+          <Link to={`/${tenantCode}`} className="brand" aria-label="高明监控首页">
+            <span className="brand-mark"><IconPulse size="large" /></span>
+            <span className="brand-copy">
+              <strong>高明</strong>
+              <small>GAOMING MONITOR</small>
             </span>
-            <span className="topbar-stat-pill green">
-              <span>在线</span>
-              <strong>{onlineCount}</strong>
+          </Link>
+
+          <nav className="primary-nav" aria-label="主导航">
+            <NavLink to={`/${tenantCode}`} end>
+              <IconHomeStroked />
+              <span>总览</span>
+            </NavLink>
+            {user?.role === "admin" ? (
+              <NavLink to={`/${tenantCode}/users`}>
+                <IconUserGroup />
+                <span>用户</span>
+              </NavLink>
+            ) : null}
+          </nav>
+
+          <div className="topbar-context">
+            <span className={`live-indicator ${isStreaming ? "is-live" : ""}`}>
+              <i />
+              {hostData.streamState}
             </span>
-            <span className="topbar-stat-pill orange">
-              <span>异常</span>
-              <strong>{warningCount}</strong>
-            </span>
-            <span className="topbar-stat-pill red">
-              <span>离线</span>
-              <strong>{offlineCount}</strong>
-            </span>
+            <span className="tenant-badge">{tenantCode}</span>
           </div>
         </div>
-        <div className="shell-actions">
-          <Space className="topbar-controls">
+
+        <div className="topbar-tools">
+          <div className="tool-field host-picker">
+            <IconServerStroked />
             <Select
-              value={expandedHostUID}
+              value={expandedHostUID || undefined}
               optionList={hostOptions}
-              placeholder="展开主机"
-              className="topbar-action topbar-host-select"
+              placeholder="定位主机"
+              emptyContent="暂无主机"
               onChange={(value) => setExpandedHostUID(String(value || ""))}
             />
-            <Select
-              value={selectedWindowSec}
-              optionList={WINDOW_OPTIONS.map((option) => ({
-                label: option.label,
-                value: option.seconds,
-              }))}
-              className="topbar-action topbar-window-select"
-              onChange={(value) => setSelectedWindowSec(Number(value || 300))}
-            />
-            <Button className="topbar-action topbar-refresh" onClick={() => void hostData.reloadHosts()}>
-              刷新
-            </Button>
-          </Space>
-          <nav className="shell-badges">
-            <Link to={`/${tenantCode}`} className="meta-pill topbar-action-link">
-              Dashboard
-            </Link>
-            {user?.role === "admin" ? (
-              <Link to={`/${tenantCode}/users`} className="meta-pill topbar-action-link">
-                Users
-              </Link>
-            ) : null}
-            <span className="meta-pill">Tenant: {tenantCode}</span>
-          </nav>
-          <div className="shell-user">
-            <span className="meta-pill">{user?.display_name || "未登录"}</span>
-            {user ? (
-              <>
-                <span className="meta-pill">{user.role === "admin" ? "管理员" : "成员"}</span>
-                <button
-                  type="button"
-                  className="meta-pill meta-pill-button topbar-action-link"
-                  onClick={() => void handleSignOut()}
-                >
-                  退出登录
-                </button>
-              </>
-            ) : null}
           </div>
+          <Select
+            value={selectedWindowSec}
+            optionList={WINDOW_OPTIONS.map((option) => ({
+              label: option.label,
+              value: option.seconds,
+            }))}
+            className="window-picker"
+            aria-label="趋势时间范围"
+            onChange={(value) => setSelectedWindowSec(Number(value || 300))}
+          />
+          <Tooltip content="刷新主机列表">
+            <Button
+              className="icon-button"
+              icon={<IconRefresh />}
+              aria-label="刷新主机列表"
+              onClick={() => void hostData.reloadHosts()}
+            />
+          </Tooltip>
+
+          <span className="topbar-divider" />
+          <div className="user-identity">
+            <span className="user-avatar">{(user?.display_name || "访").slice(0, 1)}</span>
+            <span>
+              <strong>{user?.display_name || "访客"}</strong>
+              <small>{user ? (user.role === "admin" ? "管理员" : "成员") : "只读访问"}</small>
+            </span>
+          </div>
+          {user ? (
+            <Tooltip content="退出登录">
+              <Button
+                className="icon-button quiet"
+                icon={<IconExit />}
+                aria-label="退出登录"
+                onClick={() => void handleSignOut()}
+              />
+            </Tooltip>
+          ) : null}
         </div>
       </header>
 

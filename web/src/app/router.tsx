@@ -55,18 +55,18 @@ export const router = createBrowserRouter([
             index: true,
             element: <PcDashboardPage />,
           },
-        ],
-      },
-      {
-        path: "users",
-        element: <RequireAuth />,
-        children: [
           {
-            element: <RequireAdmin />,
+            path: "users",
+            element: <RequireAuth />,
             children: [
               {
-                index: true,
-                element: <UsersPage />,
+                element: <RequireAdmin />,
+                children: [
+                  {
+                    index: true,
+                    element: <UsersPage />,
+                  },
+                ],
               },
             ],
           },
