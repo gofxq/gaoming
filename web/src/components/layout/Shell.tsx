@@ -2,9 +2,11 @@ import { Button, Select, Tooltip } from "@douyinfe/semi-ui";
 import {
   IconExit,
   IconHomeStroked,
+  IconMoonStroked,
   IconPulse,
   IconRefresh,
   IconServerStroked,
+  IconSunStroked,
   IconUserGroup,
 } from "@douyinfe/semi-icons";
 import { useEffect, useMemo, useState } from "react";
@@ -29,6 +31,9 @@ export function Shell() {
   const navigate = useNavigate();
   const [selectedWindowSec, setSelectedWindowSec] = useState(300);
   const [expandedHostUID, setExpandedHostUID] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+  );
   const hostData = useLiveHostsData({
     apiBaseUrl: config.apiBaseUrl,
     streamPath: config.streamPath,
@@ -58,6 +63,12 @@ export function Shell() {
   }, []);
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.body.toggleAttribute("theme-mode", theme === "dark");
+    window.localStorage.setItem("gaoming-theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
     setExpandedHostUID("");
   }, [tenantCode]);
 
@@ -74,86 +85,121 @@ export function Shell() {
 
   return (
     <div className="shell">
-      <header className="topbar glass-panel">
-        <div className="topbar-primary">
-          <Link to={`/${tenantCode}`} className="brand" aria-label="高明监控首页">
-            <span className="brand-mark"><IconPulse size="large" /></span>
-            <span className="brand-copy">
-              <strong>高明</strong>
-              <small>GAOMING MONITOR</small>
-            </span>
-          </Link>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="topbar-primary">
+            <Link to={`/${tenantCode}`} className="brand" aria-label="高明监控首页">
+              <span className="brand-mark"><IconPulse /></span>
+              <span className="brand-copy">
+                <strong>高明</strong>
+              </span>
+            </Link>
 
-          <nav className="primary-nav" aria-label="主导航">
-            <NavLink to={`/${tenantCode}`} end>
-              <IconHomeStroked />
-              <span>总览</span>
-            </NavLink>
-            {user?.role === "admin" ? (
-              <NavLink to={`/${tenantCode}/users`}>
-                <IconUserGroup />
-                <span>用户</span>
+            <nav className="primary-nav" aria-label="主导航">
+              <NavLink to={`/${tenantCode}`} end>
+                <IconHomeStroked />
+                <span>总览</span>
               </NavLink>
+              {user?.role === "admin" ? (
+                <NavLink to={`/${tenantCode}/users`}>
+                  <IconUserGroup />
+                  <span>用户</span>
+                </NavLink>
+              ) : null}
+            </nav>
+
+            <div className="topbar-context">
+              <span className={`live-indicator ${isStreaming ? "is-live" : ""}`}>
+                <i />
+                {hostData.streamState}
+              </span>
+              <span className="tenant-badge">{tenantCode}</span>
+            </div>
+          </div>
+
+          <div className="topbar-tools">
+            <div className="tool-field host-picker">
+              <IconServerStroked />
+              <Select
+                value={expandedHostUID || undefined}
+                optionList={hostOptions}
+                placeholder="定位主机"
+                emptyContent="暂无主机"
+                onChange={(value) => setExpandedHostUID(String(value || ""))}
+              />
+            </div>
+            <div className="window-segments" role="group" aria-label="趋势时间范围">
+              {WINDOW_OPTIONS.map((option) => (
+                <button
+                  key={option.seconds}
+                  type="button"
+                  className={selectedWindowSec === option.seconds ? "active" : ""}
+                  aria-pressed={selectedWindowSec === option.seconds}
+                  onClick={() => setSelectedWindowSec(option.seconds)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <Tooltip content="刷新主机列表">
+              <Button
+                className="icon-button"
+                icon={<IconRefresh />}
+                aria-label="刷新主机列表"
+                onClick={() => void hostData.reloadHosts()}
+              />
+            </Tooltip>
+            <Tooltip content={theme === "dark" ? "切换浅色主题" : "切换深色主题"}>
+              <Button
+                className="icon-button quiet theme-toggle"
+                icon={theme === "dark" ? <IconSunStroked /> : <IconMoonStroked />}
+                aria-label={theme === "dark" ? "切换浅色主题" : "切换深色主题"}
+                onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              />
+            </Tooltip>
+
+            <span className="topbar-divider" />
+            <div className="user-identity">
+              <span className="user-avatar">{(user?.display_name || "访").slice(0, 1)}</span>
+              <span>
+                <strong>{user?.display_name || "访客"}</strong>
+                <small>{user ? (user.role === "admin" ? "管理员" : "成员") : "只读访问"}</small>
+              </span>
+            </div>
+            {user ? (
+              <Tooltip content="退出登录">
+                <Button
+                  className="icon-button quiet"
+                  icon={<IconExit />}
+                  aria-label="退出登录"
+                  onClick={() => void handleSignOut()}
+                />
+              </Tooltip>
             ) : null}
-          </nav>
-
-          <div className="topbar-context">
-            <span className={`live-indicator ${isStreaming ? "is-live" : ""}`}>
-              <i />
-              {hostData.streamState}
-            </span>
-            <span className="tenant-badge">{tenantCode}</span>
           </div>
-        </div>
 
-        <div className="topbar-tools">
-          <div className="tool-field host-picker">
-            <IconServerStroked />
-            <Select
-              value={expandedHostUID || undefined}
-              optionList={hostOptions}
-              placeholder="定位主机"
-              emptyContent="暂无主机"
-              onChange={(value) => setExpandedHostUID(String(value || ""))}
-            />
-          </div>
-          <Select
-            value={selectedWindowSec}
-            optionList={WINDOW_OPTIONS.map((option) => ({
-              label: option.label,
-              value: option.seconds,
-            }))}
-            className="window-picker"
-            aria-label="趋势时间范围"
-            onChange={(value) => setSelectedWindowSec(Number(value || 300))}
-          />
-          <Tooltip content="刷新主机列表">
+          <div className="mobile-tools">
             <Button
               className="icon-button"
               icon={<IconRefresh />}
               aria-label="刷新主机列表"
               onClick={() => void hostData.reloadHosts()}
             />
-          </Tooltip>
-
-          <span className="topbar-divider" />
-          <div className="user-identity">
-            <span className="user-avatar">{(user?.display_name || "访").slice(0, 1)}</span>
-            <span>
-              <strong>{user?.display_name || "访客"}</strong>
-              <small>{user ? (user.role === "admin" ? "管理员" : "成员") : "只读访问"}</small>
-            </span>
-          </div>
-          {user ? (
-            <Tooltip content="退出登录">
+            <Button
+              className="icon-button quiet"
+              icon={theme === "dark" ? <IconSunStroked /> : <IconMoonStroked />}
+              aria-label={theme === "dark" ? "切换浅色主题" : "切换深色主题"}
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+            />
+            {user ? (
               <Button
                 className="icon-button quiet"
                 icon={<IconExit />}
                 aria-label="退出登录"
                 onClick={() => void handleSignOut()}
               />
-            </Tooltip>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </header>
 

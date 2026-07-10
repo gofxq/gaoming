@@ -19,14 +19,14 @@ export function LoginPage() {
   return (
     <div className="auth-page">
       <section className="auth-card">
-        <div className="eyebrow">Gaoming Auth</div>
+        <div className="eyebrow">安全访问</div>
         <h1>登录暂未开放</h1>
         <p className="auth-copy">
           当前版本未配置网页登录方式。请联系管理员开通账号入口，或使用已有会话继续访问。
         </p>
         <div className="auth-meta">
-          <span className="meta-pill">Tenant: {tenantCode}</span>
-          <span className="meta-pill">{initializing ? "Checking Session" : "No Login Provider"}</span>
+          <span className="meta-pill">租户: {tenantCode}</span>
+          <span className="meta-pill">{initializing ? "正在检查会话" : "未配置登录方式"}</span>
         </div>
         {!initializing ? <div className="auth-error">没有可用的网页登录方式。</div> : null}
       </section>

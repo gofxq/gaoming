@@ -1,4 +1,4 @@
-import { Button, Progress, Tag, Tooltip, Typography } from "@douyinfe/semi-ui";
+import { Button, Progress, Tooltip, Typography } from "@douyinfe/semi-ui";
 import { IconClose, IconPulse, IconSearch, IconServer } from "@douyinfe/semi-icons";
 import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
@@ -18,14 +18,14 @@ import "./PcDashboardPage.css";
 const { Text } = Typography;
 
 const CHARTS: Array<{ title: string; metricKey: MetricKey; color: string }> = [
-  { title: "CPU", metricKey: "cpu_usage_pct", color: "#2563eb" },
-  { title: "内存", metricKey: "mem_used_pct", color: "#0f9f6e" },
-  { title: "磁盘", metricKey: "disk_used_pct", color: "#d97706" },
-  { title: "网络 RX", metricKey: "net_rx_bps", color: "#7c3aed" },
-  { title: "网络 TX", metricKey: "net_tx_bps", color: "#db2777" },
-  { title: "磁盘读", metricKey: "disk_read_bps", color: "#0891b2" },
-  { title: "磁盘写", metricKey: "disk_write_bps", color: "#ea580c" },
-  { title: "负载", metricKey: "load1", color: "#475569" },
+  { title: "CPU", metricKey: "cpu_usage_pct", color: "var(--accent)" },
+  { title: "内存", metricKey: "mem_used_pct", color: "var(--purple)" },
+  { title: "磁盘", metricKey: "disk_used_pct", color: "var(--warning)" },
+  { title: "网络 RX", metricKey: "net_rx_bps", color: "var(--success)" },
+  { title: "网络 TX", metricKey: "net_tx_bps", color: "#0a84ff" },
+  { title: "磁盘读", metricKey: "disk_read_bps", color: "#5e5ce6" },
+  { title: "磁盘写", metricKey: "disk_write_bps", color: "#ff9f0a" },
+  { title: "负载", metricKey: "load1", color: "var(--ink-secondary)" },
 ];
 
 const DETAIL_METRICS: Array<{ label: string; metricKey: MetricKey }> = [
@@ -103,9 +103,9 @@ export function PcDashboardPage() {
     <div className="pc-page">
       <header className="page-heading">
         <div>
-          <span className="section-kicker">INFRASTRUCTURE</span>
-          <h1>运行总览</h1>
-          <p>聚合所有节点的实时健康状态与资源负载。</p>
+          <span className="section-kicker">基础设施 · 现在</span>
+          <h1>每台主机，尽在掌握。</h1>
+          <p>实时查看所有节点的健康状态、资源负载与性能趋势。</p>
         </div>
         <div className="updated-at">
           <span>最近同步</span>
@@ -113,7 +113,7 @@ export function PcDashboardPage() {
         </div>
       </header>
 
-      <section className="cluster-summary glass-panel" aria-label="集群摘要">
+      <section className="cluster-summary surface-panel" aria-label="集群摘要">
         <SummaryStat label="全部主机" value={sortedHosts.length} tone="blue" />
         <SummaryStat label="运行正常" value={onlineCount} tone="green" />
         <SummaryStat label="需要关注" value={issueCount} tone="orange" />
@@ -122,7 +122,7 @@ export function PcDashboardPage() {
         <SummaryGauge label="平均内存" value={avgMem} tone="violet" />
       </section>
 
-      <section className="pc-panel glass-panel">
+      <section className="pc-host-section">
         <div className="panel-toolbar">
           <div>
             <h2>主机列表</h2>
@@ -165,7 +165,7 @@ export function PcDashboardPage() {
       </section>
 
       {expandedHost ? (
-        <section className="pc-panel pc-detail-panel glass-panel" aria-label={`${expandedHost.hostname} 主机详情`}>
+        <section className="pc-detail-panel surface-panel" aria-label={`${expandedHost.hostname} 主机详情`}>
           <div className="detail-heading">
             <div className="detail-identity">
               <span className={`detail-icon state-${stateTone(expandedHost.overall_state)}`}><IconServer /></span>
@@ -241,17 +241,17 @@ function averageMetric(hosts: HostSnapshot[], key: MetricKey) {
 function SummaryStat(props: { label: string; value: number; tone: string }) {
   return (
     <div className={`summary-stat tone-${props.tone}`}>
-      <span className="summary-icon"><IconServer /></span>
       <div><span>{props.label}</span><strong>{props.value}</strong></div>
     </div>
   );
 }
 
 function SummaryGauge(props: { label: string; value: number; tone: string }) {
+  const stroke = props.tone === "violet" ? "var(--purple)" : "var(--accent)";
   return (
     <div className={`summary-gauge tone-${props.tone}`}>
       <div><span>{props.label}</span><strong>{props.value.toFixed(1)}%</strong></div>
-      <Progress percent={Math.min(100, Math.max(0, props.value))} showInfo={false} />
+      <Progress percent={Math.min(100, Math.max(0, props.value))} showInfo={false} stroke={stroke} />
     </div>
   );
 }
@@ -282,9 +282,9 @@ function HostOverviewCard(props: { host: HostSnapshot; active: boolean; onClick:
       </div>
 
       <div className="pc-host-overview-foot">
-        <span>LOAD <strong>{Number(host.load1 || 0).toFixed(2)}</strong></span>
-        <span>METRIC <strong>{formatAgo(host.last_metric_at)}</strong></span>
-        <span>HEARTBEAT <strong>{formatAgo(host.last_agent_seen_at)}</strong></span>
+        <span>负载 <strong>{Number(host.load1 || 0).toFixed(2)}</strong></span>
+        <span>指标 <strong>{formatAgo(host.last_metric_at)}</strong></span>
+        <span>心跳 <strong>{formatAgo(host.last_agent_seen_at)}</strong></span>
       </div>
     </button>
   );
@@ -296,7 +296,12 @@ function MetricMini(props: { label: string; metricKey: MetricKey; value: number 
     <div className="pc-mini-metric">
       <div><span>{props.label}</span><strong>{formatMetricValue(props.metricKey, props.value)}</strong></div>
       {percentMetric ? (
-        <Progress percent={Math.min(100, Math.max(0, props.value))} showInfo={false} size="small" />
+        <Progress
+          percent={Math.min(100, Math.max(0, props.value))}
+          showInfo={false}
+          size="small"
+          stroke="var(--host-accent)"
+        />
       ) : <span className="metric-pulse"><i /><i /><i /><i /></span>}
     </div>
   );
@@ -320,7 +325,12 @@ function DetailMetric(props: { label: string; metricKey: MetricKey; value: numbe
         <strong>{formatMetricValue(props.metricKey, props.value)}</strong>
       </div>
       {percentMetric ? (
-        <Progress percent={Math.min(100, Math.max(0, props.value))} showInfo={false} size="small" />
+        <Progress
+          percent={Math.min(100, Math.max(0, props.value))}
+          showInfo={false}
+          size="small"
+          stroke="var(--accent)"
+        />
       ) : null}
     </div>
   );
@@ -352,20 +362,17 @@ function MetricChart(props: {
         return `${x.toFixed(2)},${y.toFixed(2)}`;
       }).join(" ")
     : "";
-  const areaPoints = drawable ? `${padX},${height - padY} ${linePoints} ${width - padX},${height - padY}` : "";
-
   return (
     <div className="pc-chart">
       <div className="pc-chart-head">
         <div><Text type="tertiary">{props.title}</Text><strong>{formatMetricValue(props.metricKey, props.value)}</strong></div>
-        <Tag>{props.windowLabel}</Tag>
+        <span className="chart-window">{props.windowLabel}</span>
       </div>
       <div className="pc-chart-frame">
         {drawable ? (
           <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-label={`${props.title} trend`}>
             <line x1="0" y1="30" x2={width} y2="30" className="chart-grid-line" />
             <line x1="0" y1="61" x2={width} y2="61" className="chart-grid-line" />
-            <polygon points={areaPoints} fill={props.color} opacity="0.08" />
             <polyline className="pc-chart-line" points={linePoints} style={{ stroke: props.color }} />
           </svg>
         ) : (

@@ -85,7 +85,7 @@ export function UsersPage() {
       <section className="panel">
         <div className="panel-head">
           <div>
-            <div className="eyebrow">Users</div>
+            <div className="eyebrow">成员与权限</div>
             <h2>用户管理</h2>
           </div>
           <p className="panel-note">管理员可查看用户，并调整角色与启用状态。</p>
@@ -93,7 +93,7 @@ export function UsersPage() {
 
         <div className="hero-meta">
           <span className="meta-pill">当前管理员: {user?.display_name || "--"}</span>
-          <span className="meta-pill">用户总数: {items.length}</span>
+          <span className="meta-pill">共 {items.length} 位用户</span>
         </div>
 
         {errorMessage ? <div className="auth-error">{errorMessage}</div> : null}
@@ -161,7 +161,7 @@ export function UsersPage() {
                     disabled={savingID === item.id}
                     onClick={() => void updateUser(item, { display_name: item.display_name })}
                   >
-                    {savingID === item.id ? "保存中..." : "刷新保存"}
+                    {savingID === item.id ? "保存中..." : "保存"}
                   </button>
                 </div>
               </div>
