@@ -261,13 +261,8 @@ go build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
 
 ## 📚 文档
 
-- [docs/00-summary.md](docs/00-summary.md)
-- [docs/01-data-model.md](docs/01-data-model.md)
-- [docs/02-contracts.md](docs/02-contracts.md)
-- [docs/03-runtime-flow.md](docs/03-runtime-flow.md)
-- [docs/04-layout.md](docs/04-layout.md)
-- [docs/05-local-run.md](docs/05-local-run.md)
-- [docs/06-repository-hygiene.md](docs/06-repository-hygiene.md)
-- [docs/07-oss-options.md](docs/07-oss-options.md)
-- [docs/08-persistence-runtime.md](docs/08-persistence-runtime.md)
-- [docs/plans/99-roadmap.md](docs/plans/99-roadmap.md)
+- [中文文档概要与索引](docs/README_cn.md)
+- [系统架构](docs/01-core/architecture.md)
+- [本地开发与验证](docs/02-guides/local-development.md)
+- [接口与数据模型](docs/03-reference/api-and-data.md)
+- [仓库结构](docs/03-reference/repository-layout.md)
