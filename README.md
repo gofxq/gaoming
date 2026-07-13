@@ -36,11 +36,6 @@ loop-interval-sec [5]: 1
 ## WEB
 ![web-demo](docs/gaoming.gofxq.com_default.png)
 
-## PWA
-| 横屏                                      | 竖屏｜                                     |                                          |
-| ----------------------------------------- | ------------------------------------------ | ---------------------------------------- | ----------------------------------------- |
-| ![png](<docs/pics/mobile_overview_-.png>) | ![text](<docs/pics/mobile_overview_I.png>) | ![text](<docs/pics/mobile_detail_-.png>) | ![text](<gdocs/pics/mobile_detail_I.png>) |
-
 ## ✨ 核心能力
 
 - Agent 自动注册、流式指标上报
