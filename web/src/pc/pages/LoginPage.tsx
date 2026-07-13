@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../../app/providers/AuthProvider";
-import { useTenant } from "../../app/providers/TenantProvider";
+import { useAuth } from "../../shared/features/auth/AuthProvider";
+import { useTenant } from "../../shared/features/tenant/TenantProvider";
+import { AppearanceControls } from "../components/appearance/AppearanceControls";
 
 export function LoginPage() {
   const location = useLocation();
@@ -18,6 +19,7 @@ export function LoginPage() {
 
   return (
     <div className="auth-page">
+      <AppearanceControls className="auth-appearance-controls" />
       <section className="auth-card">
         <div className="eyebrow">安全访问</div>
         <h1>登录暂未开放</h1>

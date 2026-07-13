@@ -438,6 +438,11 @@
   resolved "https://registry.npmmirror.com/@floating-ui/utils/-/utils-0.2.11.tgz#a269e055e40e2f45873bae9d1a2fdccbd314ea3f"
   integrity sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==
 
+"@fontsource/fusion-pixel-12px-proportional-sc@5.2.5":
+  version "5.2.5"
+  resolved "https://registry.npmmirror.com/@fontsource/fusion-pixel-12px-proportional-sc/-/fusion-pixel-12px-proportional-sc-5.2.5.tgz#3ab50777302e9d94d30fe65f2fafafe51b07da11"
+  integrity sha512-TMFojLE0JUJUqgoL1pRxohnm11u59BYSkogyN9VbTQp2kh1HkkQ1FSkPboce3GGQXPskNTip9+oRp3ju83U0tw==
+
 "@jridgewell/gen-mapping@^0.3.12", "@jridgewell/gen-mapping@^0.3.5":
   version "0.3.13"
   resolved "https://registry.npmmirror.com/@jridgewell/gen-mapping/-/gen-mapping-0.3.13.tgz#6342a19f44347518c93e43b1ac69deb3c4656a1f"

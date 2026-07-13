@@ -1,0 +1,163 @@
+:root[data-skin="pixel"] .topbar {
+  height: 52px;
+  border-bottom: 2px solid var(--line-strong);
+  background: var(--nav);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--line-strong) 30%, transparent);
+}
+
+:root[data-skin="pixel"] .brand-mark {
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  color: var(--surface);
+  background: var(--ink);
+  box-shadow: 3px 3px 0 var(--accent);
+}
+
+:root[data-skin="pixel"] .brand-copy strong,
+:root[data-skin="pixel"] .primary-nav a,
+:root[data-skin="pixel"] .tenant-badge,
+:root[data-skin="pixel"] .live-indicator,
+:root[data-skin="pixel"] .section-kicker,
+:root[data-skin="pixel"] .eyebrow {
+  letter-spacing: 0.06em;
+}
+
+:root[data-skin="pixel"] .primary-nav a.active::after {
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 9px);
+}
+
+:root[data-skin="pixel"] .live-indicator i,
+:root[data-skin="pixel"] .pc-status-chip i,
+:root[data-skin="pixel"] .status-badge i {
+  border-radius: 0;
+  box-shadow: 2px 2px 0 color-mix(in srgb, currentColor 35%, transparent);
+}
+
+:root[data-skin="pixel"] .tool-field,
+:root[data-skin="pixel"] .window-segments,
+:root[data-skin="pixel"] .auth-appearance-controls {
+  border-width: 2px;
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--line-strong) 36%, transparent);
+}
+
+:root[data-skin="pixel"] .window-segments {
+  padding: 2px;
+  border-radius: 0;
+  background: var(--surface);
+}
+
+:root[data-skin="pixel"] .window-segments button,
+:root[data-skin="pixel"] .icon-button.semi-button,
+:root[data-skin="pixel"] .search-field button {
+  border-radius: 0;
+}
+
+:root[data-skin="pixel"] .window-segments button.active {
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  color: var(--surface);
+  background: var(--accent);
+  box-shadow: 2px 2px 0 color-mix(in srgb, var(--line-strong) 45%, transparent);
+}
+
+:root[data-skin="pixel"] .icon-button.semi-button:hover,
+:root[data-skin="pixel"] .appearance-controls .icon-button.semi-button[aria-pressed="true"] {
+  outline: 1px solid var(--line-strong);
+  outline-offset: -2px;
+}
+
+:root[data-skin="pixel"] .content {
+  padding-top: 60px;
+}
+
+:root[data-skin="pixel"] .section-kicker::before,
+:root[data-skin="pixel"] .eyebrow::before {
+  content: "[ ";
+}
+
+:root[data-skin="pixel"] .section-kicker::after,
+:root[data-skin="pixel"] .eyebrow::after {
+  content: " ]";
+}
+
+:root[data-skin="pixel"] .surface-panel,
+:root[data-skin="pixel"] .panel,
+:root[data-skin="pixel"] .auth-card,
+:root[data-skin="pixel"] .pc-host-overview,
+:root[data-skin="pixel"] .pc-empty {
+  border-width: 2px;
+  box-shadow: 5px 5px 0 color-mix(in srgb, var(--line-strong) 38%, transparent);
+}
+
+:root[data-skin="pixel"] .auth-card {
+  position: relative;
+  overflow: hidden;
+}
+
+:root[data-skin="pixel"] .auth-card::before {
+  border: 2px solid var(--line-strong);
+  border-radius: 0;
+  color: var(--surface);
+  background: var(--accent);
+  box-shadow: 3px 3px 0 var(--line-strong);
+}
+
+:root[data-skin="pixel"] .auth-card::after {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 8px;
+  background: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 8px);
+  content: "";
+}
+
+:root[data-skin="pixel"] .meta-pill,
+:root[data-skin="pixel"] .auth-error,
+:root[data-skin="pixel"] .chip,
+:root[data-skin="pixel"] .user-cell select {
+  border-width: 2px;
+  border-radius: 0;
+}
+
+:root[data-skin="pixel"] .meta-pill {
+  border-style: dashed;
+}
+
+:root[data-skin="pixel"] .user-table {
+  border-top-width: 2px;
+}
+
+:root[data-skin="pixel"] .user-table-head {
+  color: var(--ink);
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 8px,
+    color-mix(in srgb, var(--line) 18%, transparent) 8px 9px
+  );
+}
+
+:root[data-skin="pixel"] .user-row {
+  border-top-style: dashed;
+}
+
+:root[data-skin="pixel"] .chip:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--line-strong);
+}
+
+:root[data-skin="pixel"] button:focus-visible,
+:root[data-skin="pixel"] a:focus-visible,
+:root[data-skin="pixel"] input:focus-visible,
+:root[data-skin="pixel"] select:focus-visible {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+
+:root[data-skin="pixel"] .semi-select-option-list,
+:root[data-skin="pixel"] .semi-tooltip-wrapper {
+  border-radius: 0;
+}

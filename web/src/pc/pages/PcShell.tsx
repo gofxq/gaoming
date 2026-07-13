@@ -2,45 +2,41 @@ import { Button, Select, Tooltip } from "@douyinfe/semi-ui";
 import {
   IconExit,
   IconHomeStroked,
-  IconMoonStroked,
   IconPulse,
   IconRefresh,
   IconServerStroked,
-  IconSunStroked,
   IconUserGroup,
 } from "@douyinfe/semi-icons";
 import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useAppConfig } from "../../app/providers/AppConfigProvider";
-import { useAuth } from "../../app/providers/AuthProvider";
-import { useTenant } from "../../app/providers/TenantProvider";
-import { WINDOW_OPTIONS } from "../../features/hosts/model";
-import { useLiveHostsData } from "../../features/hosts/useLiveHostsData";
+import { useAppConfig } from "../../shared/features/config/AppConfigProvider";
+import { useAuth } from "../../shared/features/auth/AuthProvider";
+import { useTenant } from "../../shared/features/tenant/TenantProvider";
+import { WINDOW_OPTIONS } from "../../shared/features/hosts/model";
+import { useLiveHostsData } from "../../shared/features/hosts/useLiveHostsData";
+import { AppearanceControls } from "../components/appearance/AppearanceControls";
 
-export type ShellOutletContext = ReturnType<typeof useLiveHostsData> & {
+export type PcShellOutletContext = ReturnType<typeof useLiveHostsData> & {
   selectedWindowSec: number;
   setSelectedWindowSec: (value: number) => void;
   expandedHostUID: string;
   setExpandedHostUID: (value: string | ((current: string) => string)) => void;
 };
 
-export function Shell() {
+export function PcShell() {
   const { config } = useAppConfig();
   const { tenantCode } = useTenant();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [selectedWindowSec, setSelectedWindowSec] = useState(300);
   const [expandedHostUID, setExpandedHostUID] = useState("");
-  const [theme, setTheme] = useState<"light" | "dark">(() =>
-    document.documentElement.dataset.theme === "dark" ? "dark" : "light",
-  );
   const hostData = useLiveHostsData({
     apiBaseUrl: config.apiBaseUrl,
     streamPath: config.streamPath,
     tenantCode,
   });
 
-  const outletContext: ShellOutletContext = {
+  const outletContext: PcShellOutletContext = {
     ...hostData,
     selectedWindowSec,
     setSelectedWindowSec,
@@ -61,12 +57,6 @@ export function Shell() {
     document.body.classList.add("app-scroll");
     return () => document.body.classList.remove("app-scroll");
   }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.body.toggleAttribute("theme-mode", theme === "dark");
-    window.localStorage.setItem("gaoming-theme", theme);
-  }, [theme]);
 
   useEffect(() => {
     setExpandedHostUID("");
@@ -149,14 +139,7 @@ export function Shell() {
                 onClick={() => void hostData.reloadHosts()}
               />
             </Tooltip>
-            <Tooltip content={theme === "dark" ? "切换浅色主题" : "切换深色主题"}>
-              <Button
-                className="icon-button quiet theme-toggle"
-                icon={theme === "dark" ? <IconSunStroked /> : <IconMoonStroked />}
-                aria-label={theme === "dark" ? "切换浅色主题" : "切换深色主题"}
-                onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-              />
-            </Tooltip>
+            <AppearanceControls />
 
             <span className="topbar-divider" />
             <div className="user-identity">
@@ -185,12 +168,7 @@ export function Shell() {
               aria-label="刷新主机列表"
               onClick={() => void hostData.reloadHosts()}
             />
-            <Button
-              className="icon-button quiet"
-              icon={theme === "dark" ? <IconSunStroked /> : <IconMoonStroked />}
-              aria-label={theme === "dark" ? "切换浅色主题" : "切换深色主题"}
-              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            />
+            <AppearanceControls className="appearance-controls-mobile" />
             {user ? (
               <Button
                 className="icon-button quiet"

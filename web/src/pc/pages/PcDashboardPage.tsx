@@ -2,7 +2,7 @@ import { Button, Progress, Tooltip, Typography } from "@douyinfe/semi-ui";
 import { IconClose, IconPulse, IconSearch, IconServer } from "@douyinfe/semi-icons";
 import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import type { ShellOutletContext } from "../components/layout/Shell";
+import type { PcShellOutletContext } from "./PcShell";
 import {
   currentWindowLabel,
   formatAgo,
@@ -12,8 +12,9 @@ import {
   type HostHistoryMap,
   type HostSnapshot,
   type MetricKey,
-} from "../features/hosts/model";
+} from "../../shared/features/hosts/model";
 import "./PcDashboardPage.css";
+import "../components/pixel/PcDashboardPixel.css";
 
 const { Text } = Typography;
 
@@ -79,7 +80,7 @@ function latestPoint(
 
 export function PcDashboardPage() {
   const { expandedHostUID, histories, lastUpdated, selectedWindowSec, setExpandedHostUID, sortedHosts } =
-    useOutletContext<ShellOutletContext>();
+    useOutletContext<PcShellOutletContext>();
   const [query, setQuery] = useState("");
 
   const expandedHost = sortedHosts.find((host) => host.host_uid === expandedHostUID);

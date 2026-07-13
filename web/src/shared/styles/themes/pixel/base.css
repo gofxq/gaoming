@@ -1,0 +1,12 @@
+:root[data-skin="pixel"] body {
+  background-color: var(--page);
+  background-image:
+    linear-gradient(var(--chart-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--chart-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+:root[data-skin="pixel"] body,
+:root[data-skin="pixel"] body * {
+  font-family: var(--font-pixel);
+}

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useAppConfig } from "../../app/providers/AppConfigProvider";
-import { useAuth } from "../../app/providers/AuthProvider";
-import { requestJson } from "../../lib/http";
+import { useAppConfig } from "../../shared/features/config/AppConfigProvider";
+import { useAuth } from "../../shared/features/auth/AuthProvider";
+import { requestJson } from "../../shared/lib/http";
 
 type UserRecord = {
   id: number;

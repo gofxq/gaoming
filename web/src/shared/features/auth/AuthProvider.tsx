@@ -7,7 +7,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { useAppConfig } from "./AppConfigProvider";
+import { useAppConfig } from "../config/AppConfigProvider";
 
 type AuthUser = {
   id: number;

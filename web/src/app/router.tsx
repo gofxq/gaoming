@@ -1,9 +1,9 @@
 import { Navigate, Outlet, createBrowserRouter, useLocation, useParams } from "react-router-dom";
-import { useAuth } from "./providers/AuthProvider";
-import { Shell } from "../components/layout/Shell";
-import { LoginPage } from "../pages/auth/LoginPage";
-import { UsersPage } from "../pages/admin/UsersPage";
-import { PcDashboardPage } from "../pc/PcDashboardPage";
+import { useAuth } from "../shared/features/auth/AuthProvider";
+import { PcShell } from "../pc/pages/PcShell";
+import { LoginPage } from "../pc/pages/LoginPage";
+import { UsersPage } from "../pc/pages/UsersPage";
+import { PcDashboardPage } from "../pc/pages/PcDashboardPage";
 
 function RootRedirect() {
   return <Navigate to="/default" replace />;
@@ -37,7 +37,7 @@ function RequireAdmin() {
 }
 
 function TenantEntry() {
-  return <Shell />;
+  return <PcShell />;
 }
 
 export const router = createBrowserRouter([

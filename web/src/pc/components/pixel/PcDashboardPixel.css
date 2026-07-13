@@ -1,0 +1,114 @@
+:root[data-skin="pixel"] .page-heading h1::before,
+:root[data-skin="pixel"] .panel-toolbar h2::before,
+:root[data-skin="pixel"] .detail-heading h2::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+:root[data-skin="pixel"] .cluster-summary {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 12px,
+    color-mix(in srgb, var(--line) 10%, transparent) 12px 13px
+  );
+}
+
+:root[data-skin="pixel"] .summary-stat::after,
+:root[data-skin="pixel"] .summary-gauge::after,
+:root[data-skin="pixel"] .pc-mini-metric:not(:last-child)::after,
+:root[data-skin="pixel"] .pc-summary-item:not(:last-child)::after {
+  width: 2px;
+}
+
+:root[data-skin="pixel"] .search-field {
+  border-width: 2px;
+  border-radius: 0;
+  box-shadow: 3px 3px 0 color-mix(in srgb, var(--line-strong) 30%, transparent);
+}
+
+:root[data-skin="pixel"] .search-field:focus-within {
+  box-shadow: 3px 3px 0 var(--accent);
+}
+
+:root[data-skin="pixel"] .pc-host-grid {
+  gap: 16px;
+}
+
+:root[data-skin="pixel"] .pc-host-overview {
+  background-image:
+    linear-gradient(90deg, var(--host-accent) 8px, transparent 8px),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 27px,
+      color-mix(in srgb, var(--line) 10%, transparent) 27px 28px
+    );
+}
+
+:root[data-skin="pixel"] .pc-host-overview:hover {
+  transform: translate(-2px, -2px);
+  border-color: var(--line-strong);
+  box-shadow: 7px 7px 0 color-mix(in srgb, var(--host-accent) 44%, transparent);
+}
+
+:root[data-skin="pixel"] .pc-host-overview.active {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+:root[data-skin="pixel"] .host-icon,
+:root[data-skin="pixel"] .detail-icon,
+:root[data-skin="pixel"] .pc-empty > span,
+:root[data-skin="pixel"] .pc-status-chip,
+:root[data-skin="pixel"] .status-badge {
+  border: 1px solid currentColor;
+  border-radius: 0;
+}
+
+:root[data-skin="pixel"] .pc-status-chip,
+:root[data-skin="pixel"] .status-badge {
+  box-shadow: 2px 2px 0 color-mix(in srgb, currentColor 26%, transparent);
+}
+
+:root[data-skin="pixel"] .semi-progress-line,
+:root[data-skin="pixel"] .semi-progress-line-inner {
+  border-radius: 0;
+}
+
+:root[data-skin="pixel"] .semi-progress-line-inner {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0 6px,
+    color-mix(in srgb, var(--surface) 48%, transparent) 6px 8px
+  );
+}
+
+:root[data-skin="pixel"] .metric-pulse i {
+  border-radius: 0;
+  opacity: 0.7;
+}
+
+:root[data-skin="pixel"] .pc-detail-metric-grid {
+  gap: 2px;
+  border-width: 2px;
+}
+
+:root[data-skin="pixel"] .pc-detail-metric {
+  background-image: linear-gradient(135deg, transparent 88%, var(--accent-soft) 88%);
+}
+
+:root[data-skin="pixel"] .pc-chart-grid {
+  border-top-width: 2px;
+}
+
+:root[data-skin="pixel"] .pc-chart-line {
+  stroke-width: 3;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  shape-rendering: crispEdges;
+}
+
+:root[data-skin="pixel"] .chart-grid-line {
+  stroke-dasharray: 3 5;
+  shape-rendering: crispEdges;
+}
