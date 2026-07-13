@@ -49,13 +49,15 @@
 ## Web
 
 - `web/src/app`：Router 和应用级 Provider。
-- `web/src/components/layout`：应用壳层。
-- `web/src/features/hosts`：主机模型和实时数据 Hook。
-- `web/src/pc`：桌面 Dashboard。
-- `web/src/pages/auth`、`web/src/pages/admin`：登录提示和用户管理。
-- `web/src/lib`：HTTP 与 Query Client。
+- `web/src/pc/pages`：PC 页面和 Semi UI 应用壳层。
+- `web/src/pc/components/pixel`：PC 专属 Pixel 展示覆写。
+- `web/src/h5/pages`、`web/src/h5/components/pixel`：H5 页面和 H5 Pixel 展示边界。
+- `web/src/shared/features`：跨端共享的鉴权、租户、配置、外观状态和主机实时数据。
+- `web/src/shared/lib`：HTTP 与 Query Client。
+- `web/src/shared/styles/themes/pixel`：Pixel 字体、通用 token 和基础材质。
 - `web/src/styles`：全局样式。
-- `web/DESIGN_SYSTEM.md`：前端视觉与组件规范。
+- `web/DESIGN_SYSTEM.md`：现代皮肤和全局组件规范。
+- `web/PIXEL_DESIGN_SYSTEM.md`：Pixel 皮肤设计与实现规范。
 
 ## 运行与验证入口
 

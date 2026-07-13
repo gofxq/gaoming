@@ -2,6 +2,8 @@
 
 本规范服务于 Gaoming 主机监控、实时指标与租户管理界面。视觉语言强调高对比排版、克制留白、精细材质和内容驱动的阅读节奏。Gaoming 是高频使用的运维工具：信息密度、状态识别与操作效率优先于展示性效果。
 
+本文描述现代皮肤及全局组件规则。像素皮肤的 token、字体、组件形态和实现边界见 [PIXEL_DESIGN_SYSTEM.md](./PIXEL_DESIGN_SYSTEM.md)。
+
 ## 1. Design direction
 
 ### 1.1 Core principles
@@ -192,7 +194,8 @@ backdrop-filter: saturate(180%) blur(20px);
 
 ## 8. Implementation rules
 
-- 全局 token 和应用壳层位于 `src/styles/global.css`；页面专属样式留在对应页面样式文件。
+- 现代皮肤的全局 token 位于 `src/styles/global.css`；页面专属样式留在对应页面样式文件。
+- Pixel 通用 token/字体位于 `src/shared/styles/themes/pixel`，PC/H5 展示覆写分别位于各端的 `components/pixel`。
 - 组件优先复用 Semi UI 与 `@douyinfe/semi-icons`，不得为常见图标手绘 SVG。
 - 新页面先复用语义 token，不创建只差轻微色值的新 token。
 - 添加容器前先判断能否用留白、分隔线或网格完成，禁止卡片嵌套卡片。

@@ -271,5 +271,5 @@ Schema 由 `deployments/sql/init.sql` 在 PostgreSQL 数据卷首次初始化时
 | ingest 处理 | `services/ingest-gateway/internal/service/service.go` |
 | master HTTP/SSE | `services/master-api/internal/transport/http` |
 | Web 路由 | `web/src/app/router.tsx` |
-| Web 实时数据 | `web/src/features/hosts/useLiveHostsData.ts` |
+| Web 实时数据 | `web/src/shared/features/hosts/useLiveHostsData.ts` |
 | 数据库 Schema | `deployments/sql/init.sql` |

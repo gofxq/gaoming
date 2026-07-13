@@ -50,7 +50,7 @@ Agent 采集主机指标
 | [接口与数据模型](./03-reference/api-and-data.md) | HTTP、gRPC、SSE、状态码、指标和存储结构 | 前后端开发 |
 | [仓库结构](./03-reference/repository-layout.md) | 目录职责和关键代码入口 | 新贡献者 |
 
-前端视觉规则单独维护在 [`web/DESIGN_SYSTEM.md`](../web/DESIGN_SYSTEM.md)，贡献与检查流程见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
+前端视觉规则单独维护在 [`web/DESIGN_SYSTEM.md`](../web/DESIGN_SYSTEM.md)，Pixel 皮肤规范见 [`web/PIXEL_DESIGN_SYSTEM.md`](../web/PIXEL_DESIGN_SYSTEM.md)，贡献与检查流程见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
 
 ## 快速开始
 

@@ -2,7 +2,7 @@
 
 这个目录用于承载 `Gaoming` 的同仓前端项目。
 
-界面设计 token、毛玻璃层级、组件规则与响应式约束见 [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)。
+现代皮肤和全局组件规则见 [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)，像素皮肤规范见 [PIXEL_DESIGN_SYSTEM.md](./PIXEL_DESIGN_SYSTEM.md)。
 
 当前目标不是立刻把所有页面重写完，而是先把一个独立、可演进的 React 工程边界落下来，让后续的鉴权、分租户、前端配置能力有稳定落点。
 
@@ -38,45 +38,36 @@ make docker-up-full
 ## 推荐目录
 
 ```text
-web/
-  index.html
-  package.json
-  tsconfig.json
-  tsconfig.node.json
-  vite.config.ts
-  src/
-    app/
-      App.tsx
-      router.tsx
-      providers/
-        AppProviders.tsx
-        AuthProvider.tsx
-        TenantProvider.tsx
-        AppConfigProvider.tsx
-    components/
-      layout/
-        Shell.tsx
-    pages/
-      dashboard/
-        DashboardPage.tsx
-        dashboard.ts
-    styles/
-      global.css
-    main.tsx
+src/
+  app/                         # 应用入口、路由和 Provider 装配
+  pc/
+    pages/                     # PC 页面和 Semi UI 壳层
+    components/pixel/          # PC 专属 Pixel 展示覆写
+  h5/
+    pages/                     # IonPage / IonContent 页面
+    components/pixel/          # H5 专属 Pixel 展示覆写
+  shared/
+    features/                  # API、状态、表单和 payload
+    lib/                       # HTTP、Query Client 等基础设施
+    styles/themes/pixel/       # Pixel token、字体和基础材质
+  styles/global.css            # 现代皮肤 token 和全局样式
+  main.tsx
 ```
 
 ## 目录职责
 
 - `src/app`
-  放应用级入口能力，包括路由、全局 provider、应用壳层装配。
-- `src/app/providers`
-  放全局上下文，不把鉴权、租户、前端配置直接散落到页面中。
-- `src/pages`
-  放路由页面和页面级数据模型。当前 dashboard 已经迁入 React，并在同目录维护页面状态和格式化工具。
-- `src/components`
-  放跨页面复用的视图组件。先从布局组件开始，不要一开始就抽太细。
+  放应用入口、路由和全局 Provider 装配，不承载平台专属展示。
+- `src/pc`、`src/h5`
+  放各端页面、布局和必要的 Pixel 展示变体；不得复制共享业务状态。
+- `src/shared/features`
+  放鉴权、租户、配置、外观状态和主机实时数据等跨端能力。
+- `src/shared/lib`
+  放与具体页面无关的 HTTP 和数据查询基础设施。
+- `src/shared/styles/themes/pixel`
+  放跨端 Pixel 字体、语义 token 和基础材质。
 - `src/styles`
-  放全局样式和设计 token。
+  放现代皮肤 token 和当前应用的全局样式。
 
 ## 当前建议的落地方式
 
@@ -114,5 +105,5 @@ web/
 
 ## 后续建议
 
-- 后续增加 `src/lib/http.ts` 统一封装 API client。
-- 当页面数变多时，再补 `entities/`、`features/` 等更细分层，不要一开始过度设计。
+- API、状态和 payload 优先沉淀到 `src/shared/features`，避免 PC/H5 重复实现。
+- 只有 CSS 无法表达展示差异时，才在各端增加 Pixel 组件变体。
