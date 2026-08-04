@@ -48,6 +48,8 @@ type HostStateStore interface {
 
 type MetricWindowStore interface {
 	AppendHeartbeatMetrics(ctx context.Context, hostUID string, now time.Time, digest contracts.AgentDigest) error
+	SaveMetricSnapshot(ctx context.Context, hostUID string, snapshot contracts.MetricSnapshot) error
+	GetMetricSnapshot(ctx context.Context, hostUID string) (contracts.MetricSnapshot, bool, error)
 	GetHostMetricHistory(ctx context.Context, hostUID string) (map[state.MetricKey][]state.MetricPoint, error)
 	GetAllHostMetricHistory(ctx context.Context, hostUIDs []string) (map[string]map[state.MetricKey][]state.MetricPoint, error)
 }

@@ -1,6 +1,11 @@
 package service
 
-import "time"
+import (
+	"time"
+
+	monitorv1 "github.com/gofxq/gaoming/api/gen/go/monitor/v1"
+	"github.com/gofxq/gaoming/pkg/contracts"
+)
 
 type systemMetrics struct {
 	CPUUsagePct       float64
@@ -19,6 +24,10 @@ type systemMetrics struct {
 	NetTxBPS          int64
 	NetRxPacketsPS    int64
 	NetTxPacketsPS    int64
+	ExtraPoints       []contracts.MetricPoint
+	Capabilities      []string
+	Collectors        []contracts.CollectorStatus
+	Structured        *monitorv1.SystemMetrics
 }
 
 type systemSampler interface {

@@ -48,6 +48,27 @@ export type MetricPoint = {
   value: number;
 };
 
+export type CollectedMetricPoint = {
+  name: string;
+  value: number;
+  ts?: string;
+  labels?: Record<string, string>;
+};
+
+export type CollectorStatus = {
+  name: string;
+  state: number;
+  metric_names?: string[];
+  duration_micros?: number;
+  timed_out?: boolean;
+};
+
+export type MetricSnapshot = {
+  collected_at: string;
+  points: CollectedMetricPoint[];
+  collectors?: CollectorStatus[];
+};
+
 export type MetricLatestMap = Partial<Record<MetricKey, MetricPoint>>;
 export type HostHistoryMap = Partial<Record<MetricKey, MetricPoint[]>>;
 
@@ -62,6 +83,10 @@ export type HostUpsertPayload = {
   item?: HostSnapshot;
   latest?: MetricLatestMap;
   server_time?: string;
+};
+
+export type HostMetricSnapshotPayload = {
+  snapshot?: MetricSnapshot | null;
 };
 
 export type HostDeletePayload = {
@@ -271,6 +296,45 @@ export function formatMetricValue(metricKey: MetricKey, value: number) {
     default:
       return Number(value || 0).toFixed(2);
   }
+}
+
+export function formatCollectedMetricValue(metricName: string, value: number) {
+  const numericValue = Number(value || 0);
+  if (metricName.endsWith("_pct")) {
+    return formatPercent(numericValue);
+  }
+  if (metricName.endsWith("_bps")) {
+    return formatBps(numericValue);
+  }
+  if (metricName.endsWith("_bytes") || metricName.endsWith("_bytes_total")) {
+    return formatBytes(numericValue);
+  }
+  if (metricName.endsWith("_kib")) {
+    return `${formatNumber(numericValue)} KiB`;
+  }
+  if (metricName.endsWith("_mhz")) {
+    return `${formatNumber(numericValue)} MHz`;
+  }
+  if (metricName.endsWith("_celsius")) {
+    return `${formatNumber(numericValue)} °C`;
+  }
+  if (metricName.endsWith("_seconds")) {
+    return `${formatNumber(numericValue)} s`;
+  }
+  if (metricName.endsWith("_milliseconds_total")) {
+    return `${formatNumber(numericValue)} ms`;
+  }
+  if (metricName.endsWith("_packets_ps")) {
+    return `${formatNumber(numericValue)} pkt/s`;
+  }
+  return formatNumber(numericValue);
+}
+
+function formatNumber(value: number) {
+  if (Number.isInteger(value)) {
+    return value.toLocaleString();
+  }
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 export function formatAgo(isoTime?: string) {

@@ -36,6 +36,9 @@ func (s *Server) RegisterAgent(ctx context.Context, req *monitorv1.RegisterAgent
 func (s *Server) PushMetricBatch(ctx context.Context, req *monitorv1.PushMetricBatchRequest) (*monitorv1.Ack, error) {
 	resp, err := s.svc.PushMetricBatch(ctx, fromProtoPushMetricBatchRequest(req))
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidMetricBatch) {
+			return nil, grpcstatus.Error(codes.InvalidArgument, err.Error())
+		}
 		if err == hostruntime.ErrTenantNotFound {
 			return nil, grpcstatus.Error(codes.FailedPrecondition, err.Error())
 		}
@@ -59,6 +62,9 @@ func (s *Server) StreamMetricBatches(stream monitorv1.MetricsIngestService_Strea
 
 		resp, err := s.svc.PushMetricBatch(stream.Context(), fromProtoPushMetricBatchRequest(req))
 		if err != nil {
+			if errors.Is(err, service.ErrInvalidMetricBatch) {
+				return grpcstatus.Error(codes.InvalidArgument, err.Error())
+			}
 			if err == hostruntime.ErrTenantNotFound {
 				return grpcstatus.Error(codes.FailedPrecondition, err.Error())
 			}
@@ -126,6 +132,16 @@ func fromProtoPushMetricBatchRequest(req *monitorv1.PushMetricBatchRequest) cont
 			Labels: cloneStringMap(point.GetLabels()),
 		})
 	}
+	collectors := make([]contracts.CollectorStatus, 0, len(req.GetCollectors()))
+	for _, collector := range req.GetCollectors() {
+		collectors = append(collectors, contracts.CollectorStatus{
+			Name:           collector.GetName(),
+			State:          contracts.CollectorState(collector.GetState()),
+			MetricNames:    append([]string(nil), collector.GetMetricNames()...),
+			DurationMicros: collector.GetDurationMicros(),
+			TimedOut:       collector.GetTimedOut(),
+		})
+	}
 
 	return contracts.PushMetricBatchRequest{
 		HostUID:     hostUID,
@@ -152,7 +168,8 @@ func fromProtoPushMetricBatchRequest(req *monitorv1.PushMetricBatchRequest) cont
 			Capabilities: append([]string(nil), req.GetAgent().GetCapabilities()...),
 			BootTime:     asTime(req.GetAgent().GetBootTime()),
 		},
-		Points: points,
+		Points:     points,
+		Collectors: collectors,
 	}
 }
 

@@ -1,0 +1,15 @@
+^\.git/
+^web/node_modules/
+^h5/node_modules/
+^web/dist/
+^h5/dist/
+^web/\.vite/
+^h5/\.vite/
+^bin/
+^dist/
+^tmp/
+^\.tmp/
+^coverage/
+.*\.png$
+.*\.ico$
+.*\.tsbuildinfo$

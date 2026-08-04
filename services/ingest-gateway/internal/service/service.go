@@ -75,6 +75,9 @@ func (s *Service) PushMetricBatch(ctx context.Context, req contracts.PushMetricB
 
 func (s *Service) processMetricBatch(ctx context.Context, req contracts.PushMetricBatchRequest) (contracts.AckResponse, error) {
 	now := s.clock.Now()
+	if err := validateMetricBatch(req); err != nil {
+		return contracts.AckResponse{}, err
+	}
 	digest := digestFromMetricBatch(req)
 
 	snapshot, err := s.hostStore.ReportMetrics(ctx, req, digest, now)
@@ -82,6 +85,21 @@ func (s *Service) processMetricBatch(ctx context.Context, req contracts.PushMetr
 		return contracts.AckResponse{}, err
 	}
 	if err := s.metricStore.AppendHeartbeatMetrics(ctx, req.HostUID, now, digest); err != nil {
+		return contracts.AckResponse{}, err
+	}
+	collectedAt := req.CollectedAt
+	if collectedAt.IsZero() {
+		collectedAt = now
+	}
+	points := req.Points
+	if points == nil {
+		points = make([]contracts.MetricPoint, 0)
+	}
+	if err := s.metricStore.SaveMetricSnapshot(ctx, req.HostUID, contracts.MetricSnapshot{
+		CollectedAt: collectedAt,
+		Points:      points,
+		Collectors:  req.Collectors,
+	}); err != nil {
 		return contracts.AckResponse{}, err
 	}
 	if err := s.eventBus.PublishHostUpsert(ctx, snapshot); err != nil {

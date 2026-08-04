@@ -98,6 +98,10 @@ func (s *Service) GetAllHostMetricHistory(ctx context.Context, hostUIDs []string
 	return s.metricStore.GetAllHostMetricHistory(ctx, hostUIDs)
 }
 
+func (s *Service) GetMetricSnapshot(ctx context.Context, hostUID string) (contracts.MetricSnapshot, bool, error) {
+	return s.metricStore.GetMetricSnapshot(ctx, hostUID)
+}
+
 func (s *Service) GetHost(ctx context.Context, hostUID string, tenantCode string) (state.HostSnapshot, bool, error) {
 	return s.hostStore.GetHost(ctx, hostUID, tenantCode)
 }

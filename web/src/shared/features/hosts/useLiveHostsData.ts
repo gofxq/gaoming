@@ -6,9 +6,11 @@ import {
   sortHosts,
   type HostDeletePayload,
   type HostHistoryMap,
+  type HostMetricSnapshotPayload,
   type HostSnapshot,
   type HostSyncPayload,
   type HostUpsertPayload,
+  type MetricSnapshot,
 } from "./model";
 
 const HISTORY_RETENTION_SEC = 3600;
@@ -27,6 +29,7 @@ export function useLiveHostsData(props: {
   const { apiBaseUrl, streamPath, tenantCode } = props;
   const [agents, setAgents] = useState<Record<string, HostSnapshot>>({});
   const [histories, setHistories] = useState<Record<string, HostHistoryMap>>({});
+  const [metricSnapshots, setMetricSnapshots] = useState<Record<string, MetricSnapshot>>({});
   const [streamState, setStreamState] = useState("连接中");
   const [streamEventCount, setStreamEventCount] = useState(0);
   const [lastUpdated, setLastUpdated] = useState("");
@@ -54,10 +57,38 @@ export function useLiveHostsData(props: {
     });
   }, [hostsUrl]);
 
+  const loadMetricSnapshot = useCallback(async (hostUID: string) => {
+    if (!hostUID) {
+      return;
+    }
+    const encodedHostUID = encodeURIComponent(hostUID);
+    const url = buildTenantScopedUrl(`${apiBaseUrl}/hosts/${encodedHostUID}/metrics/latest`, tenantCode);
+    const response = await fetch(url, { credentials: "include" });
+    if (!response.ok) {
+      throw new Error(`Failed to load metric snapshot: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as HostMetricSnapshotPayload;
+    setMetricSnapshots((current) => {
+      if (!payload.snapshot) {
+        const next = { ...current };
+        delete next[hostUID];
+        return next;
+      }
+      const currentCollectedAt = new Date(current[hostUID]?.collected_at || 0).getTime();
+      const nextCollectedAt = new Date(payload.snapshot.collected_at).getTime();
+      if (Number.isFinite(currentCollectedAt) && currentCollectedAt > nextCollectedAt) {
+        return current;
+      }
+      return { ...current, [hostUID]: payload.snapshot };
+    });
+  }, [apiBaseUrl, tenantCode]);
+
   useEffect(() => {
     startTransition(() => {
       setAgents({});
       setHistories({});
+      setMetricSnapshots({});
       setStreamState("连接中");
       setStreamEventCount(0);
       setLastUpdated("");
@@ -156,6 +187,11 @@ export function useLiveHostsData(props: {
           delete next[payload.host_uid!];
           return next;
         });
+        setMetricSnapshots((current) => {
+          const next = { ...current };
+          delete next[payload.host_uid!];
+          return next;
+        });
         setLastUpdated(payload.server_time || "");
       });
     });
@@ -171,6 +207,8 @@ export function useLiveHostsData(props: {
     agents,
     histories,
     lastUpdated,
+    loadMetricSnapshot,
+    metricSnapshots,
     reloadHosts,
     sortedHosts,
     streamEventCount,

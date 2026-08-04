@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestPushMetricsWithDigestGRPC(t *testing.T) {
@@ -54,8 +55,11 @@ func TestPushMetricsWithDigestGRPC(t *testing.T) {
 	now := time.Now().UTC()
 	digest := agent.digest(now)
 
-	if err := agent.pushMetricsWithDigest(context.Background(), now, digest); err != nil {
-		t.Fatalf("pushMetricsWithDigest: %v", err)
+	metrics := systemMetrics{Structured: &monitorv1.SystemMetrics{
+		Host: &monitorv1.HostMetrics{ProcessCount: 7},
+	}}
+	if err := agent.pushMetrics(context.Background(), now, digest, metrics); err != nil {
+		t.Fatalf("pushMetrics: %v", err)
 	}
 
 	if recorder.lastRequest == nil {
@@ -78,6 +82,42 @@ func TestPushMetricsWithDigestGRPC(t *testing.T) {
 	}
 	if len(recorder.lastRequest.Points) == 0 {
 		t.Fatal("expected metric points to be sent")
+	}
+	if got := recorder.lastRequest.GetSystemMetrics().GetHost().GetProcessCount(); got != 7 {
+		t.Fatalf("expected structured system metrics, got process count %d", got)
+	}
+}
+
+func TestPushMetricsReportsAdaptiveCollectors(t *testing.T) {
+	now := time.Now().UTC()
+	request := toProtoPushMetricBatchRequest(contracts.PushMetricBatchRequest{
+		Points: []contracts.MetricPoint{{
+			Name:   "host_cpu_usage_pct",
+			Value:  12.5,
+			TS:     now,
+			Labels: map[string]string{"cpu": "0"},
+		}},
+		Collectors: []contracts.CollectorStatus{{
+			Name:           "cpu",
+			State:          contracts.CollectorStateDegraded,
+			MetricNames:    []string{"host_cpu_usage_pct"},
+			DurationMicros: 123,
+			TimedOut:       true,
+		}},
+	})
+
+	if len(request.GetCollectors()) != 1 {
+		t.Fatalf("expected one collector status, got %d", len(request.GetCollectors()))
+	}
+	collector := request.GetCollectors()[0]
+	if collector.GetName() != "cpu" || collector.GetState() != monitorv1.CollectorState_COLLECTOR_STATE_DEGRADED {
+		t.Fatalf("unexpected collector status: %+v", collector)
+	}
+	if collector.GetDurationMicros() != 123 || !collector.GetTimedOut() {
+		t.Fatalf("expected collector timing metadata, got %+v", collector)
+	}
+	if got := request.GetPoints()[0].GetLabels()["cpu"]; got != "0" {
+		t.Fatalf("expected cpu label to survive conversion, got %q", got)
 	}
 }
 
@@ -109,6 +149,7 @@ func TestRunStopsOnInvalidTenant(t *testing.T) {
 		},
 	}, logx.NewNop())
 	defer agent.Close()
+	agent.sampler = fixedSampler{}
 
 	err = agent.Run(context.Background())
 	if grpcstatus.Code(err) != codes.FailedPrecondition {
@@ -132,8 +173,7 @@ type recordingIngestServer struct {
 }
 
 func (s *recordingIngestServer) RegisterAgent(_ context.Context, req *monitorv1.RegisterAgentRequest) (*monitorv1.RegisterAgentResponse, error) {
-	copied := *req
-	s.lastRegister = &copied
+	s.lastRegister = proto.Clone(req).(*monitorv1.RegisterAgentRequest)
 	return &monitorv1.RegisterAgentResponse{
 		Ack:        &monitorv1.Ack{},
 		HostUid:    "host-test",
@@ -142,9 +182,7 @@ func (s *recordingIngestServer) RegisterAgent(_ context.Context, req *monitorv1.
 }
 
 func (s *recordingIngestServer) PushMetricBatch(_ context.Context, req *monitorv1.PushMetricBatchRequest) (*monitorv1.Ack, error) {
-	copied := *req
-	copied.Points = append([]*monitorv1.MetricPoint(nil), req.Points...)
-	s.lastRequest = &copied
+	s.lastRequest = proto.Clone(req).(*monitorv1.PushMetricBatchRequest)
 	return &monitorv1.Ack{}, nil
 }
 
@@ -153,9 +191,7 @@ func (s *recordingIngestServer) StreamMetricBatches(stream monitorv1.MetricsInge
 	if err != nil {
 		return err
 	}
-	copied := *req
-	copied.Points = append([]*monitorv1.MetricPoint(nil), req.Points...)
-	s.lastRequest = &copied
+	s.lastRequest = proto.Clone(req).(*monitorv1.PushMetricBatchRequest)
 	if s.streamErr != nil {
 		return s.streamErr
 	}

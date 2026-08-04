@@ -20,6 +20,7 @@ import (
 type stubHostStore struct {
 	allocateTenant func(context.Context) (string, error)
 	listHosts      func(context.Context, string) ([]state.HostSnapshot, error)
+	getHost        func(context.Context, string, string) (state.HostSnapshot, bool, error)
 }
 
 func (s stubHostStore) AllocateTenant(ctx context.Context) (string, error) {
@@ -48,7 +49,10 @@ func (s stubHostStore) ListHosts(ctx context.Context, tenantCode string) ([]stat
 	return nil, nil
 }
 
-func (s stubHostStore) GetHost(context.Context, string, string) (state.HostSnapshot, bool, error) {
+func (s stubHostStore) GetHost(ctx context.Context, hostUID string, tenantCode string) (state.HostSnapshot, bool, error) {
+	if s.getHost != nil {
+		return s.getHost(ctx, hostUID, tenantCode)
+	}
 	return state.HostSnapshot{}, false, nil
 }
 
@@ -56,10 +60,23 @@ func (s stubHostStore) ReconcileOffline(context.Context, time.Time) ([]state.Hos
 	return nil, nil
 }
 
-type stubMetricStore struct{}
+type stubMetricStore struct {
+	getMetricSnapshot func(context.Context, string) (contracts.MetricSnapshot, bool, error)
+}
 
 func (stubMetricStore) AppendHeartbeatMetrics(context.Context, string, time.Time, contracts.AgentDigest) error {
 	return nil
+}
+
+func (stubMetricStore) SaveMetricSnapshot(context.Context, string, contracts.MetricSnapshot) error {
+	return nil
+}
+
+func (s stubMetricStore) GetMetricSnapshot(ctx context.Context, hostUID string) (contracts.MetricSnapshot, bool, error) {
+	if s.getMetricSnapshot != nil {
+		return s.getMetricSnapshot(ctx, hostUID)
+	}
+	return contracts.MetricSnapshot{}, false, nil
 }
 
 func (stubMetricStore) GetHostMetricHistory(context.Context, string) (map[state.MetricKey][]state.MetricPoint, error) {
@@ -95,10 +112,107 @@ func (stubOpsStore) AckAlert(context.Context, string, string, time.Time) error {
 }
 
 func newTestServer(hostStore repository.HostStateStore) *Server {
+	return newTestServerWithMetricStore(hostStore, stubMetricStore{})
+}
+
+func newTestServerWithMetricStore(hostStore repository.HostStateStore, metricStore repository.MetricWindowStore) *Server {
 	_ = io.Discard
 	logger := logx.NewNop()
-	svc := service.New(hostStore, stubMetricStore{}, stubOpsStore{}, stubEventBus{}, nil, service.AuthConfig{}, clock.Real{}, logger)
+	svc := service.New(hostStore, metricStore, stubOpsStore{}, stubEventBus{}, nil, service.AuthConfig{}, clock.Real{}, logger)
 	return NewServer(svc, logger)
+}
+
+func TestHandleGetLatestMetricSnapshotChecksTenantAndReturnsSnapshot(t *testing.T) {
+	collectedAt := time.Now().UTC().Truncate(time.Second)
+	server := newTestServerWithMetricStore(stubHostStore{
+		getHost: func(_ context.Context, hostUID string, tenantCode string) (state.HostSnapshot, bool, error) {
+			if hostUID != "host-1" || tenantCode != "tenant-a" {
+				t.Fatalf("unexpected host lookup: host=%q tenant=%q", hostUID, tenantCode)
+			}
+			return state.HostSnapshot{HostUID: hostUID, TenantCode: tenantCode}, true, nil
+		},
+	}, stubMetricStore{
+		getMetricSnapshot: func(_ context.Context, hostUID string) (contracts.MetricSnapshot, bool, error) {
+			if hostUID != "host-1" {
+				t.Fatalf("unexpected snapshot host uid: %q", hostUID)
+			}
+			return contracts.MetricSnapshot{
+				CollectedAt: collectedAt,
+				Points: []contracts.MetricPoint{
+					{Name: "host_load5", Value: 1.2},
+				},
+			}, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(nethttp.MethodGet, "/master/api/v1/hosts/host-1/metrics/latest?tenant=tenant-a", nil)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != nethttp.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("expected no-store cache policy, got %q", rec.Header().Get("Cache-Control"))
+	}
+	var resp struct {
+		Snapshot contracts.MetricSnapshot `json:"snapshot"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.Snapshot.CollectedAt.Equal(collectedAt) || len(resp.Snapshot.Points) != 1 {
+		t.Fatalf("unexpected metric snapshot: %+v", resp.Snapshot)
+	}
+}
+
+func TestHandleGetLatestMetricSnapshotRejectsOtherTenant(t *testing.T) {
+	metricStoreCalled := false
+	server := newTestServerWithMetricStore(stubHostStore{
+		getHost: func(_ context.Context, _ string, tenantCode string) (state.HostSnapshot, bool, error) {
+			if tenantCode != "tenant-b" {
+				t.Fatalf("unexpected tenant lookup: %q", tenantCode)
+			}
+			return state.HostSnapshot{}, false, nil
+		},
+	}, stubMetricStore{
+		getMetricSnapshot: func(context.Context, string) (contracts.MetricSnapshot, bool, error) {
+			metricStoreCalled = true
+			return contracts.MetricSnapshot{}, false, nil
+		},
+	})
+
+	req := httptest.NewRequest(nethttp.MethodGet, "/master/api/v1/hosts/host-1/metrics/latest?tenant=tenant-b", nil)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != nethttp.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Code)
+	}
+	if metricStoreCalled {
+		t.Fatal("metric store must not be read before tenant ownership is verified")
+	}
+}
+
+func TestHandleGetLatestMetricSnapshotRequiresTenant(t *testing.T) {
+	hostStoreCalled := false
+	server := newTestServer(stubHostStore{
+		getHost: func(context.Context, string, string) (state.HostSnapshot, bool, error) {
+			hostStoreCalled = true
+			return state.HostSnapshot{}, false, nil
+		},
+	})
+
+	req := httptest.NewRequest(nethttp.MethodGet, "/master/api/v1/hosts/host-1/metrics/latest", nil)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != nethttp.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Code)
+	}
+	if hostStoreCalled {
+		t.Fatal("host store must not be read without a tenant")
+	}
 }
 
 func TestHandleAllocateInstallTenant(t *testing.T) {

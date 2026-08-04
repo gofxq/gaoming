@@ -1,0 +1,568 @@
+syntax = "proto3";
+
+package monitor.v1;
+option go_package = "github.com/gofxq/gaoming/api/gen/go/monitor/v1;monitorv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// Shared enums and messages.
+
+enum State {
+  STATE_UNSPECIFIED = 0;
+  STATE_UP = 1;
+  STATE_WARNING = 2;
+  STATE_CRITICAL = 3;
+  STATE_OFFLINE = 4;
+  STATE_MAINTENANCE = 5;
+  STATE_DISABLED = 6;
+}
+
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_INFO = 1;
+  SEVERITY_WARN = 2;
+  SEVERITY_ERROR = 3;
+  SEVERITY_FATAL = 4;
+}
+
+enum ProbeType {
+  PROBE_TYPE_UNSPECIFIED = 0;
+  PROBE_TYPE_ICMP = 1;
+  PROBE_TYPE_TCP = 2;
+  PROBE_TYPE_HTTP = 3;
+  PROBE_TYPE_GRPC = 4;
+  PROBE_TYPE_DNS = 5;
+}
+
+message Ack {
+  string request_id = 1;
+  int32 code = 2;
+  string message = 3;
+  google.protobuf.Timestamp server_time = 4;
+}
+
+message HostIdentity {
+  string host_uid = 1;
+  string hostname = 2;
+  string primary_ip = 3;
+  repeated string ips = 4;
+  string os_type = 5;
+  string arch = 6;
+  string region = 7;
+  string az = 8;
+  string env = 9;
+  string role = 10;
+  map<string, string> labels = 11;
+  string tenant_code = 12;
+}
+
+message AgentMetadata {
+  string agent_id = 1;
+  string version = 2;
+  repeated string capabilities = 3;
+  google.protobuf.Timestamp boot_time = 4;
+}
+
+message PluginConfig {
+  string name = 1;
+  bool enabled = 2;
+  google.protobuf.Struct spec = 3;
+}
+
+message AgentConfig {
+  int64 config_version = 1;
+  int32 heartbeat_interval_sec = 2;
+  int32 metric_interval_sec = 3;
+  repeated PluginConfig plugins = 4;
+  map<string, string> static_labels = 5;
+}
+
+message MetricPoint {
+  string name = 1;
+  double value = 2;
+  google.protobuf.Timestamp ts = 3;
+  map<string, string> labels = 4;
+}
+
+message EventRecord {
+  string type = 1;
+  Severity severity = 2;
+  string message = 3;
+  google.protobuf.Timestamp ts = 4;
+  map<string, string> attrs = 5;
+}
+
+message AgentDigest {
+  double cpu_usage_pct = 1;
+  double mem_used_pct = 2;
+  int64 mem_available_bytes = 3;
+  double swap_used_pct = 4;
+  double disk_used_pct = 5;
+  int64 disk_free_bytes = 6;
+  double disk_inodes_used_pct = 7;
+  int64 disk_read_bps = 8;
+  int64 disk_write_bps = 9;
+  int64 disk_read_iops = 10;
+  int64 disk_write_iops = 11;
+  double load1 = 12;
+  int64 net_rx_bps = 13;
+  int64 net_tx_bps = 14;
+  int64 net_rx_packets_ps = 15;
+  int64 net_tx_packets_ps = 16;
+  int64 queue_depth = 17;
+  int64 last_metric_batch_seq = 18;
+}
+
+message AlertBrief {
+  int64 alert_id = 1;
+  string summary = 2;
+  Severity severity = 3;
+  google.protobuf.Timestamp fired_at = 4;
+}
+
+message HostStatus {
+  string host_uid = 1;
+  string hostname = 2;
+  string primary_ip = 3;
+  string group_id = 4;
+  State agent_state = 5;
+  State reachability_state = 6;
+  State service_state = 7;
+  State overall_state = 8;
+
+  double cpu_usage_pct = 9;
+  double mem_used_pct = 10;
+  int64 mem_available_bytes = 11;
+  double swap_used_pct = 12;
+  double disk_used_pct = 13;
+  int64 disk_free_bytes = 14;
+  double disk_inodes_used_pct = 15;
+  int64 disk_read_bps = 16;
+  int64 disk_write_bps = 17;
+  int64 disk_read_iops = 18;
+  int64 disk_write_iops = 19;
+  double load1 = 20;
+  int64 net_rx_bps = 21;
+  int64 net_tx_bps = 22;
+  int64 net_rx_packets_ps = 23;
+  int64 net_tx_packets_ps = 24;
+
+  google.protobuf.Timestamp last_agent_seen_at = 25;
+  google.protobuf.Timestamp last_metric_at = 26;
+  google.protobuf.Timestamp last_probe_at = 27;
+  int32 open_alert_count = 28;
+  map<string, string> labels = 29;
+  repeated AlertBrief alerts = 30;
+  int64 version = 31;
+}
+
+// Agent control and metrics ingestion.
+
+service AgentControlService {
+  rpc RegisterAgent(RegisterAgentRequest) returns (RegisterAgentResponse);
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+service MetricsIngestService {
+  rpc PushMetricBatch(PushMetricBatchRequest) returns (Ack);
+  rpc StreamMetricBatches(stream PushMetricBatchRequest) returns (stream MetricBatchAck);
+  rpc PushEventBatch(PushEventBatchRequest) returns (Ack);
+}
+
+message RegisterAgentRequest {
+  HostIdentity host = 1;
+  AgentMetadata agent = 2;
+}
+
+message RegisterAgentResponse {
+  Ack ack = 1;
+  string host_uid = 2;
+  AgentConfig config = 3;
+  string tenant_code = 4;
+}
+
+message GetConfigRequest {
+  string host_uid = 1;
+  string agent_id = 2;
+  int64 current_config_version = 3;
+}
+
+message GetConfigResponse {
+  Ack ack = 1;
+  bool changed = 2;
+  AgentConfig config = 3;
+}
+
+message HeartbeatRequest {
+  string host_uid = 1;
+  string agent_id = 2;
+  int64 seq = 3;
+  google.protobuf.Timestamp ts = 4;
+  AgentDigest digest = 5;
+}
+
+message HeartbeatResponse {
+  Ack ack = 1;
+  int32 next_heartbeat_interval_sec = 2;
+  int64 desired_config_version = 3;
+}
+
+message PushMetricBatchRequest {
+  string host_uid = 1;
+  string agent_id = 2;
+  int64 batch_seq = 3;
+  google.protobuf.Timestamp collected_at = 4;
+  repeated MetricPoint points = 5;
+  HostIdentity host = 6;
+  AgentMetadata agent = 7;
+  repeated CollectorStatus collectors = 8;
+  SystemMetrics system_metrics = 9;
+  AgentDigest digest = 10;
+}
+
+enum CollectorState {
+  COLLECTOR_STATE_UNSPECIFIED = 0;
+  COLLECTOR_STATE_AVAILABLE = 1;
+  COLLECTOR_STATE_UNAVAILABLE = 2;
+  COLLECTOR_STATE_DEGRADED = 3;
+}
+
+message CollectorStatus {
+  string name = 1;
+  CollectorState state = 2;
+  repeated string metric_names = 3;
+  int64 duration_micros = 4;
+  bool timed_out = 5;
+}
+
+message SystemMetrics {
+  double runtime_uptime_seconds = 1;
+  HostMetrics host = 2;
+  CpuMetrics cpu = 3;
+  MemoryMetrics memory = 4;
+  SwapMetrics swap = 5;
+  LoadMetrics load = 6;
+  repeated FilesystemMetrics filesystems = 7;
+  repeated DiskIOMetrics disks = 8;
+  repeated NetworkInterfaceMetrics network_interfaces = 9;
+  repeated NetworkProtocolMetrics network_protocols = 10;
+  NetworkConntrackMetrics network_conntrack = 11;
+  repeated TemperatureMetrics temperatures = 12;
+}
+
+message HostMetrics {
+  uint64 uptime_seconds = 1;
+  uint64 boot_time_seconds = 2;
+  uint64 process_count = 3;
+}
+
+message CpuMetrics {
+  double usage_pct = 1;
+  uint32 logical_count = 2;
+  uint32 physical_count = 3;
+  repeated CpuCoreMetrics cores = 4;
+}
+
+message CpuCoreMetrics {
+  string cpu = 1;
+  double usage_pct = 2;
+  double user_seconds = 3;
+  double system_seconds = 4;
+  double idle_seconds = 5;
+  double nice_seconds = 6;
+  double iowait_seconds = 7;
+  double irq_seconds = 8;
+  double softirq_seconds = 9;
+  double steal_seconds = 10;
+  double guest_seconds = 11;
+  double guest_nice_seconds = 12;
+  double frequency_mhz = 13;
+  uint64 cache_size_kib = 14;
+}
+
+message MemoryMetrics {
+  uint64 total_bytes = 1;
+  uint64 available_bytes = 2;
+  uint64 used_bytes = 3;
+  double used_pct = 4;
+  uint64 free_bytes = 5;
+  uint64 active_bytes = 6;
+  uint64 inactive_bytes = 7;
+  uint64 wired_bytes = 8;
+  uint64 laundry_bytes = 9;
+  uint64 buffers_bytes = 10;
+  uint64 cached_bytes = 11;
+  uint64 writeback_bytes = 12;
+  uint64 dirty_bytes = 13;
+  uint64 shared_bytes = 14;
+  uint64 slab_bytes = 15;
+  uint64 page_tables_bytes = 16;
+  uint64 swap_cached_bytes = 17;
+  uint64 commit_limit_bytes = 18;
+  uint64 committed_as_bytes = 19;
+  uint64 mapped_bytes = 20;
+  uint64 vmalloc_total_bytes = 21;
+  uint64 vmalloc_used_bytes = 22;
+  uint64 huge_pages_total = 23;
+  uint64 huge_pages_free = 24;
+  uint64 huge_pages_reserved = 25;
+  uint64 huge_pages_surplus = 26;
+  uint64 huge_page_size_bytes = 27;
+  uint64 anon_huge_pages_bytes = 28;
+  uint64 writeback_temporary_bytes = 29;
+  uint64 reclaimable_slab_bytes = 30;
+  uint64 unreclaimable_slab_bytes = 31;
+  uint64 high_total_bytes = 32;
+  uint64 high_free_bytes = 33;
+  uint64 low_total_bytes = 34;
+  uint64 low_free_bytes = 35;
+  uint64 swap_total_bytes = 36;
+  uint64 swap_free_bytes = 37;
+  uint64 vmalloc_chunk_bytes = 38;
+}
+
+message SwapMetrics {
+  uint64 total_bytes = 1;
+  uint64 used_bytes = 2;
+  uint64 free_bytes = 3;
+  double used_pct = 4;
+  uint64 bytes_in_total = 5;
+  uint64 bytes_out_total = 6;
+  uint64 pages_in_total = 7;
+  uint64 pages_out_total = 8;
+  uint64 page_faults_total = 9;
+  uint64 major_page_faults_total = 10;
+}
+
+message LoadMetrics {
+  double load1 = 1;
+  double load5 = 2;
+  double load15 = 3;
+  int64 processes_total = 4;
+  int64 processes_created_total = 5;
+  int64 processes_running = 6;
+  int64 processes_blocked = 7;
+  int64 context_switches_total = 8;
+}
+
+message FilesystemMetrics {
+  string device = 1;
+  string mountpoint = 2;
+  string filesystem_type = 3;
+  uint64 total_bytes = 4;
+  uint64 used_bytes = 5;
+  uint64 free_bytes = 6;
+  double used_pct = 7;
+  uint64 inodes_total = 8;
+  uint64 inodes_used = 9;
+  uint64 inodes_free = 10;
+  double inodes_used_pct = 11;
+}
+
+message DiskIOMetrics {
+  string device = 1;
+  uint64 reads_total = 2;
+  uint64 merged_reads_total = 3;
+  uint64 writes_total = 4;
+  uint64 merged_writes_total = 5;
+  uint64 read_bytes_total = 6;
+  uint64 write_bytes_total = 7;
+  uint64 read_milliseconds_total = 8;
+  uint64 write_milliseconds_total = 9;
+  uint64 io_in_progress = 10;
+  uint64 io_milliseconds_total = 11;
+  uint64 weighted_io_milliseconds_total = 12;
+}
+
+message NetworkInterfaceMetrics {
+  string interface = 1;
+  int64 index = 2;
+  int64 mtu_bytes = 3;
+  uint64 bytes_sent_total = 4;
+  uint64 bytes_received_total = 5;
+  uint64 packets_sent_total = 6;
+  uint64 packets_received_total = 7;
+  uint64 receive_errors_total = 8;
+  uint64 transmit_errors_total = 9;
+  uint64 receive_drops_total = 10;
+  uint64 transmit_drops_total = 11;
+  uint64 receive_fifo_errors_total = 12;
+  uint64 transmit_fifo_errors_total = 13;
+}
+
+message NetworkProtocolMetrics {
+  string protocol = 1;
+  map<string, int64> counters = 2;
+}
+
+message NetworkConntrackMetrics {
+  int64 count = 1;
+  int64 maximum = 2;
+  uint64 entries = 3;
+  uint64 searched_total = 4;
+  uint64 found_total = 5;
+  uint64 new_total = 6;
+  uint64 invalid_total = 7;
+  uint64 ignored_total = 8;
+  uint64 deleted_total = 9;
+  uint64 inserted_total = 10;
+  uint64 insert_failed_total = 11;
+  uint64 dropped_total = 12;
+  uint64 early_dropped_total = 13;
+  uint64 search_restarts_total = 14;
+  uint64 delete_list_total = 15;
+  uint64 icmp_errors_total = 16;
+  uint64 expected_new_total = 17;
+  uint64 expectations_created_total = 18;
+  uint64 expectations_deleted_total = 19;
+}
+
+message TemperatureMetrics {
+  string sensor = 1;
+  double current_celsius = 2;
+  double high_celsius = 3;
+  double critical_celsius = 4;
+}
+
+message PushEventBatchRequest {
+  string host_uid = 1;
+  string agent_id = 2;
+  int64 batch_seq = 3;
+  repeated EventRecord events = 4;
+}
+
+message MetricBatchAck {
+  Ack ack = 1;
+  int64 batch_seq = 2;
+}
+
+// Probe coordination.
+
+service ProbeCoordinatorService {
+  rpc LeaseProbeJobs(LeaseProbeJobsRequest) returns (LeaseProbeJobsResponse);
+  rpc ReportProbeResults(ReportProbeResultsRequest) returns (Ack);
+}
+
+message LeaseProbeJobsRequest {
+  string worker_id = 1;
+  string region = 2;
+  repeated ProbeType supported_types = 3;
+  int32 max_jobs = 4;
+}
+
+message ProbeJob {
+  int64 job_id = 1;
+  int64 policy_id = 2;
+  int64 target_id = 3;
+  ProbeType type = 4;
+  string target = 5;
+  int32 interval_sec = 6;
+  int32 timeout_ms = 7;
+  int32 retries = 8;
+  string success_rule = 9;
+  google.protobuf.Struct spec = 10;
+  map<string, string> labels = 11;
+}
+
+message LeaseProbeJobsResponse {
+  Ack ack = 1;
+  repeated ProbeJob jobs = 2;
+}
+
+message ProbeResult {
+  int64 job_id = 1;
+  int64 target_id = 2;
+  string worker_id = 3;
+  string region = 4;
+  google.protobuf.Timestamp ts = 5;
+  bool success = 6;
+  int32 latency_ms = 7;
+  int32 status_code = 8;
+  string error_code = 9;
+  string error_msg = 10;
+  google.protobuf.Struct observation = 11;
+}
+
+message ReportProbeResultsRequest {
+  string worker_id = 1;
+  repeated ProbeResult results = 2;
+}
+
+// Status queries.
+
+service StatusQueryService {
+  rpc GetHostStatus(GetHostStatusRequest) returns (HostStatus);
+  rpc ListHosts(ListHostsRequest) returns (ListHostsResponse);
+  rpc WatchHostStatus(WatchHostStatusRequest) returns (stream HostStatusEvent);
+}
+
+message GetHostStatusRequest {
+  string host_uid = 1;
+}
+
+message ListHostsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+  string keyword = 3;
+  string group_id = 4;
+  State overall_state = 5;
+  map<string, string> labels = 6;
+}
+
+message ListHostsResponse {
+  repeated HostStatus items = 1;
+  string next_page_token = 2;
+}
+
+message WatchHostStatusRequest {
+  repeated string host_uids = 1;
+  string group_id = 2;
+  map<string, string> labels = 3;
+}
+
+message HostStatusEvent {
+  enum ChangeType {
+    CHANGE_TYPE_UNSPECIFIED = 0;
+    CHANGE_TYPE_UPSERT = 1;
+    CHANGE_TYPE_DELETE = 2;
+  }
+
+  ChangeType change_type = 1;
+  HostStatus status = 2;
+}
+
+// Operations.
+
+service OpsService {
+  rpc CreateMaintenanceWindow(CreateMaintenanceWindowRequest) returns (MaintenanceWindow);
+  rpc AckAlert(AckAlertRequest) returns (Ack);
+}
+
+message CreateMaintenanceWindowRequest {
+  string title = 1;
+  string scope_type = 2;
+  string scope_ref = 3;
+  google.protobuf.Timestamp start_at = 4;
+  google.protobuf.Timestamp end_at = 5;
+  string created_by = 6;
+  string reason = 7;
+}
+
+message MaintenanceWindow {
+  int64 id = 1;
+  string title = 2;
+  string scope_type = 3;
+  string scope_ref = 4;
+  google.protobuf.Timestamp start_at = 5;
+  google.protobuf.Timestamp end_at = 6;
+  string created_by = 7;
+  string reason = 8;
+}
+
+message AckAlertRequest {
+  int64 alert_id = 1;
+  string acked_by = 2;
+}
+

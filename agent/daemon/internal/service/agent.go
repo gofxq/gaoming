@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -95,13 +96,39 @@ func (a *Agent) Run(ctx context.Context) error {
 
 func (a *Agent) sendCycle(ctx context.Context) error {
 	now := time.Now().UTC()
-	digest := a.digest(now)
+	metrics := a.sampler.Sample(now)
+	digest := a.digestFromMetrics(metrics)
 
-	return a.pushMetricsWithDigest(ctx, now, digest)
+	return a.pushMetrics(ctx, now, digest, metrics)
 }
 
 func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest contracts.AgentDigest) error {
+	return a.pushMetrics(ctx, now, digest, systemMetrics{})
+}
+
+func (a *Agent) pushMetrics(ctx context.Context, now time.Time, digest contracts.AgentDigest, metrics systemMetrics) error {
 	a.metricSeq++
+	points := []contracts.MetricPoint{
+		{Name: "runtime_uptime_seconds", Value: time.Since(a.bootTime).Seconds(), TS: now},
+		{Name: "host_cpu_usage_pct", Value: digest.CPUUsagePct, TS: now},
+		{Name: "host_mem_used_pct", Value: digest.MemUsedPct, TS: now},
+		{Name: "host_mem_available_bytes", Value: float64(digest.MemAvailableBytes), TS: now},
+		{Name: "host_swap_used_pct", Value: digest.SwapUsedPct, TS: now},
+		{Name: "host_disk_used_pct", Value: digest.DiskUsedPct, TS: now},
+		{Name: "host_disk_free_bytes", Value: float64(digest.DiskFreeBytes), TS: now},
+		{Name: "host_disk_inodes_used_pct", Value: digest.DiskInodesUsedPct, TS: now},
+		{Name: "host_disk_read_bps", Value: float64(digest.DiskReadBPS), TS: now},
+		{Name: "host_disk_write_bps", Value: float64(digest.DiskWriteBPS), TS: now},
+		{Name: "host_disk_read_iops", Value: float64(digest.DiskReadIOPS), TS: now},
+		{Name: "host_disk_write_iops", Value: float64(digest.DiskWriteIOPS), TS: now},
+		{Name: "host_load1", Value: digest.Load1, TS: now},
+		{Name: "host_net_rx_bps", Value: float64(digest.NetRxBPS), TS: now},
+		{Name: "host_net_tx_bps", Value: float64(digest.NetTxBPS), TS: now},
+		{Name: "host_net_rx_packets_ps", Value: float64(digest.NetRxPacketsPS), TS: now},
+		{Name: "host_net_tx_packets_ps", Value: float64(digest.NetTxPacketsPS), TS: now},
+	}
+	points = appendMetricPoints(points, metrics.ExtraPoints, now)
+	capabilities := append([]string{"metrics", "stream_metrics", "adaptive_collectors"}, metrics.Capabilities...)
 	payload := contracts.PushMetricBatchRequest{
 		HostUID:     a.hostUID,
 		AgentID:     a.agentID,
@@ -111,44 +138,33 @@ func (a *Agent) pushMetricsWithDigest(ctx context.Context, now time.Time, digest
 		Agent: contracts.AgentMetadata{
 			AgentID:      a.agentID,
 			Version:      "v0.1.0",
-			Capabilities: []string{"metrics", "stream_metrics"},
+			Capabilities: capabilities,
 			BootTime:     a.bootTime,
 		},
-		Points: []contracts.MetricPoint{
-			{Name: "runtime_uptime_seconds", Value: time.Since(a.bootTime).Seconds(), TS: now},
-			{Name: "host_cpu_usage_pct", Value: digest.CPUUsagePct, TS: now},
-			{Name: "host_mem_used_pct", Value: digest.MemUsedPct, TS: now},
-			{Name: "host_mem_available_bytes", Value: float64(digest.MemAvailableBytes), TS: now},
-			{Name: "host_swap_used_pct", Value: digest.SwapUsedPct, TS: now},
-			{Name: "host_disk_used_pct", Value: digest.DiskUsedPct, TS: now},
-			{Name: "host_disk_free_bytes", Value: float64(digest.DiskFreeBytes), TS: now},
-			{Name: "host_disk_inodes_used_pct", Value: digest.DiskInodesUsedPct, TS: now},
-			{Name: "host_disk_read_bps", Value: float64(digest.DiskReadBPS), TS: now},
-			{Name: "host_disk_write_bps", Value: float64(digest.DiskWriteBPS), TS: now},
-			{Name: "host_disk_read_iops", Value: float64(digest.DiskReadIOPS), TS: now},
-			{Name: "host_disk_write_iops", Value: float64(digest.DiskWriteIOPS), TS: now},
-			{Name: "host_load1", Value: digest.Load1, TS: now},
-			{Name: "host_net_rx_bps", Value: float64(digest.NetRxBPS), TS: now},
-			{Name: "host_net_tx_bps", Value: float64(digest.NetTxBPS), TS: now},
-			{Name: "host_net_rx_packets_ps", Value: float64(digest.NetRxPacketsPS), TS: now},
-			{Name: "host_net_tx_packets_ps", Value: float64(digest.NetTxPacketsPS), TS: now},
-		},
+		Points:     points,
+		Collectors: metrics.Collectors,
+		Digest:     digest,
+	}
+	if metrics.Structured != nil {
+		metrics.Structured.RuntimeUptimeSeconds = time.Since(a.bootTime).Seconds()
 	}
 
-	if err := a.pushMetricsGRPC(ctx, payload); err != nil {
+	if err := a.pushMetricsGRPC(ctx, payload, metrics.Structured); err != nil {
 		return err
 	}
 	a.logger.Info("metrics sent", "host_uid", a.hostUID, "batch_seq", a.metricSeq)
 	return nil
 }
 
-func (a *Agent) pushMetricsGRPC(ctx context.Context, payload contracts.PushMetricBatchRequest) error {
+func (a *Agent) pushMetricsGRPC(ctx context.Context, payload contracts.PushMetricBatchRequest, systemMetrics *monitorv1.SystemMetrics) error {
 	stream, err := a.metricStreamClient(ctx)
 	if err != nil {
 		return err
 	}
 
-	if err := stream.Send(toProtoPushMetricBatchRequest(payload)); err != nil {
+	request := toProtoPushMetricBatchRequest(payload)
+	request.SystemMetrics = systemMetrics
+	if err := stream.Send(request); err != nil {
 		a.resetMetricStream()
 		return err
 	}
@@ -173,6 +189,10 @@ func isFatalMetricError(err error) bool {
 
 func (a *Agent) digest(now time.Time) contracts.AgentDigest {
 	metrics := a.sampler.Sample(now)
+	return a.digestFromMetrics(metrics)
+}
+
+func (a *Agent) digestFromMetrics(metrics systemMetrics) contracts.AgentDigest {
 	return contracts.AgentDigest{
 		CPUUsagePct:        metrics.CPUUsagePct,
 		MemUsedPct:         metrics.MemUsedPct,
@@ -193,6 +213,38 @@ func (a *Agent) digest(now time.Time) contracts.AgentDigest {
 		QueueDepth:         0,
 		LastMetricBatchSeq: a.metricSeq,
 	}
+}
+
+func appendMetricPoints(dst []contracts.MetricPoint, extra []contracts.MetricPoint, now time.Time) []contracts.MetricPoint {
+	seen := make(map[string]struct{}, len(dst)+len(extra))
+	for _, point := range dst {
+		seen[metricPointIdentity(point)] = struct{}{}
+	}
+	for _, point := range extra {
+		if point.TS.IsZero() {
+			point.TS = now
+		}
+		identity := metricPointIdentity(point)
+		if _, ok := seen[identity]; ok {
+			continue
+		}
+		seen[identity] = struct{}{}
+		dst = append(dst, point)
+	}
+	return dst
+}
+
+func metricPointIdentity(point contracts.MetricPoint) string {
+	identity := point.Name
+	keys := make([]string, 0, len(point.Labels))
+	for key := range point.Labels {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		identity += "\x00" + key + "=" + point.Labels[key]
+	}
+	return identity
 }
 
 type apiError struct {
@@ -363,6 +415,16 @@ func toProtoPushMetricBatchRequest(req contracts.PushMetricBatchRequest) *monito
 			Labels: cloneStringMap(point.Labels),
 		})
 	}
+	collectors := make([]*monitorv1.CollectorStatus, 0, len(req.Collectors))
+	for _, collector := range req.Collectors {
+		collectors = append(collectors, &monitorv1.CollectorStatus{
+			Name:           collector.Name,
+			State:          monitorv1.CollectorState(collector.State),
+			MetricNames:    append([]string(nil), collector.MetricNames...),
+			DurationMicros: collector.DurationMicros,
+			TimedOut:       collector.TimedOut,
+		})
+	}
 
 	return &monitorv1.PushMetricBatchRequest{
 		HostUid:     req.HostUID,
@@ -389,7 +451,19 @@ func toProtoPushMetricBatchRequest(req contracts.PushMetricBatchRequest) *monito
 			Capabilities: append([]string(nil), req.Agent.Capabilities...),
 			BootTime:     timestamppb.New(req.Agent.BootTime),
 		},
-		Points: points,
+		Points:     points,
+		Collectors: collectors,
+		Digest: &monitorv1.AgentDigest{
+			CpuUsagePct: req.Digest.CPUUsagePct, MemUsedPct: req.Digest.MemUsedPct,
+			MemAvailableBytes: req.Digest.MemAvailableBytes, SwapUsedPct: req.Digest.SwapUsedPct,
+			DiskUsedPct: req.Digest.DiskUsedPct, DiskFreeBytes: req.Digest.DiskFreeBytes,
+			DiskInodesUsedPct: req.Digest.DiskInodesUsedPct, DiskReadBps: req.Digest.DiskReadBPS,
+			DiskWriteBps: req.Digest.DiskWriteBPS, DiskReadIops: req.Digest.DiskReadIOPS,
+			DiskWriteIops: req.Digest.DiskWriteIOPS, Load1: req.Digest.Load1,
+			NetRxBps: req.Digest.NetRxBPS, NetTxBps: req.Digest.NetTxBPS,
+			NetRxPacketsPs: req.Digest.NetRxPacketsPS, NetTxPacketsPs: req.Digest.NetTxPacketsPS,
+			QueueDepth: req.Digest.QueueDepth, LastMetricBatchSeq: req.Digest.LastMetricBatchSeq,
+		},
 	}
 }
 

@@ -1,16 +1,19 @@
 import { Button, Progress, Tooltip, Typography } from "@douyinfe/semi-ui";
 import { IconClose, IconPulse, IconSearch, IconServer } from "@douyinfe/semi-icons";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import type { PcShellOutletContext } from "./PcShell";
 import {
   currentWindowLabel,
   formatAgo,
+  formatCollectedMetricValue,
   formatMetricValue,
   getWindowPoints,
   stateLabel,
   type HostHistoryMap,
   type HostSnapshot,
+  type MetricSnapshot,
+  type CollectedMetricPoint,
   type MetricKey,
 } from "../../shared/features/hosts/model";
 import "./PcDashboardPage.css";
@@ -48,6 +51,19 @@ const DETAIL_METRICS: Array<{ label: string; metricKey: MetricKey }> = [
   { label: "发包", metricKey: "net_tx_packets_ps" },
 ];
 
+type TelemetryCategory = "host" | "cpu" | "memory" | "swap" | "filesystem" | "disk" | "network" | "sensors";
+
+const TELEMETRY_CATEGORIES: Array<{ key: TelemetryCategory; label: string }> = [
+  { key: "host", label: "主机与负载" },
+  { key: "cpu", label: "CPU" },
+  { key: "memory", label: "内存" },
+  { key: "swap", label: "Swap" },
+  { key: "filesystem", label: "文件系统" },
+  { key: "disk", label: "磁盘 I/O" },
+  { key: "network", label: "网络" },
+  { key: "sensors", label: "温度" },
+];
+
 function stateTone(state?: number) {
   switch (state) {
     case 1:
@@ -79,12 +95,14 @@ function latestPoint(
 }
 
 export function PcDashboardPage() {
-  const { expandedHostUID, histories, lastUpdated, selectedWindowSec, setExpandedHostUID, sortedHosts } =
+  const { expandedHostUID, histories, lastUpdated, loadMetricSnapshot, metricSnapshots, selectedWindowSec, setExpandedHostUID, sortedHosts } =
     useOutletContext<PcShellOutletContext>();
   const [query, setQuery] = useState("");
+  const [snapshotLoadFailed, setSnapshotLoadFailed] = useState(false);
 
   const expandedHost = sortedHosts.find((host) => host.host_uid === expandedHostUID);
   const expandedHistory = expandedHostUID ? histories[expandedHostUID] : undefined;
+  const expandedMetricSnapshot = expandedHostUID ? metricSnapshots[expandedHostUID] : undefined;
   const onlineCount = sortedHosts.filter((host) => host.overall_state === 1).length;
   const issueCount = sortedHosts.filter((host) => host.overall_state === 2 || host.overall_state === 3).length;
   const offlineCount = sortedHosts.filter((host) => host.overall_state === 4).length;
@@ -99,6 +117,25 @@ export function PcDashboardPage() {
       ),
     );
   }, [query, sortedHosts]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSnapshotLoadFailed(false);
+    if (!expandedHostUID) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void loadMetricSnapshot(expandedHostUID).catch(() => {
+      if (!cancelled) {
+        setSnapshotLoadFailed(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [expandedHost?.version, expandedHostUID, loadMetricSnapshot]);
 
   return (
     <div className="pc-page">
@@ -211,6 +248,8 @@ export function PcDashboardPage() {
             ))}
           </div>
 
+          <MetricSnapshotDetails loadFailed={snapshotLoadFailed} snapshot={expandedMetricSnapshot} />
+
           <div className="detail-section-heading">
             <h3>性能趋势</h3>
             <span>时间范围 {currentWindowLabel(selectedWindowSec)}</span>
@@ -232,6 +271,143 @@ export function PcDashboardPage() {
       ) : null}
     </div>
   );
+}
+
+function MetricSnapshotDetails(props: { loadFailed: boolean; snapshot?: MetricSnapshot }) {
+  const [selectedCategory, setSelectedCategory] = useState<TelemetryCategory>("host");
+  const groupedPoints = useMemo(() => {
+    const groups = new Map<TelemetryCategory, CollectedMetricPoint[]>();
+    TELEMETRY_CATEGORIES.forEach((category) => groups.set(category.key, []));
+    for (const point of props.snapshot?.points || []) {
+      groups.get(metricCategory(point.name))!.push(point);
+    }
+    groups.forEach((points) => points.sort(compareCollectedMetricPoints));
+    return groups;
+  }, [props.snapshot]);
+  const availableCategories = TELEMETRY_CATEGORIES.filter(
+    (category) => (groupedPoints.get(category.key)?.length || 0) > 0,
+  );
+  const activeCategory = availableCategories.some((category) => category.key === selectedCategory)
+    ? selectedCategory
+    : availableCategories[0]?.key;
+  const points = activeCategory ? groupedPoints.get(activeCategory) || [] : [];
+
+  return (
+    <div className="telemetry-section">
+      <div className="detail-section-heading telemetry-heading">
+        <h3>完整采集快照</h3>
+        <span>
+          {props.snapshot
+            ? `${(props.snapshot.points || []).length} 项 · ${formatAgo(props.snapshot.collected_at)}`
+            : props.loadFailed ? "读取失败" : "等待 Agent 上报"}
+        </span>
+      </div>
+
+      {props.snapshot ? (
+        <>
+          {props.snapshot.collectors?.length ? (
+            <div className="collector-statuses" aria-label="采集器状态">
+              {props.snapshot.collectors.map((collector) => (
+                <span
+                  key={collector.name}
+                  className={`collector-status collector-state-${collector.state}`}
+                  title={collector.timed_out ? "本轮采集超时" : collectorStateLabel(collector.state)}
+                >
+                  <i />
+                  {collector.name}
+                  <small>{formatCollectorDuration(collector.duration_micros)}</small>
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {availableCategories.length ? (
+            <>
+              <div className="telemetry-tabs" role="tablist" aria-label="采集指标分类">
+                {availableCategories.map((category) => (
+                  <button
+                    key={category.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeCategory === category.key}
+                    className={activeCategory === category.key ? "active" : ""}
+                    onClick={() => setSelectedCategory(category.key)}
+                  >
+                    {category.label}
+                    <span>{groupedPoints.get(category.key)?.length || 0}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="telemetry-table-wrap">
+                <table className="telemetry-table">
+                  <thead>
+                    <tr>
+                      <th>指标</th>
+                      <th>维度</th>
+                      <th>当前值</th>
+                      <th>采样时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {points.map((point, index) => (
+                      <tr key={`${point.name}:${formatMetricLabels(point.labels)}:${index}`}>
+                        <td><code title={point.name}>{point.name}</code></td>
+                        <td><span title={formatMetricLabels(point.labels)}>{formatMetricLabels(point.labels) || "全局"}</span></td>
+                        <td><strong>{formatCollectedMetricValue(point.name, point.value)}</strong></td>
+                        <td>{formatAgo(point.ts || props.snapshot?.collected_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="telemetry-empty">本轮没有可展示的数值指标。</div>
+          )}
+        </>
+      ) : (
+        <div className="telemetry-empty">
+          {props.loadFailed ? "最新采集快照暂时无法读取。" : "完整快照将在 Agent 下一轮指标上报后显示。"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function metricCategory(name: string): TelemetryCategory {
+  if (name.startsWith("host_cpu_")) return "cpu";
+  if (name.startsWith("host_mem_")) return "memory";
+  if (name.startsWith("host_swap_")) return "swap";
+  if (name.startsWith("host_filesystem_")) return "filesystem";
+  if (name.startsWith("host_disk_")) return "disk";
+  if (name.startsWith("host_net_")) return "network";
+  if (name.startsWith("host_sensor_")) return "sensors";
+  return "host";
+}
+
+function compareCollectedMetricPoints(left: CollectedMetricPoint, right: CollectedMetricPoint) {
+  const byName = left.name.localeCompare(right.name);
+  if (byName !== 0) return byName;
+  return formatMetricLabels(left.labels).localeCompare(formatMetricLabels(right.labels));
+}
+
+function formatMetricLabels(labels?: Record<string, string>) {
+  return Object.entries(labels || {})
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join(" · ");
+}
+
+function collectorStateLabel(state: number) {
+  if (state === 1) return "可用";
+  if (state === 2) return "不可用";
+  if (state === 3) return "部分可用";
+  return "未知";
+}
+
+function formatCollectorDuration(durationMicros?: number) {
+  const value = Number(durationMicros || 0);
+  return value >= 1000 ? `${(value / 1000).toFixed(1)}ms` : `${Math.round(value)}µs`;
 }
 
 function averageMetric(hosts: HostSnapshot[], key: MetricKey) {

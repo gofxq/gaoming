@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestPushMetricBatch(t *testing.T) {
@@ -27,11 +28,22 @@ func TestPushMetricBatch(t *testing.T) {
 	}
 	defer listener.Close()
 
+	collectedAt := time.Now().UTC().Truncate(time.Second)
+	var savedSnapshot contracts.MetricSnapshot
+	metricStore := stubMetricStore{
+		saveMetricSnapshot: func(_ context.Context, hostUID string, snapshot contracts.MetricSnapshot) error {
+			if hostUID != "host-1" {
+				t.Fatalf("unexpected snapshot host uid: %s", hostUID)
+			}
+			savedSnapshot = snapshot
+			return nil
+		},
+	}
 	svc := service.New(
 		logx.NewNop(),
 		clock.Real{},
 		stubHostStore{},
-		stubMetricStore{},
+		metricStore,
 		stubEventBus{},
 	)
 	server := gogrpc.NewServer()
@@ -54,9 +66,10 @@ func TestPushMetricBatch(t *testing.T) {
 
 	client := monitorv1.NewMetricsIngestServiceClient(conn)
 	resp, err := client.PushMetricBatch(context.Background(), &monitorv1.PushMetricBatchRequest{
-		HostUid:  "host-1",
-		AgentId:  "agent-1",
-		BatchSeq: 1,
+		HostUid:     "host-1",
+		AgentId:     "agent-1",
+		BatchSeq:    1,
+		CollectedAt: timestamppb.New(collectedAt),
 		Host: &monitorv1.HostIdentity{
 			HostUid:    "host-1",
 			Hostname:   "node-1",
@@ -68,7 +81,15 @@ func TestPushMetricBatch(t *testing.T) {
 			Version: "v0.1.0",
 		},
 		Points: []*monitorv1.MetricPoint{
-			{Name: "host_cpu_usage_pct", Value: 1},
+			{Name: "host_cpu_usage_pct", Value: 1, Labels: map[string]string{"cpu": "cpu0"}},
+		},
+		Collectors: []*monitorv1.CollectorStatus{
+			{
+				Name:           "cpu",
+				State:          monitorv1.CollectorState_COLLECTOR_STATE_AVAILABLE,
+				MetricNames:    []string{"host_cpu_usage_pct"},
+				DurationMicros: 2500,
+			},
 		},
 	})
 	if err != nil {
@@ -81,6 +102,15 @@ func TestPushMetricBatch(t *testing.T) {
 	stats := svc.Stats()
 	if stats.MetricBatches != 1 {
 		t.Fatalf("unexpected metric batch count: %d", stats.MetricBatches)
+	}
+	if !savedSnapshot.CollectedAt.Equal(collectedAt) {
+		t.Fatalf("unexpected snapshot collection time: %s", savedSnapshot.CollectedAt)
+	}
+	if len(savedSnapshot.Points) != 1 || savedSnapshot.Points[0].Labels["cpu"] != "cpu0" {
+		t.Fatalf("unexpected saved points: %+v", savedSnapshot.Points)
+	}
+	if len(savedSnapshot.Collectors) != 1 || savedSnapshot.Collectors[0].State != contracts.CollectorStateAvailable {
+		t.Fatalf("unexpected saved collectors: %+v", savedSnapshot.Collectors)
 	}
 }
 
@@ -172,10 +202,23 @@ func (s stubHostStore) ReconcileOffline(context.Context, time.Time) ([]state.Hos
 	return nil, nil
 }
 
-type stubMetricStore struct{}
+type stubMetricStore struct {
+	saveMetricSnapshot func(context.Context, string, contracts.MetricSnapshot) error
+}
 
 func (stubMetricStore) AppendHeartbeatMetrics(context.Context, string, time.Time, contracts.AgentDigest) error {
 	return nil
+}
+
+func (s stubMetricStore) SaveMetricSnapshot(ctx context.Context, hostUID string, snapshot contracts.MetricSnapshot) error {
+	if s.saveMetricSnapshot != nil {
+		return s.saveMetricSnapshot(ctx, hostUID, snapshot)
+	}
+	return nil
+}
+
+func (stubMetricStore) GetMetricSnapshot(context.Context, string) (contracts.MetricSnapshot, bool, error) {
+	return contracts.MetricSnapshot{}, false, nil
 }
 
 func (stubMetricStore) GetHostMetricHistory(context.Context, string) (map[state.MetricKey][]state.MetricPoint, error) {

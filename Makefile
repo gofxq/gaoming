@@ -47,11 +47,7 @@ agent:
 proto-check:
 	protoc -I api/proto \
 		--descriptor_set_out=/tmp/gaoming-proto.pb \
-		api/proto/monitor/v1/common.proto \
-		api/proto/monitor/v1/agent.proto \
-		api/proto/monitor/v1/probe.proto \
-		api/proto/monitor/v1/query.proto \
-		api/proto/monitor/v1/ops.proto
+		api/proto/monitor/v1/monitor.proto
 
 proto-lint:
 	buf lint api/proto

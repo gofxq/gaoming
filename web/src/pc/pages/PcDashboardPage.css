@@ -194,6 +194,90 @@
 .pc-detail-metric .semi-progress-line { height: 3px; border-radius: 2px; background: var(--line); }
 .pc-detail-metric .semi-progress-line-inner { background: var(--accent); }
 
+.telemetry-section { min-width: 0; }
+.telemetry-heading { padding-bottom: 10px; }
+.collector-statuses {
+  display: flex;
+  gap: 8px;
+  margin: 0 24px 12px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+}
+.collector-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--ink-secondary);
+  background: var(--surface);
+  font-size: 10px;
+}
+.collector-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-tertiary); }
+.collector-status small { color: var(--ink-tertiary); font-size: 9px; }
+.collector-state-1 i { background: var(--success); }
+.collector-state-2 i { background: var(--danger); }
+.collector-state-3 i { background: var(--warning); }
+.telemetry-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 24px;
+  padding: 3px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--surface-raised);
+}
+.telemetry-tabs button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ink-secondary);
+  background: transparent;
+  font-size: 11px;
+}
+.telemetry-tabs button:hover { color: var(--ink); background: var(--surface); }
+.telemetry-tabs button.active { color: var(--accent); background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.telemetry-tabs button span { color: var(--ink-tertiary); font-size: 9px; }
+.telemetry-table-wrap {
+  max-height: 460px;
+  margin: 0 24px;
+  overflow: auto;
+  border: 1px solid var(--line);
+}
+.telemetry-table { width: 100%; min-width: 720px; border-collapse: collapse; table-layout: fixed; }
+.telemetry-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-tertiary);
+  background: var(--surface-raised);
+  font-size: 9px;
+  font-weight: 500;
+  text-align: left;
+}
+.telemetry-table th:nth-child(1) { width: 36%; }
+.telemetry-table th:nth-child(2) { width: 34%; }
+.telemetry-table th:nth-child(3) { width: 18%; }
+.telemetry-table th:nth-child(4) { width: 12%; }
+.telemetry-table td { min-width: 0; padding: 9px 12px; border-bottom: 1px solid var(--line); color: var(--ink-secondary); font-size: 10px; vertical-align: top; }
+.telemetry-table tr:last-child td { border-bottom: 0; }
+.telemetry-table code, .telemetry-table td > span { overflow-wrap: anywhere; word-break: break-word; }
+.telemetry-table code { color: var(--ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.telemetry-table strong { color: var(--ink); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.telemetry-empty { margin: 0 24px; padding: 28px 16px; border: 1px solid var(--line); color: var(--ink-tertiary); font-size: 11px; text-align: center; }
+
 .pc-chart-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 0; border-top: 1px solid var(--line); }
 .pc-chart { display: grid; gap: 18px; min-width: 0; padding: 24px; }
 .pc-chart:not(:nth-child(4n)) { border-right: 1px solid var(--line); }
@@ -246,6 +330,7 @@
   .pc-detail-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 18px; }
   .detail-heading { padding: 18px; }
   .detail-section-heading { padding: 22px 18px 12px; }
+  .collector-statuses, .telemetry-tabs, .telemetry-table-wrap, .telemetry-empty { margin-right: 18px; margin-left: 18px; }
   .pc-chart-grid { grid-template-columns: minmax(0, 1fr); }
   .pc-chart, .pc-chart:nth-child(n) { padding: 20px 18px; border-top: 1px solid var(--line); border-right: 0; }
   .pc-chart:first-child { border-top: 0; }

@@ -53,6 +53,30 @@ func (s *MetricWindowStore) AppendHeartbeatMetrics(ctx context.Context, hostUID 
 	return err
 }
 
+func (s *MetricWindowStore) SaveMetricSnapshot(ctx context.Context, hostUID string, snapshot contracts.MetricSnapshot) error {
+	body, err := json.Marshal(snapshot)
+	if err != nil {
+		return err
+	}
+	return s.client.Set(ctx, s.snapshotKey(hostUID), body, s.windowTTL).Err()
+}
+
+func (s *MetricWindowStore) GetMetricSnapshot(ctx context.Context, hostUID string) (contracts.MetricSnapshot, bool, error) {
+	body, err := s.client.Get(ctx, s.snapshotKey(hostUID)).Bytes()
+	if err != nil {
+		if err == goredis.Nil {
+			return contracts.MetricSnapshot{}, false, nil
+		}
+		return contracts.MetricSnapshot{}, false, err
+	}
+
+	var snapshot contracts.MetricSnapshot
+	if err := json.Unmarshal(body, &snapshot); err != nil {
+		return contracts.MetricSnapshot{}, false, err
+	}
+	return snapshot, true, nil
+}
+
 func (s *MetricWindowStore) GetHostMetricHistory(ctx context.Context, hostUID string) (map[state.MetricKey][]state.MetricPoint, error) {
 	keys := repository.MetricKeys()
 	pipe := s.client.Pipeline()
@@ -93,6 +117,10 @@ func (s *MetricWindowStore) GetAllHostMetricHistory(ctx context.Context, hostUID
 
 func (s *MetricWindowStore) metricKey(hostUID string, key state.MetricKey) string {
 	return fmt.Sprintf("%s:%s:%s", s.keyPrefix, hostUID, key)
+}
+
+func (s *MetricWindowStore) snapshotKey(hostUID string) string {
+	return fmt.Sprintf("%s:%s:snapshot", s.keyPrefix, hostUID)
 }
 
 func decodeMetricPoints(raw []string) ([]state.MetricPoint, error) {

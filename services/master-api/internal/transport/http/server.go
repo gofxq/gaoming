@@ -44,6 +44,7 @@ func (s *Server) Handler() nethttp.Handler {
 	public := engine.Group("/master/api/v1")
 	public.GET("/stream/hosts", s.handleHostStream)
 	public.GET("/hosts", s.handleListHosts)
+	public.GET("/hosts/:hostUID/metrics/latest", s.handleGetLatestMetricSnapshot)
 	public.GET("/hosts/:hostUID", s.handleGetHost)
 
 	protected := engine.Group("/master/api/v1")
@@ -113,6 +114,43 @@ func (s *Server) handleGetHost(c *gin.Context) {
 		return
 	}
 	c.JSON(nethttp.StatusOK, host)
+}
+
+func (s *Server) handleGetLatestMetricSnapshot(c *gin.Context) {
+	hostUID := strings.TrimSpace(c.Param("hostUID"))
+	if hostUID == "" {
+		writeError(c, errors.New("missing host uid"))
+		return
+	}
+	tenantCode := tenantCodeFromContext(c)
+	if tenantCode == "" {
+		writeError(c, errors.New("missing tenant"))
+		return
+	}
+
+	_, ok, err := s.svc.GetHost(c.Request.Context(), hostUID, tenantCode)
+	if err != nil {
+		s.logger.Error("verify metric snapshot host", "host_uid", hostUID, "error", err)
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": "failed to verify host"})
+		return
+	}
+	if !ok {
+		c.JSON(nethttp.StatusNotFound, gin.H{"error": "host not found"})
+		return
+	}
+
+	snapshot, found, err := s.svc.GetMetricSnapshot(c.Request.Context(), hostUID)
+	if err != nil {
+		s.logger.Error("load latest metric snapshot", "host_uid", hostUID, "error", err)
+		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": "failed to load metric snapshot"})
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	if !found {
+		c.JSON(nethttp.StatusOK, gin.H{"snapshot": nil})
+		return
+	}
+	c.JSON(nethttp.StatusOK, gin.H{"snapshot": snapshot})
 }
 
 func (s *Server) handleCreateMaintenance(c *gin.Context) {

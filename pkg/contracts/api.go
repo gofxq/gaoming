@@ -93,6 +93,29 @@ type MetricPoint struct {
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
+type CollectorState int32
+
+const (
+	CollectorStateUnspecified CollectorState = iota
+	CollectorStateAvailable
+	CollectorStateUnavailable
+	CollectorStateDegraded
+)
+
+type CollectorStatus struct {
+	Name           string         `json:"name"`
+	State          CollectorState `json:"state"`
+	MetricNames    []string       `json:"metric_names,omitempty"`
+	DurationMicros int64          `json:"duration_micros"`
+	TimedOut       bool           `json:"timed_out"`
+}
+
+type MetricSnapshot struct {
+	CollectedAt time.Time         `json:"collected_at"`
+	Points      []MetricPoint     `json:"points"`
+	Collectors  []CollectorStatus `json:"collectors,omitempty"`
+}
+
 type EventRecord struct {
 	Type     string            `json:"type"`
 	Severity string            `json:"severity"`
@@ -102,13 +125,15 @@ type EventRecord struct {
 }
 
 type PushMetricBatchRequest struct {
-	HostUID     string        `json:"host_uid"`
-	AgentID     string        `json:"agent_id"`
-	BatchSeq    int64         `json:"batch_seq"`
-	CollectedAt time.Time     `json:"collected_at"`
-	Host        HostIdentity  `json:"host"`
-	Agent       AgentMetadata `json:"agent"`
-	Points      []MetricPoint `json:"points"`
+	HostUID     string            `json:"host_uid"`
+	AgentID     string            `json:"agent_id"`
+	BatchSeq    int64             `json:"batch_seq"`
+	CollectedAt time.Time         `json:"collected_at"`
+	Host        HostIdentity      `json:"host"`
+	Agent       AgentMetadata     `json:"agent"`
+	Points      []MetricPoint     `json:"points"`
+	Collectors  []CollectorStatus `json:"collectors,omitempty"`
+	Digest      AgentDigest       `json:"digest"`
 }
 
 type PushEventBatchRequest struct {
