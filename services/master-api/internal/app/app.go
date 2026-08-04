@@ -79,19 +79,12 @@ func New() (*App, error) {
 	metricStore := redisrepo.NewMetricWindowStore(redisClient, "", 60, 2*time.Hour)
 	eventBus := redisrepo.NewEventBus(redisClient, "")
 	authStore := auth.NewStore(gormDB)
-	weChatOAuth := auth.NewWeChatOAuthClient(
-		cfg.WeChatAppID,
-		cfg.WeChatAppSecret,
-		cfg.WeChatRedirectURL,
-		cfg.WeChatScope,
-	)
 	svc := service.New(
 		hostStore,
 		metricStore,
 		hostStore,
 		eventBus,
 		authStore,
-		weChatOAuth,
 		service.AuthConfig{
 			SessionTTL:        time.Duration(cfg.SessionTTLHours) * time.Hour,
 			SessionCookieName: cfg.SessionCookieName,

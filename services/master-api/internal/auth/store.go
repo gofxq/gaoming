@@ -2,15 +2,11 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"gorm.io/gorm"
 )
-
-const weChatProvider = "wechat"
 
 type GormStore struct {
 	db *gorm.DB
@@ -18,108 +14,6 @@ type GormStore struct {
 
 func NewStore(db *gorm.DB) *GormStore {
 	return &GormStore{db: db}
-}
-
-func (s *GormStore) CreateOrUpdateWeChatUser(ctx context.Context, tenantCode string, profile WeChatProfile, now time.Time) (User, error) {
-	if tenantCode == "" {
-		tenantCode = "default"
-	}
-	if profile.OpenID == "" {
-		return User{}, errors.New("missing wechat openid")
-	}
-
-	var result User
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		tenant, err := ensureTenant(ctx, tx, tenantCode)
-		if err != nil {
-			return err
-		}
-
-		identity, found, err := findIdentity(ctx, tx, profile)
-		if err != nil {
-			return err
-		}
-
-		var user userModel
-		if found {
-			if err := tx.Where("id = ?", identity.UserID).Take(&user).Error; err != nil {
-				return err
-			}
-		} else {
-			role := UserRoleMember
-			var existingCount int64
-			if err := tx.Model(&userModel{}).Where("tenant_id = ?", tenant.ID).Count(&existingCount).Error; err != nil {
-				return err
-			}
-			if existingCount == 0 {
-				role = UserRoleAdmin
-			}
-
-			user = userModel{
-				TenantID:    tenant.ID,
-				DisplayName: displayNameFromWeChat(profile),
-				AvatarURL:   emptyStringPtr(profile.AvatarURL),
-				Role:        string(role),
-				Status:      string(UserStatusActive),
-				LastLoginAt: &now,
-				CreatedAt:   now,
-				UpdatedAt:   now,
-			}
-			if err := tx.Create(&user).Error; err != nil {
-				return err
-			}
-		}
-
-		if user.TenantID == 0 {
-			user.TenantID = tenant.ID
-		}
-		user.TenantID = tenant.ID
-		user.DisplayName = displayNameFromWeChat(profile)
-		user.AvatarURL = emptyStringPtr(profile.AvatarURL)
-		user.LastLoginAt = &now
-		user.UpdatedAt = now
-		if user.Status == "" {
-			user.Status = string(UserStatusActive)
-		}
-		if user.Role == "" {
-			user.Role = string(UserRoleMember)
-		}
-		if err := tx.Save(&user).Error; err != nil {
-			return err
-		}
-
-		rawProfile, err := json.Marshal(profile)
-		if err != nil {
-			return err
-		}
-		if !found {
-			identity = userIdentityModel{
-				UserID:         user.ID,
-				Provider:       weChatProvider,
-				ProviderUserID: profile.OpenID,
-				CreatedAt:      now,
-			}
-		}
-		identity.UserID = user.ID
-		identity.Provider = weChatProvider
-		identity.ProviderUserID = profile.OpenID
-		identity.UnionID = emptyStringPtr(profile.UnionID)
-		identity.RawProfile = rawProfile
-		identity.UpdatedAt = now
-		if identity.CreatedAt.IsZero() {
-			identity.CreatedAt = now
-		}
-		if err := tx.Save(&identity).Error; err != nil {
-			return err
-		}
-
-		result = toUser(user, tenant.TenantCode, identity)
-		return nil
-	})
-	if err != nil {
-		return User{}, err
-	}
-	return result, nil
 }
 
 func (s *GormStore) CreateSession(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time, ip string, userAgent string, now time.Time) error {
@@ -201,7 +95,7 @@ func (s *GormStore) ListUsers(ctx context.Context, tenantCode string) ([]User, e
 		Table("users").
 		Select("users.id, users.display_name, users.avatar_url, users.role, users.status, users.last_login_at, users.created_at, users.updated_at, tenants.tenant_code, user_identities.provider, user_identities.provider_user_id").
 		Joins("join tenants on tenants.id = users.tenant_id").
-		Joins("left join user_identities on user_identities.user_id = users.id and user_identities.provider = ?", weChatProvider).
+		Joins("left join user_identities on user_identities.id = (select min(id) from user_identities where user_identities.user_id = users.id)").
 		Where("tenants.tenant_code = ?", tenantCode).
 		Order("users.created_at asc").
 		Scan(&rows).Error
@@ -244,7 +138,7 @@ func (s *GormStore) UpdateUser(ctx context.Context, tenantCode string, userID in
 		}
 
 		var identity userIdentityModel
-		_ = tx.Where("user_id = ? and provider = ?", user.ID, weChatProvider).Take(&identity).Error
+		_ = tx.Where("user_id = ?", user.ID).Order("id asc").Take(&identity).Error
 		result = toUser(user, tenant.TenantCode, identity)
 		return nil
 	})
@@ -252,47 +146,6 @@ func (s *GormStore) UpdateUser(ctx context.Context, tenantCode string, userID in
 		return User{}, err
 	}
 	return result, nil
-}
-
-func findIdentity(ctx context.Context, db *gorm.DB, profile WeChatProfile) (userIdentityModel, bool, error) {
-	var identity userIdentityModel
-	err := db.WithContext(ctx).
-		Where("provider = ? and provider_user_id = ?", weChatProvider, profile.OpenID).
-		Take(&identity).Error
-	if err == nil {
-		return identity, true, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return userIdentityModel{}, false, err
-	}
-	if profile.UnionID == "" {
-		return userIdentityModel{}, false, nil
-	}
-	err = db.WithContext(ctx).
-		Where("provider = ? and union_id = ?", weChatProvider, profile.UnionID).
-		Take(&identity).Error
-	if err == nil {
-		return identity, true, nil
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return userIdentityModel{}, false, nil
-	}
-	return userIdentityModel{}, false, err
-}
-
-func ensureTenant(ctx context.Context, db *gorm.DB, tenantCode string) (tenantRefModel, error) {
-	var tenant tenantRefModel
-	if err := db.WithContext(ctx).Where("tenant_code = ?", tenantCode).Take(&tenant).Error; err != nil {
-		return tenantRefModel{}, fmt.Errorf("load tenant %q: %w", tenantCode, err)
-	}
-	return tenant, nil
-}
-
-func displayNameFromWeChat(profile WeChatProfile) string {
-	if profile.Nickname != "" {
-		return profile.Nickname
-	}
-	return profile.OpenID
 }
 
 func toUser(user userModel, tenantCode string, identity userIdentityModel) User {

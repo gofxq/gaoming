@@ -19,7 +19,6 @@ type Service struct {
 	opsStore    repository.OperationsStore
 	eventBus    repository.EventBus
 	authStore   auth.Store
-	weChatOAuth auth.WeChatOAuthClient
 	authConfig  AuthConfig
 	clock       clock.Clock
 	logger      *logx.Logger
@@ -38,14 +37,13 @@ const (
 	HostEventDelete = repository.HostEventDelete
 )
 
-func New(hostStore repository.HostStateStore, metricStore repository.MetricWindowStore, opsStore repository.OperationsStore, eventBus repository.EventBus, authStore auth.Store, weChatOAuth auth.WeChatOAuthClient, authConfig AuthConfig, clk clock.Clock, logger *logx.Logger) *Service {
+func New(hostStore repository.HostStateStore, metricStore repository.MetricWindowStore, opsStore repository.OperationsStore, eventBus repository.EventBus, authStore auth.Store, authConfig AuthConfig, clk clock.Clock, logger *logx.Logger) *Service {
 	return &Service{
 		hostStore:   hostStore,
 		metricStore: metricStore,
 		opsStore:    opsStore,
 		eventBus:    eventBus,
 		authStore:   authStore,
-		weChatOAuth: weChatOAuth,
 		authConfig:  authConfig,
 		clock:       clk,
 		logger:      logger,

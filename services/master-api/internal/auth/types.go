@@ -51,21 +51,7 @@ type SessionRecord struct {
 	ExpiresAt time.Time
 }
 
-type WeChatProfile struct {
-	OpenID      string `json:"openid"`
-	UnionID     string `json:"unionid,omitempty"`
-	Nickname    string `json:"nickname"`
-	AvatarURL   string `json:"headimgurl,omitempty"`
-	Country     string `json:"country,omitempty"`
-	Province    string `json:"province,omitempty"`
-	City        string `json:"city,omitempty"`
-	Language    string `json:"language,omitempty"`
-	Sex         int    `json:"sex,omitempty"`
-	AccessToken string `json:"-"`
-}
-
 type Store interface {
-	CreateOrUpdateWeChatUser(ctx context.Context, tenantCode string, profile WeChatProfile, now time.Time) (User, error)
 	CreateSession(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time, ip string, userAgent string, now time.Time) error
 	GetUserBySessionTokenHash(ctx context.Context, tokenHash string, now time.Time) (User, SessionRecord, bool, error)
 	DeleteSession(ctx context.Context, tokenHash string) error

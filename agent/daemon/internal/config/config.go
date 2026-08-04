@@ -16,10 +16,13 @@ type Config struct {
 	Region                string
 	Env                   string
 	Role                  string
+	Hostname              string
 	TenantCode            string
 	ConfigPath            string
 	LoopIntervalSec       int
 }
+
+const EnvConfigPath = "GAOMING_AGENT_CONFIG"
 
 func Load() (Config, error) {
 	configPath := defaultConfigPath()
@@ -40,6 +43,7 @@ func Load() (Config, error) {
 		Region:                fileString(fileState.Region, "local"),
 		Env:                   fileString(fileState.Env, "dev"),
 		Role:                  fileString(fileState.Role, "node"),
+		Hostname:              strings.TrimSpace(fileState.Hostname),
 		TenantCode:            strings.TrimSpace(fileState.TenantCode),
 		ConfigPath:            configPath,
 		LoopIntervalSec:       fileInt(fileState.LoopIntervalSec, 1),
@@ -54,6 +58,7 @@ type persistedConfig struct {
 	Region                 string `yaml:"region"`
 	Env                    string `yaml:"env"`
 	Role                   string `yaml:"role"`
+	Hostname               string `yaml:"hostname"`
 	TenantCode             string `yaml:"tenant_code"`
 	LoopIntervalSec        int    `yaml:"loop_interval_sec"`
 }
@@ -72,6 +77,7 @@ func Save(cfg Config) error {
 		Region:                cfg.Region,
 		Env:                   cfg.Env,
 		Role:                  cfg.Role,
+		Hostname:              cfg.Hostname,
 		TenantCode:            cfg.TenantCode,
 		LoopIntervalSec:       cfg.LoopIntervalSec,
 	})
@@ -100,6 +106,7 @@ func SaveTenant(path string, tenantCode string) error {
 		Region:                fileString(state.Region, "local"),
 		Env:                   fileString(state.Env, "dev"),
 		Role:                  fileString(state.Role, "node"),
+		Hostname:              strings.TrimSpace(state.Hostname),
 		TenantCode:            state.TenantCode,
 		ConfigPath:            path,
 		LoopIntervalSec:       fileInt(state.LoopIntervalSec, 1),
@@ -108,6 +115,9 @@ func SaveTenant(path string, tenantCode string) error {
 }
 
 func defaultConfigPath() string {
+	if path := strings.TrimSpace(os.Getenv(EnvConfigPath)); path != "" {
+		return path
+	}
 	wd, err := os.Getwd()
 	if err != nil || wd == "" {
 		return "agent-config.yaml"

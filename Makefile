@@ -1,9 +1,16 @@
 GO ?= go
 DOCKER_COMPOSE ?= docker compose
 YARN ?= yarn
+AIR ?= air
 WEB_API_ORIGIN ?= https://gm-metric.gofxq.com
 
-.PHONY: fmt build test check clean master ingest core probe agent proto-check proto-lint compose-config up docker-up docker-up-full docker-down docker-logs docker-ps smoke smoke-agent deploy-agent-service install-agent-local-service db-update web-install web-dev web-local web-build h5-install h5-dev h5-local h5-build
+.PHONY: fmt build test check clean air
+.PHONY: master ingest core probe agent
+.PHONY: proto-check proto-lint
+.PHONY: compose-config up up-full down docker-up docker-up-full docker-down docker-logs docker-ps
+.PHONY: smoke smoke-agent
+.PHONY: deploy-agent-service install-agent-local-service
+.PHONY: web-install web-dev web-local web-build web-typecheck web-preview
 
 fmt:
 	$(GO) fmt ./...
@@ -17,7 +24,10 @@ test:
 check: fmt test build proto-check
 
 clean:
-	rm -rf bin dist tmp .tmp coverage cover.out
+	rm -rf bin dist tmp .tmp coverage cover.out web/dist
+
+air: web-install
+	GO="$(GO)" AIR="$(AIR)" YARN="$(YARN)" sh ./scripts/dev-air.sh
 
 master:
 	$(GO) run ./services/master-api/cmd/server
@@ -52,13 +62,10 @@ compose-config:
 up:
 	$(DOCKER_COMPOSE) --profile web up -d --build
 
-docker-up:
-	$(DOCKER_COMPOSE) --profile web up -d --build
+up-full:
+	$(DOCKER_COMPOSE) --profile container-agent --profile web up -d --build
 
-docker-up-full:
-	$(DOCKER_COMPOSE) --profile container-agent --profile web --profile h5 up -d --build
-
-docker-down:
+down:
 	$(DOCKER_COMPOSE) down --remove-orphans
 
 docker-logs:
@@ -74,7 +81,7 @@ smoke-agent:
 	sh ./scripts/smoke-agent.sh
 
 deploy-agent-service:
-	sh ./deployments/deploy-agent-service.sh
+	sh ./deployments/service-deploy-sh.sh
 
 install-agent-local-service:
 	mkdir -p .tmp
@@ -93,14 +100,8 @@ web-local: web-install
 web-build:
 	cd web && VITE_API_ORIGIN=$(WEB_API_ORIGIN) $(YARN) build
 
-h5-install:
-	cd h5 && $(YARN) install
+web-typecheck:
+	cd web && $(YARN) typecheck
 
-h5-dev: h5-install
-	cd h5 && VITE_PROXY_TARGET=$(WEB_API_ORIGIN) $(YARN) dev
-
-h5-local: h5-install
-	cd h5 && VITE_PROXY_TARGET=http://localhost:8080 $(YARN) dev
-
-h5-build:
-	cd h5 && VITE_API_ORIGIN=$(WEB_API_ORIGIN) $(YARN) build
+web-preview:
+	cd web && $(YARN) preview

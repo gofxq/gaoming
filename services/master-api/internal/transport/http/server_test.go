@@ -19,6 +19,7 @@ import (
 
 type stubHostStore struct {
 	allocateTenant func(context.Context) (string, error)
+	listHosts      func(context.Context, string) ([]state.HostSnapshot, error)
 }
 
 func (s stubHostStore) AllocateTenant(ctx context.Context) (string, error) {
@@ -40,7 +41,10 @@ func (s stubHostStore) ReportMetrics(context.Context, contracts.PushMetricBatchR
 	return state.HostSnapshot{}, nil
 }
 
-func (s stubHostStore) ListHosts(context.Context, string) ([]state.HostSnapshot, error) {
+func (s stubHostStore) ListHosts(ctx context.Context, tenantCode string) ([]state.HostSnapshot, error) {
+	if s.listHosts != nil {
+		return s.listHosts(ctx, tenantCode)
+	}
 	return nil, nil
 }
 
@@ -93,7 +97,7 @@ func (stubOpsStore) AckAlert(context.Context, string, string, time.Time) error {
 func newTestServer(hostStore repository.HostStateStore) *Server {
 	_ = io.Discard
 	logger := logx.NewNop()
-	svc := service.New(hostStore, stubMetricStore{}, stubOpsStore{}, stubEventBus{}, nil, nil, service.AuthConfig{}, clock.Real{}, logger)
+	svc := service.New(hostStore, stubMetricStore{}, stubOpsStore{}, stubEventBus{}, nil, service.AuthConfig{}, clock.Real{}, logger)
 	return NewServer(svc, logger)
 }
 
@@ -133,5 +137,42 @@ func TestHandleAllocateInstallTenantMethodNotAllowed(t *testing.T) {
 
 	if rec.Code != nethttp.StatusMethodNotAllowed {
 		t.Fatalf("expected status 405, got %d", rec.Code)
+	}
+}
+
+func TestHandleListHostsAllowsAnonymousTenantRead(t *testing.T) {
+	var gotTenantCode string
+	server := newTestServer(stubHostStore{
+		listHosts: func(_ context.Context, tenantCode string) ([]state.HostSnapshot, error) {
+			gotTenantCode = tenantCode
+			return []state.HostSnapshot{
+				{
+					HostUID:    "host-1",
+					TenantCode: "tenant-a",
+					Hostname:   "agent-1",
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(nethttp.MethodGet, "/master/api/v1/hosts?tenant=tenant-a", nil)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != nethttp.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if gotTenantCode != "tenant-a" {
+		t.Fatalf("expected tenant-a, got %q", gotTenantCode)
+	}
+
+	var resp struct {
+		Items []state.HostSnapshot `json:"items"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Items) != 1 || resp.Items[0].HostUID != "host-1" {
+		t.Fatalf("unexpected items: %+v", resp.Items)
 	}
 }

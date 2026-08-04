@@ -1,6 +1,6 @@
 # 高明 / Gaoming
 
-![icon](web/favicon/android-chrome-512x512.png)
+![icon](web/favicon/apple-touch-icon.png)
 
 > 高明是明代神魔小说《封神演义》中的虚拟角色，本体为棋盘山桃精，与其弟柳鬼高觉（顺风耳）并称千里眼。
 
@@ -35,11 +35,6 @@ loop-interval-sec [5]: 1
 🔗 在线 Demo: [https://gaoming.gofxq.com/default](https://gaoming.gofxq.com/default)
 ## WEB
 ![web-demo](docs/gaoming.gofxq.com_default.png)
-
-## PWA
-| 横屏                                      | 竖屏｜                                     |                                          |
-| ----------------------------------------- | ------------------------------------------ | ---------------------------------------- | ----------------------------------------- |
-| ![png](<docs/pics/mobile_overview_-.png>) | ![text](<docs/pics/mobile_overview_I.png>) | ![text](<docs/pics/mobile_detail_-.png>) | ![text](<gdocs/pics/mobile_detail_I.png>) |
 
 ## ✨ 核心能力
 
@@ -261,13 +256,8 @@ go build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
 
 ## 📚 文档
 
-- [docs/00-summary.md](docs/00-summary.md)
-- [docs/01-data-model.md](docs/01-data-model.md)
-- [docs/02-contracts.md](docs/02-contracts.md)
-- [docs/03-runtime-flow.md](docs/03-runtime-flow.md)
-- [docs/04-layout.md](docs/04-layout.md)
-- [docs/05-local-run.md](docs/05-local-run.md)
-- [docs/06-repository-hygiene.md](docs/06-repository-hygiene.md)
-- [docs/07-oss-options.md](docs/07-oss-options.md)
-- [docs/08-persistence-runtime.md](docs/08-persistence-runtime.md)
-- [docs/plans/99-roadmap.md](docs/plans/99-roadmap.md)
+- [中文文档概要与索引](docs/README_cn.md)
+- [系统架构](docs/01-core/architecture.md)
+- [本地开发与验证](docs/02-guides/local-development.md)
+- [接口与数据模型](docs/03-reference/api-and-data.md)
+- [仓库结构](docs/03-reference/repository-layout.md)

@@ -11,10 +11,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@douyinfe/semi-icons": "2.101.0",
+    "@douyinfe/semi-ui": "^2.78.0",
+    "@fontsource/fusion-pixel-12px-proportional-sc": "5.2.5",
     "@tanstack/react-query": "^5.90.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.30.1"
+    "react-router-dom": "6.30.4"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
