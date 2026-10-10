@@ -1,6 +1,13 @@
 # Gaoming 文档
 
-这里记录仓库当前已经实现的行为。设计设想、已完成的迁移步骤和临时方案不再与现状文档混放。
+核心、指南和参考资料记录仓库当前已经实现的行为。后续规划单独维护在 Roadmap 和 TODO 中，避免与现状文档混放。
+
+## 后续规划
+
+| 文档 | 内容 |
+| --- | --- |
+| [Roadmap](./roadmap.md) | 全项目现状、阶段目标、依赖与交付条件 |
+| [按优先级 TODO](./TODO.md) | P0～P3 待办、代码依据与验收标准 |
 
 ## 项目概要
 
@@ -49,6 +56,7 @@ Agent 采集主机指标
 | --- | --- | --- |
 | [接口与数据模型](./03-reference/api-and-data.md) | HTTP、gRPC、SSE、状态码、指标和存储结构 | 前后端开发 |
 | [仓库结构](./03-reference/repository-layout.md) | 目录职责和关键代码入口 | 新贡献者 |
+| [gopsutil 采集能力与性能](./03-reference/gopsutil-capability-benchmark.md) | 能力数量口径、全分组耗时、批次成本和采集边界 | Agent、后端与运维开发 |
 
 前端视觉规则单独维护在 [`web/DESIGN_SYSTEM.md`](../web/DESIGN_SYSTEM.md)，Pixel 皮肤规范见 [`web/PIXEL_DESIGN_SYSTEM.md`](../web/PIXEL_DESIGN_SYSTEM.md)，贡献与检查流程见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
 
@@ -84,6 +92,7 @@ TENANT=default make smoke-agent
 ## 文档维护约定
 
 - 文档描述当前代码，不把规划写成已实现能力。
+- Roadmap 和 TODO 明确标注为规划；完成任务后同步更新现状文档和验收记录。
 - 接口或运行链路变化时，优先更新核心文档和对应参考文档。
 - 临时实施计划放在 Issue/PR；完成后不长期保留在 `docs/`。
 - 命令以 [`Makefile`](../Makefile) 中真实存在的 target 为准。

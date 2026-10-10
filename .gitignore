@@ -44,3 +44,5 @@ config/
 !web/src/shared/features/config/
 !web/src/shared/features/config/AppConfigProvider.tsx
 .codex
+docs/roadmap.md
+docs/TODO.md

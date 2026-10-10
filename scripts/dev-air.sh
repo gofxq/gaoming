@@ -8,7 +8,8 @@ YARN="${YARN:-yarn}"
 LOG_DIR=".tmp/air/logs"
 BIN_DIR=".tmp/air/bin"
 CONFIG_DIR=".tmp/air/config"
-mkdir -p "$LOG_DIR" "$BIN_DIR" "$CONFIG_DIR"
+TMP_DIR=".tmp/air/tmp"
+mkdir -p "$LOG_DIR" "$BIN_DIR" "$CONFIG_DIR" "$TMP_DIR"
 
 if ! command -v "$AIR" >/dev/null 2>&1; then
 	if [ -x "$("$GO" env GOPATH)/bin/air" ]; then
@@ -58,7 +59,7 @@ tmp_dir = ".tmp/air/tmp/$name"
 
 [build]
 cmd = "$GO build -o ./$BIN_DIR/$name $pkg"
-bin = "./$BIN_DIR/$name"
+entrypoint = ["./$BIN_DIR/$name"]
 include_ext = ["go", "yml", "yaml"]
 exclude_dir = [".git", ".tmp", "web", "node_modules"]
 delay = 1000
