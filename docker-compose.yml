@@ -43,6 +43,8 @@ services:
     ports:
       - "8080:8080"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -67,6 +69,8 @@ services:
       - "8090:8090"
       - "8091:8091"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -76,6 +80,20 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE_PATH: ./services/master-api/cmd/admin
+    entrypoint: ["/app/admin", "migrate"]
+    volumes:
+      - ./config/master-api.docker.yml:/app/config/master-api.yml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   core-worker:
     build:

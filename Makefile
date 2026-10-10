@@ -8,12 +8,24 @@ WEB_API_ORIGIN ?= https://gm-metric.gofxq.com
 .PHONY: master ingest core probe agent
 .PHONY: proto-check proto-lint
 .PHONY: compose-config up up-full down docker-up docker-up-full docker-down docker-logs docker-ps
-.PHONY: smoke smoke-agent
+.PHONY: smoke smoke-agent migrate schema-check migration-test fmt-check proto-generate proto-generated-check web-test web-e2e smoke-roadmap
 .PHONY: deploy-agent-service install-agent-local-service
 .PHONY: web-install web-dev web-local web-build web-typecheck web-preview
 
 fmt:
 	$(GO) fmt ./...
+
+fmt-check:
+	@test -z "$$(gofmt -l $$(git ls-files '*.go') $$(git ls-files --others --exclude-standard '*.go'))" || { echo 'Go files require gofmt'; exit 1; }
+
+migrate:
+	$(GO) run ./services/master-api/cmd/admin migrate
+
+schema-check:
+	$(GO) run ./services/master-api/cmd/admin schema-check
+
+migration-test:
+	REQUIRE_POSTGRES_TESTS=1 $(GO) test ./pkg/migrations -count=1 -v
 
 build:
 	$(GO) build ./...
@@ -21,7 +33,7 @@ build:
 test:
 	$(GO) test ./...
 
-check: fmt test build proto-check
+check: fmt-check test build proto-check proto-generated-check web-typecheck web-test web-build
 
 clean:
 	rm -rf bin dist tmp .tmp coverage cover.out web/dist
@@ -52,6 +64,12 @@ proto-check:
 proto-lint:
 	buf lint api/proto
 
+proto-generate:
+	protoc -I api/proto --go_out=api/gen/go --go_opt=paths=source_relative --go-grpc_out=api/gen/go --go-grpc_opt=paths=source_relative api/proto/monitor/v1/monitor.proto
+
+proto-generated-check:
+	sh ./scripts/check-proto-generated.sh
+
 compose-config:
 	$(DOCKER_COMPOSE) config >/dev/null
 
@@ -60,6 +78,12 @@ up:
 
 up-full:
 	$(DOCKER_COMPOSE) --profile container-agent --profile web up -d --build
+
+docker-up: up
+
+docker-up-full: up-full
+
+docker-down: down
 
 down:
 	$(DOCKER_COMPOSE) down --remove-orphans
@@ -98,6 +122,15 @@ web-build:
 
 web-typecheck:
 	cd web && $(YARN) typecheck
+
+web-test:
+	cd web && $(YARN) test
+
+web-e2e:
+	cd web && $(YARN) test:e2e
+
+smoke-roadmap:
+	sh ./scripts/smoke-roadmap.sh
 
 web-preview:
 	cd web && $(YARN) preview

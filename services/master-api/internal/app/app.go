@@ -11,6 +11,7 @@ import (
 	postgresrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/postgres"
 	redisrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/redis"
 	"github.com/gofxq/gaoming/pkg/logx"
+	"github.com/gofxq/gaoming/pkg/migrations"
 	"github.com/gofxq/gaoming/services/master-api/internal/auth"
 	"github.com/gofxq/gaoming/services/master-api/internal/config"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
@@ -54,6 +55,10 @@ func New() (*App, error) {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
+	if err := migrations.Check(initCtx, sqlDB); err != nil {
+		_ = sqlDB.Close()
+		return nil, err
+	}
 
 	redisClient := goredis.NewClient(&goredis.Options{
 		Addr:     cfg.RedisAddr,
@@ -89,6 +94,9 @@ func New() (*App, error) {
 			SessionTTL:        time.Duration(cfg.SessionTTLHours) * time.Hour,
 			SessionCookieName: cfg.SessionCookieName,
 			SessionSecret:     cfg.SessionSecret,
+			SetupToken:        cfg.SetupToken,
+			CookieSecure:      cfg.SessionCookieSecure,
+			AllowedOrigins:    cfg.AllowedOrigins,
 		},
 		clock.Real{},
 		logger,

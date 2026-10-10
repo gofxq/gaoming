@@ -221,7 +221,7 @@ flowchart TB
 - `users`、`user_identities`、`user_sessions`：用户和已有会话解析。
 - `maintenance_windows`、`alert_events`：部分运维操作。
 
-Schema 由 `deployments/sql/init.sql` 在 PostgreSQL 数据卷首次初始化时执行。服务启动不会自动迁移已有数据库。
+新数据库结构见 `deployments/sql/init.sql`；部署和存量升级使用显式的 `make migrate` 管理命令，按顺序执行嵌入的 SQL、事务锁与 checksum 版本记录。Compose 一次性迁移服务完成后才启动 master/ingest；服务启动只检查版本。失败回滚与升级边界见[数据库迁移](../02-guides/database-migrations.md)。
 
 ### Redis
 
@@ -235,7 +235,7 @@ Schema 由 `deployments/sql/init.sql` 在 PostgreSQL 数据卷首次初始化时
 - 主机列表、详情和 SSE 是公开接口，租户来自 `?tenant=`。
 - 受保护接口通过 `gaoming_session` Cookie 查找会话。
 - 用户管理要求已登录且角色为 `admin`，并限制在会话租户内。
-- 仓库当前没有登录、OAuth 回调或创建会话的 HTTP 路由。
+- 已接通本地密码登录和一次性初始管理员引导，已有环境可通过本机管理命令创建管理员；暂无 OAuth 回调。Cookie 默认 Secure/HttpOnly/SameSite=Lax，写操作校验 Origin 和会话派生 CSRF；认证响应 no-store。详见[登录手册](../02-guides/authentication.md)。
 - 维护窗和告警 ACK 虽要求会话，但底层操作仍使用服务默认租户，而非会话租户。
 
 ## 部署形态
@@ -255,7 +255,7 @@ Schema 由 `deployments/sql/init.sql` 在 PostgreSQL 数据卷首次初始化时
 2. **Probe 闭环**：探测结果未落库，未参与 `reachability_state` 和 `overall_state` 计算。
 3. **Core 计算**：状态、告警和调度 pipeline 尚未实现。
 4. **可靠上报**：Agent 没有磁盘队列，`batch_seq` 不去重，进程重启后重新计数。
-5. **认证与租户**：公开查询依赖可猜测的 tenant code；登录流程和部分运维租户边界不完整。
+5. **认证与租户**：登录流程已可用，但主机公开查询仍依赖可猜测的 tenant code；运维租户绑定、分享和 Agent 接入鉴权尚未闭环。
 6. **扩展性**：每个 SSE 连接有独立 Redis 订阅，多实例 ingest 会重复执行离线扫描。
 
 ## 关键代码入口

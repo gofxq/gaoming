@@ -30,6 +30,7 @@ export function PcShell() {
   const navigate = useNavigate();
   const [selectedWindowSec, setSelectedWindowSec] = useState(300);
   const [expandedHostUID, setExpandedHostUID] = useState("");
+  const [signOutError, setSignOutError] = useState("");
   const hostData = useLiveHostsData({
     apiBaseUrl: config.apiBaseUrl,
     streamPath: config.streamPath,
@@ -69,8 +70,13 @@ export function PcShell() {
   }, [expandedHostUID, hostData.sortedHosts]);
 
   async function handleSignOut() {
-    await signOut();
-    navigate(`/${tenantCode}/login`, { replace: true });
+    setSignOutError("");
+    try {
+      await signOut();
+      navigate(`/${tenantCode}/login`, { replace: true });
+    } catch {
+      setSignOutError("退出失败，请检查网络后重试。当前会话尚未确认失效。");
+    }
   }
 
   return (
@@ -182,6 +188,7 @@ export function PcShell() {
       </header>
 
       <main className="content">
+        {signOutError ? <div className="auth-error" role="alert">{signOutError}</div> : null}
         <Outlet context={outletContext} />
       </main>
     </div>

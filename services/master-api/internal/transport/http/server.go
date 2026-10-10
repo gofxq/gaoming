@@ -17,13 +17,14 @@ import (
 const userContextKey = "session_user"
 
 type Server struct {
-	svc    *service.Service
-	logger *logx.Logger
+	svc       *service.Service
+	logger    *logx.Logger
+	authGuard *authGuard
 }
 
 func NewServer(svc *service.Service, logger *logx.Logger) *Server {
 	gin.SetMode(gin.ReleaseMode)
-	return &Server{svc: svc, logger: logger}
+	return &Server{svc: svc, logger: logger, authGuard: newAuthGuard()}
 }
 
 func (s *Server) Handler() nethttp.Handler {
@@ -35,8 +36,13 @@ func (s *Server) Handler() nethttp.Handler {
 	engine.GET("/master/healthz", s.handleHealth)
 
 	authGroup := engine.Group("/master/api/v1/auth")
+	authGroup.Use(s.requireAllowedOrigin())
+	authGroup.POST("/setup", s.limitAuthWork(), s.handleSetup)
+	authGroup.GET("/setup-status", s.handleSetupStatus)
+	authGroup.POST("/login", s.limitAuthWork(), s.handleLogin)
+	authGroup.GET("/csrf", s.requireSession(), s.handleCSRF)
 	authGroup.GET("/session", s.handleSession)
-	authGroup.POST("/logout", s.handleLogout)
+	authGroup.POST("/logout", s.requireSession(), s.requireCSRF(), s.handleLogout)
 
 	engine.POST("/master/api/v1/install/tenant", s.handleAllocateInstallTenant)
 	engine.POST("/master/api/v1/agents/register", s.handleRegisterAgent)
@@ -48,7 +54,7 @@ func (s *Server) Handler() nethttp.Handler {
 	public.GET("/hosts/:hostUID", s.handleGetHost)
 
 	protected := engine.Group("/master/api/v1")
-	protected.Use(s.requireSession())
+	protected.Use(s.requireSession(), s.requireAllowedOrigin(), s.requireCSRF())
 	protected.POST("/ops/maintenance", s.handleCreateMaintenance)
 	protected.POST("/ops/alerts/:alertID/ack", s.handleAckAlert)
 
@@ -203,7 +209,7 @@ func (s *Server) handleLogout(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
-	clearSessionCookie(c, s.cookieName())
+	s.clearSessionCookie(c)
 	c.Status(nethttp.StatusNoContent)
 }
 
@@ -308,12 +314,14 @@ func sessionTokenFromRequest(c *gin.Context, cookieName string) string {
 	return cookie.Value
 }
 
-func setSessionCookie(c *gin.Context, cookieName string, value string, expiresAt time.Time) {
-	c.SetCookie(cookieName, value, max(1, int(time.Until(expiresAt).Seconds())), "/", "", false, true)
+func (s *Server) setSessionCookie(c *gin.Context, value string, expiresAt time.Time) {
+	c.SetSameSite(nethttp.SameSiteLaxMode)
+	c.SetCookie(s.cookieName(), value, max(1, int(time.Until(expiresAt).Seconds())), "/", "", s.svc.CookieSecure(), true)
 }
 
-func clearSessionCookie(c *gin.Context, cookieName string) {
-	c.SetCookie(cookieName, "", -1, "/", "", false, true)
+func (s *Server) clearSessionCookie(c *gin.Context) {
+	c.SetSameSite(nethttp.SameSiteLaxMode)
+	c.SetCookie(s.cookieName(), "", -1, "/", "", s.svc.CookieSecure(), true)
 }
 
 func writeError(c *gin.Context, err error) {

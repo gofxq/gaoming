@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppConfig } from "../../shared/features/config/AppConfigProvider";
 import { useAuth } from "../../shared/features/auth/AuthProvider";
 import { requestJson } from "../../shared/lib/http";
+import { writeAuthorizedJson } from "../../shared/features/auth/api";
 
 type UserRecord = {
   id: number;
@@ -24,8 +25,8 @@ type UsersPayload = {
 
 type UserPatch = Partial<Pick<UserRecord, "display_name" | "role" | "status">>;
 
-function usersQueryKey(apiBaseUrl: string) {
-  return ["admin-users", apiBaseUrl] as const;
+function usersQueryKey(apiBaseUrl: string, tenantCode: string, userID: number) {
+  return ["private", "admin-users", apiBaseUrl, tenantCode, userID] as const;
 }
 
 export function UsersPage() {
@@ -33,12 +34,15 @@ export function UsersPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [savingID, setSavingID] = useState<number | null>(null);
+  const queryKey = usersQueryKey(config.apiBaseUrl, user?.tenant_code || "", user?.id || 0);
 
   const query = useQuery({
-    queryKey: usersQueryKey(config.apiBaseUrl),
-    queryFn: async () => {
+    queryKey,
+    enabled: Boolean(user?.role === "admin"),
+    queryFn: async ({ signal }) => {
       const payload = await requestJson<UsersPayload>(`${config.apiBaseUrl}/admin/users`, {
         credentials: "include",
+        signal,
       });
       return payload.items || [];
     },
@@ -46,19 +50,15 @@ export function UsersPage() {
 
   const mutation = useMutation({
     mutationFn: async ({ target, patch }: { target: UserRecord; patch: UserPatch }) =>
-      requestJson<UserRecord>(`${config.apiBaseUrl}/admin/users/${target.id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(patch),
-      }),
+      writeAuthorizedJson<UserRecord>(config.apiBaseUrl, `/admin/users/${target.id}`, patch, "PATCH"),
     onMutate: ({ target }) => {
       setSavingID(target.id);
     },
     onSuccess: (nextUser) => {
-      queryClient.setQueryData<UserRecord[]>(usersQueryKey(config.apiBaseUrl), (current) =>
+      // A mutation completed after logout/account switch must not recreate the
+      // removed query or copy data into the new user's scope.
+      if (!queryClient.getQueryState(queryKey)) return;
+      queryClient.setQueryData<UserRecord[]>(queryKey, (current) =>
         (current || []).map((item) => (item.id === nextUser.id ? nextUser : item)),
       );
     },

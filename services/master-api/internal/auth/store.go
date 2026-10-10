@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type GormStore struct {
@@ -13,7 +14,8 @@ type GormStore struct {
 }
 
 func NewStore(db *gorm.DB) *GormStore {
-	return &GormStore{db: db}
+	// Driver errors may include password hashes or session-token hashes.
+	return &GormStore{db: db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})}
 }
 
 func (s *GormStore) CreateSession(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time, ip string, userAgent string, now time.Time) error {
@@ -26,7 +28,12 @@ func (s *GormStore) CreateSession(ctx context.Context, userID int64, tokenHash s
 		UserAgent:  emptyStringPtr(userAgent),
 		CreatedAt:  now,
 	}
-	return s.db.WithContext(ctx).Create(&session).Error
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&userModel{}).Where("id = ?", userID).Updates(map[string]any{"last_login_at": now, "updated_at": now}).Error; err != nil {
+			return err
+		}
+		return tx.Create(&session).Error
+	})
 }
 
 func (s *GormStore) GetUserBySessionTokenHash(ctx context.Context, tokenHash string, now time.Time) (User, SessionRecord, bool, error) {
@@ -38,7 +45,7 @@ func (s *GormStore) GetUserBySessionTokenHash(ctx context.Context, tokenHash str
 		}
 		return User{}, SessionRecord{}, false, err
 	}
-	if session.ExpiresAt.Before(now) {
+	if !session.ExpiresAt.After(now) {
 		return User{}, SessionRecord{}, false, nil
 	}
 
@@ -47,7 +54,7 @@ func (s *GormStore) GetUserBySessionTokenHash(ctx context.Context, tokenHash str
 		Table("users").
 		Select("users.id, users.display_name, users.avatar_url, users.role, users.status, users.last_login_at, users.created_at, users.updated_at, tenants.tenant_code").
 		Joins("join tenants on tenants.id = users.tenant_id").
-		Where("users.id = ?", session.UserID).
+		Where("users.id = ? AND tenants.status = 1", session.UserID).
 		Take(&joined).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

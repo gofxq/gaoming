@@ -76,9 +76,11 @@ T01 → T02 → T03/T04 → T05 → T06/T07/T08/T09/T10 → T11/T12/T13 → T14/
 
 **Interfaces:** `migrations.Run(ctx context.Context,db *sql.DB) error`；新增 `make migrate`、`make web-test`、`make web-e2e`、`make smoke-roadmap`。迁移在独立管理命令运行，服务检查版本，不能并行隐式修改 schema。
 
-- [ ] 回归 `TestMigrationEmptyAndExistingDatabaseMatch`：新库与现有初始化库升级后结构一致；失败事务不记录成功版本；重复执行不重复数据。为现有升级 SQL 验证兼容路径。
-- [ ] 实现迁移锁/版本表/管理命令，增加全仓 Go/协议/Web 门禁与前端行为测试工具，PR 只授予读仓库权限。
-- [ ] 执行 `make test`、`make build`、`make proto-check`、`make web-typecheck`、`make web-build`；PG 迁移集成检查使用独立测试库，保留结果。记录开始执行前的基线与已有失败原因。
+- [x] 回归 `TestMigrationEmptyAndExistingDatabaseMatch`：新库与现有初始化库升级后结构一致；失败事务不记录成功版本；重复执行不重复数据。为现有升级 SQL 验证兼容路径。
+- [x] 实现迁移锁/版本表/管理命令，增加全仓 Go/协议/Web 门禁与前端行为测试工具，PR 只授予读仓库权限。
+- [x] 执行 `make test`、`make build`、`make proto-check`、`make web-typecheck`、`make web-build`；PG 迁移集成检查使用独立测试库，保留结果。记录开始执行前的基线与已有失败原因。
+
+2026-10-10：T01 的命令、5 项真实 PG 回归、3 项 Web 单元回归、1 项浏览器回归及独立 Docker/Agent smoke 均通过。详细证据与安全检查见 [TODO 实施记录](../../TODO.md)。结构比较目前覆盖列名/类型/可空性；索引/约束/默认值及完整备份恢复继续在 P1-07/T10 补齐。迁移占用 001/002，后续功能迁移编号顺延。改动按用户要求保留在当前目录供审阅。
 
 ### T02：本地登录、管理员引导与会话（M0，P0-02/P0-05）
 
@@ -86,9 +88,11 @@ T01 → T02 → T03/T04 → T05 → T06/T07/T08/T09/T10 → T11/T12/T13 → T14/
 
 **Interfaces:** `POST /auth/setup {setup_token,tenant_code,username,display_name,password}`、`POST /auth/login {tenant_code,username,password}`、`GET /auth/csrf`、现有 session/logout；`Service.Login(ctx context.Context,req LoginRequest) (auth.Session,error)`。CSRF token 不含原始会话 token。
 
-- [ ] 回归 `TestSetupTokenSingleUse`、`TestLoginDisabledAndExpiredSession`、`TestLoginOriginAndPasswordBoundaries`：并发初始化只有一位初始管理员；错误登录不泄露账号；session/cookie/Origin/CSRF 按决策生效。
-- [ ] 新增租户唯一密码身份及管理员命令；接通登录/初始化页面、字段错误、忙碌与过期反馈，站内 return_to 校验拒绝 `//`、反斜线与未授权空间。
-- [ ] 执行 `go test ./services/master-api/...`、前端登录行为回归、`make web-build`；验收无需手工写会话，密码/原始 token 不出现在 JSON 或日志。
+- [x] 回归 `TestSetupTokenSingleUse`、`TestLoginDisabledAndExpiredSession`、`TestLoginOriginAndPasswordBoundaries`：并发初始化只有一位初始管理员；错误登录不泄露账号；session/cookie/Origin/CSRF 按决策生效。
+- [x] 新增租户唯一密码身份及管理员命令；接通登录/初始化页面、字段错误、忙碌与过期反馈，站内 return_to 校验拒绝 `//`、反斜线与未授权空间。
+- [x] 执行 `go test ./services/master-api/...`、前端登录行为回归、`make web-build`；验收无需手工写会话，密码/原始 token 不出现在 JSON 或日志。
+
+2026-10-10：T02 完成真实 PG/HTTP、race、15 项 Web 单元、4 项 Chromium 场景及更新后的 Docker/Agent smoke。独立审阅发现的跨身份成员缓存问题已通过 RED→GREEN 修复。认证迁移为 003，后续从 004 编号。详细记录和截图见 TODO；其他阶段未完成。
 
 ### T03：读取授权、运维权限与受限分享（M0，P0-01/P0-03）
 
@@ -316,8 +320,8 @@ T01 → T02 → T03/T04 → T05 → T06/T07/T08/T09/T10 → T11/T12/T13 → T14/
 
 ## 当前状态与执行交接
 
-已完成仓库与 roadmap 的读取、模块边界和调用链核对、任务/接口/迁移/验收设计；当前没有修改产品代码，没有运行本计划中的实现验收，也没有部署或发送通知。
+2026-10-10 已开始实施，T01/T02 已完成本地验收；其他未勾选任务尚未完成。实际进展、命令与安全检查以 [TODO](../../TODO.md) 为准。没有部署到生产或发送外部通知。
 
-下一步：审阅此计划，确定登录/接入/通知/历史/私网探测等实现选择及执行方式，然后从 T01 开始。推荐在当前会话由主执行者顺序实施，逐阶段记录证据；是否使用隔离 worktree 随执行选择确定，已有工作区内容须完整保留。
+用户已要求按 roadmap/TODO 完整实施，并选择在当前目录保留改动供审阅；由主执行者顺序实施，逐步骤记录证据。下一步从 T03 开始，已有工作区内容须完整保留。
 
 安全检查：本次仅新增计划文档，无新运行风险。接入鉴权、公开访问和租户绑定仍有既有风险；计划将其作为 M0 交付条件，并对出站探测/webhook、缓存、恢复和升级设置相应回归。

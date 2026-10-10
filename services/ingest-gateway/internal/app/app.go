@@ -13,6 +13,7 @@ import (
 	postgresrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/postgres"
 	redisrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/redis"
 	"github.com/gofxq/gaoming/pkg/logx"
+	"github.com/gofxq/gaoming/pkg/migrations"
 	"github.com/gofxq/gaoming/services/ingest-gateway/internal/config"
 	"github.com/gofxq/gaoming/services/ingest-gateway/internal/service"
 	grpctransport "github.com/gofxq/gaoming/services/ingest-gateway/internal/transport/grpc"
@@ -55,6 +56,10 @@ func New() (*App, error) {
 	if err := sqlDB.PingContext(initCtx); err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("ping postgres: %w", err)
+	}
+	if err := migrations.Check(initCtx, sqlDB); err != nil {
+		_ = sqlDB.Close()
+		return nil, err
 	}
 
 	redisClient := goredis.NewClient(&goredis.Options{

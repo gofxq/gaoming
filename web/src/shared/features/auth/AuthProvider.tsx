@@ -4,10 +4,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
 import { useAppConfig } from "../config/AppConfigProvider";
+import { HttpError } from "../../lib/http";
+import { writeAuthorizedJson } from "./api";
+import { useQueryClient } from "@tanstack/react-query";
 
 type AuthUser = {
   id: number;
@@ -25,7 +29,7 @@ type AuthContextValue = {
   authenticated: boolean;
   initializing: boolean;
   user: AuthUser | null;
-  refreshSession: () => Promise<void>;
+  refreshSession: () => Promise<boolean>;
   signOut: () => Promise<void>;
 };
 
@@ -35,11 +39,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const { config } = useAppConfig();
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const revision = useRef(0);
+  const identity = useRef("");
+  const queryClient = useQueryClient();
+
+  const applyIdentity = useCallback(async (next: AuthUser | null, current: number) => {
+    const nextIdentity = next ? `${next.tenant_code}:${next.id}:${next.role}:${next.status}` : "";
+    if (identity.current !== nextIdentity) {
+      await queryClient.cancelQueries();
+      if (current !== revision.current) return false;
+      queryClient.clear();
+      identity.current = nextIdentity;
+    }
+    if (current !== revision.current) return false;
+    setUser(next);
+    return Boolean(next);
+  }, [queryClient]);
 
   const sessionUrl = `${config.apiBaseUrl}/auth/session`;
-  const logoutUrl = `${config.apiBaseUrl}/auth/logout`;
 
   const refreshSession = useCallback(async () => {
+    const current = ++revision.current;
     try {
       const response = await fetch(sessionUrl, {
         credentials: "include",
@@ -52,23 +72,30 @@ export function AuthProvider({ children }: PropsWithChildren) {
         authenticated?: boolean;
         user?: AuthUser;
       };
-      setUser(payload.authenticated ? payload.user || null : null);
+      if (current !== revision.current) return false;
+      return await applyIdentity(payload.authenticated ? payload.user || null : null, current);
+    } catch {
+      if (current === revision.current) await applyIdentity(null, current);
+      return false;
     } finally {
-      setInitializing(false);
+      if (current === revision.current) setInitializing(false);
     }
-  }, [sessionUrl]);
+  }, [sessionUrl, applyIdentity]);
 
   useEffect(() => {
     void refreshSession();
+    return () => { revision.current++; };
   }, [refreshSession]);
 
   const signOut = useCallback(async () => {
-    await fetch(logoutUrl, {
-      method: "POST",
-      credentials: "include",
-    });
-    setUser(null);
-  }, [logoutUrl]);
+    const current = ++revision.current;
+    try {
+      await writeAuthorizedJson<void>(config.apiBaseUrl, "/auth/logout", {});
+    } catch (error) {
+      if (!(error instanceof HttpError && error.status === 401)) throw error;
+    }
+    await applyIdentity(null, current);
+  }, [config.apiBaseUrl, applyIdentity]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

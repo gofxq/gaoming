@@ -52,9 +52,17 @@ type SessionRecord struct {
 }
 
 type Store interface {
+	BootstrapAdmin(context.Context, LocalAccount, time.Time) (User, error)
+	CreateLocalAdmin(context.Context, LocalAccount, time.Time) (User, error)
+	LocalCredentials(context.Context, string, string) (User, string, bool, error)
+	SetupAvailable(context.Context) (bool, error)
 	CreateSession(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time, ip string, userAgent string, now time.Time) error
 	GetUserBySessionTokenHash(ctx context.Context, tokenHash string, now time.Time) (User, SessionRecord, bool, error)
 	DeleteSession(ctx context.Context, tokenHash string) error
 	ListUsers(ctx context.Context, tenantCode string) ([]User, error)
 	UpdateUser(ctx context.Context, tenantCode string, userID int64, patch UserUpdate) (User, error)
+}
+
+type LocalAccount struct {
+	TenantCode, Username, DisplayName, PasswordHash string
 }

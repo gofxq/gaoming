@@ -1,0 +1,64 @@
+name: check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: gaoming_test
+          POSTGRES_USER: gaoming_test
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gaoming_test -d gaoming_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_POSTGRES_DSN: postgres://gaoming_test:ci-only-password@127.0.0.1:5432/gaoming_test?sslmode=disable
+      REQUIRE_POSTGRES_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install pinned protocol tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+      - run: make fmt-check test build proto-check proto-generated-check compose-config
+      - run: go test -race ./pkg/migrations ./services/master-api/internal/transport/http ./services/ingest-gateway/internal/service
+      - run: make smoke-roadmap
+
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+      - run: corepack enable
+      - run: yarn install --frozen-lockfile
+        working-directory: web
+      - run: make web-typecheck web-test web-build
+      - run: yarn playwright install --with-deps chromium
+        working-directory: web
+      - run: make web-e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results
+          path: web/test-results

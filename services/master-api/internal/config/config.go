@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -11,18 +12,21 @@ import (
 const DefaultConfigFile = "config/master-api.yml"
 
 type Config struct {
-	HTTPAddr              string `yaml:"http_addr"`
-	RuntimeBackend        string `yaml:"runtime_backend"`
-	PostgresDSN           string `yaml:"postgres_dsn"`
-	RedisAddr             string `yaml:"redis_addr"`
-	RedisPassword         string `yaml:"redis_password"`
-	RedisDB               int    `yaml:"redis_db"`
-	TenantCode            string `yaml:"tenant_code"`
-	TenantName            string `yaml:"tenant_name"`
-	AllowCustomTenantCode bool   `yaml:"allow_custom_tenant_code"`
-	SessionCookieName     string `yaml:"session_cookie_name"`
-	SessionSecret         string `yaml:"session_secret"`
-	SessionTTLHours       int    `yaml:"session_ttl_hours"`
+	HTTPAddr              string   `yaml:"http_addr"`
+	RuntimeBackend        string   `yaml:"runtime_backend"`
+	PostgresDSN           string   `yaml:"postgres_dsn"`
+	RedisAddr             string   `yaml:"redis_addr"`
+	RedisPassword         string   `yaml:"redis_password"`
+	RedisDB               int      `yaml:"redis_db"`
+	TenantCode            string   `yaml:"tenant_code"`
+	TenantName            string   `yaml:"tenant_name"`
+	AllowCustomTenantCode bool     `yaml:"allow_custom_tenant_code"`
+	SessionCookieName     string   `yaml:"session_cookie_name"`
+	SessionSecret         string   `yaml:"session_secret"`
+	SessionTTLHours       int      `yaml:"session_ttl_hours"`
+	SetupToken            string   `yaml:"setup_token"`
+	SessionCookieSecure   bool     `yaml:"session_cookie_secure"`
+	AllowedOrigins        []string `yaml:"allowed_origins"`
 }
 
 func Load() (Config, error) {
@@ -42,6 +46,9 @@ func LoadFromFile(path string) (Config, error) {
 	}
 
 	cfg.applyDefaults()
+	if token := os.Getenv("GAOMING_SETUP_TOKEN"); token != "" {
+		cfg.SetupToken = token
+	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, fmt.Errorf("validate master-api config %q: %w", path, err)
 	}
@@ -62,6 +69,7 @@ func defaultConfig() Config {
 		SessionCookieName:     "gaoming_session",
 		SessionSecret:         "change-me",
 		SessionTTLHours:       168,
+		SessionCookieSecure:   true,
 	}
 }
 
@@ -112,11 +120,17 @@ func (c Config) Validate() error {
 		return fmt.Errorf("tenant_name is required")
 	case strings.TrimSpace(c.SessionCookieName) == "":
 		return fmt.Errorf("session_cookie_name is required")
-	case strings.TrimSpace(c.SessionSecret) == "":
-		return fmt.Errorf("session_secret is required")
 	case c.SessionTTLHours <= 0:
 		return fmt.Errorf("session_ttl_hours must be greater than 0")
-	default:
-		return nil
 	}
+	if c.SetupToken != "" && len(c.SetupToken) < 32 {
+		return fmt.Errorf("setup_token must be at least 32 bytes")
+	}
+	for _, origin := range c.AllowedOrigins {
+		parsed, err := url.Parse(origin)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return fmt.Errorf("allowed_origins must contain exact HTTP/HTTPS origins")
+		}
+	}
+	return nil
 }

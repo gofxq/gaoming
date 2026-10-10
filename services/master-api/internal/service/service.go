@@ -28,6 +28,9 @@ type AuthConfig struct {
 	SessionTTL        time.Duration
 	SessionCookieName string
 	SessionSecret     string
+	SetupToken        string
+	CookieSecure      bool
+	AllowedOrigins    []string
 }
 
 type HostEvent = repository.HostEvent

@@ -1,5 +1,6 @@
 .git
 .gitignore
+.superpowers
 .editorconfig
 .gitattributes
 .env

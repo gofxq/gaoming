@@ -2,6 +2,7 @@ import { Navigate, Outlet, createBrowserRouter, useLocation, useParams } from "r
 import { useAuth } from "../shared/features/auth/AuthProvider";
 import { PcShell } from "../pc/pages/PcShell";
 import { LoginPage } from "../pc/pages/LoginPage";
+import { SetupPage } from "../pc/pages/SetupPage";
 import { UsersPage } from "../pc/pages/UsersPage";
 import { PcDashboardPage } from "../pc/pages/PcDashboardPage";
 
@@ -78,6 +79,7 @@ export const router = createBrowserRouter([
     path: "/:tenantCode/login",
     element: <LoginPage />,
   },
+  { path: "/:tenantCode/setup", element: <SetupPage /> },
   {
     path: "*",
     element: <Navigate to="/default" replace />,
