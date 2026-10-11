@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofxq/gaoming/pkg/access"
 	"github.com/gofxq/gaoming/pkg/clock"
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/hostruntime/repository"
 	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/pkg/state"
+	"github.com/gofxq/gaoming/services/master-api/internal/auth"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 )
 
@@ -103,11 +105,11 @@ func (stubEventBus) SubscribeHostEvents(context.Context) (<-chan repository.Host
 
 type stubOpsStore struct{}
 
-func (stubOpsStore) CreateMaintenance(context.Context, contracts.CreateMaintenanceWindowRequest) (repository.MaintenanceWindow, error) {
+func (stubOpsStore) CreateMaintenance(context.Context, access.Principal, contracts.CreateMaintenanceWindowRequest) (repository.MaintenanceWindow, error) {
 	return repository.MaintenanceWindow{}, nil
 }
 
-func (stubOpsStore) AckAlert(context.Context, string, string, time.Time) error {
+func (stubOpsStore) AckAlert(context.Context, access.Principal, string, time.Time) error {
 	return nil
 }
 
@@ -122,9 +124,23 @@ func newTestServerWithMetricStore(hostStore repository.HostStateStore, metricSto
 	return NewServer(svc, logger)
 }
 
+type testSessionStore struct {
+	auth.Store
+	tenant string
+}
+
+func (s testSessionStore) GetUserBySessionTokenHash(context.Context, string, time.Time) (auth.User, auth.SessionRecord, bool, error) {
+	return auth.User{ID: 1, TenantCode: s.tenant, Role: auth.UserRoleAdmin, Status: auth.UserStatusActive}, auth.SessionRecord{}, true, nil
+}
+func newAuthenticatedTestServer(hostStore repository.HostStateStore, metricStore repository.MetricWindowStore, tenant string) *Server {
+	logger := logx.NewNop()
+	svc := service.New(hostStore, metricStore, stubOpsStore{}, stubEventBus{}, testSessionStore{tenant: tenant}, service.AuthConfig{}, clock.Real{}, logger)
+	return NewServer(svc, logger)
+}
+
 func TestHandleGetLatestMetricSnapshotChecksTenantAndReturnsSnapshot(t *testing.T) {
 	collectedAt := time.Now().UTC().Truncate(time.Second)
-	server := newTestServerWithMetricStore(stubHostStore{
+	server := newAuthenticatedTestServer(stubHostStore{
 		getHost: func(_ context.Context, hostUID string, tenantCode string) (state.HostSnapshot, bool, error) {
 			if hostUID != "host-1" || tenantCode != "tenant-a" {
 				t.Fatalf("unexpected host lookup: host=%q tenant=%q", hostUID, tenantCode)
@@ -143,9 +159,10 @@ func TestHandleGetLatestMetricSnapshotChecksTenantAndReturnsSnapshot(t *testing.
 				},
 			}, true, nil
 		},
-	})
+	}, "tenant-a")
 
 	req := httptest.NewRequest(nethttp.MethodGet, "/master/api/v1/hosts/host-1/metrics/latest?tenant=tenant-a", nil)
+	req.AddCookie(&nethttp.Cookie{Name: "gaoming_session", Value: "test-session"})
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
 
@@ -168,7 +185,7 @@ func TestHandleGetLatestMetricSnapshotChecksTenantAndReturnsSnapshot(t *testing.
 
 func TestHandleGetLatestMetricSnapshotRejectsOtherTenant(t *testing.T) {
 	metricStoreCalled := false
-	server := newTestServerWithMetricStore(stubHostStore{
+	server := newAuthenticatedTestServer(stubHostStore{
 		getHost: func(_ context.Context, _ string, tenantCode string) (state.HostSnapshot, bool, error) {
 			if tenantCode != "tenant-b" {
 				t.Fatalf("unexpected tenant lookup: %q", tenantCode)
@@ -180,9 +197,10 @@ func TestHandleGetLatestMetricSnapshotRejectsOtherTenant(t *testing.T) {
 			metricStoreCalled = true
 			return contracts.MetricSnapshot{}, false, nil
 		},
-	})
+	}, "tenant-b")
 
 	req := httptest.NewRequest(nethttp.MethodGet, "/master/api/v1/hosts/host-1/metrics/latest?tenant=tenant-b", nil)
+	req.AddCookie(&nethttp.Cookie{Name: "gaoming_session", Value: "test-session"})
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
 
@@ -207,8 +225,8 @@ func TestHandleGetLatestMetricSnapshotRequiresTenant(t *testing.T) {
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != nethttp.StatusBadRequest {
-		t.Fatalf("expected status 400, got %d", rec.Code)
+	if rec.Code != nethttp.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Code)
 	}
 	if hostStoreCalled {
 		t.Fatal("host store must not be read without a tenant")
@@ -254,9 +272,9 @@ func TestHandleAllocateInstallTenantMethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestHandleListHostsAllowsAnonymousTenantRead(t *testing.T) {
+func TestHandleListHostsUsesAuthenticatedTenant(t *testing.T) {
 	var gotTenantCode string
-	server := newTestServer(stubHostStore{
+	server := newAuthenticatedTestServer(stubHostStore{
 		listHosts: func(_ context.Context, tenantCode string) ([]state.HostSnapshot, error) {
 			gotTenantCode = tenantCode
 			return []state.HostSnapshot{
@@ -267,9 +285,10 @@ func TestHandleListHostsAllowsAnonymousTenantRead(t *testing.T) {
 				},
 			}, nil
 		},
-	})
+	}, stubMetricStore{}, "tenant-a")
 
-	req := httptest.NewRequest(nethttp.MethodGet, "/master/api/v1/hosts?tenant=tenant-a", nil)
+	req := httptest.NewRequest(nethttp.MethodGet, "/master/api/v1/hosts", nil)
+	req.AddCookie(&nethttp.Cookie{Name: "gaoming_session", Value: "test-session"})
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
 

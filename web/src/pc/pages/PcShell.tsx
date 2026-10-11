@@ -26,7 +26,7 @@ export type PcShellOutletContext = ReturnType<typeof useLiveHostsData> & {
 export function PcShell() {
   const { config } = useAppConfig();
   const { tenantCode } = useTenant();
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshSession } = useAuth();
   const navigate = useNavigate();
   const [selectedWindowSec, setSelectedWindowSec] = useState(300);
   const [expandedHostUID, setExpandedHostUID] = useState("");
@@ -35,6 +35,7 @@ export function PcShell() {
     apiBaseUrl: config.apiBaseUrl,
     streamPath: config.streamPath,
     tenantCode,
+    onAccessCheck: refreshSession,
   });
 
   const outletContext: PcShellOutletContext = {
@@ -102,6 +103,7 @@ export function PcShell() {
                   <span>用户</span>
                 </NavLink>
               ) : null}
+              {user?.role === "admin" ? <NavLink to={`/${tenantCode}/shares`}>分享</NavLink> : null}
             </nav>
 
             <div className="topbar-context">

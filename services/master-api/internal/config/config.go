@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gofxq/gaoming/pkg/access"
 	"gopkg.in/yaml.v3"
 )
 
@@ -27,6 +28,9 @@ type Config struct {
 	SetupToken            string   `yaml:"setup_token"`
 	SessionCookieSecure   bool     `yaml:"session_cookie_secure"`
 	AllowedOrigins        []string `yaml:"allowed_origins"`
+	DemoTenantCode        string   `yaml:"demo_tenant_code"`
+	DemoHostUIDs          []string `yaml:"demo_host_uids"`
+	DemoFields            []string `yaml:"demo_fields"`
 }
 
 func Load() (Config, error) {
@@ -130,6 +134,14 @@ func (c Config) Validate() error {
 		parsed, err := url.Parse(origin)
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 			return fmt.Errorf("allowed_origins must contain exact HTTP/HTTPS origins")
+		}
+	}
+	if c.DemoTenantCode != "" || len(c.DemoHostUIDs) > 0 || len(c.DemoFields) > 0 {
+		if strings.TrimSpace(c.DemoTenantCode) == "" || len(c.DemoTenantCode) > 64 {
+			return fmt.Errorf("demo requires a tenant code")
+		}
+		if err := access.ValidateShareRequest(access.CreateShareRequest{Title: "Configured demo", HostUIDs: c.DemoHostUIDs, Fields: c.DemoFields, TTLSeconds: 60}); err != nil {
+			return fmt.Errorf("invalid demo host or field scope")
 		}
 	}
 	return nil

@@ -17,17 +17,26 @@
 | POST | `/master/api/v1/auth/logout` | Session + Origin + CSRF | 删除会话并清 Cookie |
 | POST | `/master/api/v1/install/tenant` | 无 | 分配安装租户 |
 | POST | `/master/api/v1/agents/register` | 无 | HTTP 兼容注册入口，当前 Agent 不使用 |
-| GET | `/master/api/v1/hosts?tenant=T` | 无 | 按租户查询主机 |
-| GET | `/master/api/v1/hosts/:hostUID?tenant=T` | 无 | 查询单台主机 |
-| GET | `/master/api/v1/stream/hosts?tenant=T` | 无 | 主机 SSE |
-| POST | `/master/api/v1/ops/maintenance` | Session | 创建维护窗 |
+| GET | `/master/api/v1/hosts` | Session | 会话空间的主机（可选 tenant 只能匹配会话） |
+| GET | `/master/api/v1/hosts/:hostUID` | Session | 查询自己空间的主机 |
+| GET | `/master/api/v1/hosts/:hostUID/metrics/latest` | Session | 私有动态指标，先校验主机归属 |
+| GET | `/master/api/v1/stream/hosts` | Session | 会话空间 SSE，周期权限重验 |
+| POST | `/master/api/v1/ops/maintenance` | Admin + Origin/CSRF | 创建自身空间维护窗并审计 |
 | POST | `/master/api/v1/ops/alerts/:alertID/ack` | Session | 确认告警 |
 | GET | `/master/api/v1/admin/users` | Admin | 查询会话租户用户 |
 | PATCH | `/master/api/v1/admin/users/:userID` | Admin | 更新同租户用户 |
+| POST/GET | `/master/api/v1/shares` | Admin | 创建/列出受限分享；写入需 Origin/CSRF |
+| DELETE | `/master/api/v1/shares/:shareID` | Admin + Origin/CSRF | 撤销自身空间分享和全部兑换会话 |
+| POST | `/master/api/v1/public/shares/exchange` | 分享 token + Origin | POST body 兑换窄路径 Cookie |
+| GET | `/master/api/v1/public/shares/session` | Share Cookie | 查看允许字段和范围数量 |
+| GET | `/master/api/v1/public/shares/hosts`、`/hosts/:hostUID`、`/hosts/:hostUID/metrics/latest`、`/stream/hosts` | Share Cookie | 受限主机/字段投影，非私有 API |
+| GET | `/master/api/v1/public/demo/session`、`/hosts`、`/hosts/:hostUID`、`/hosts/:hostUID/metrics/latest`、`/stream/hosts` | 显式 demo 配置 | 默认关闭，固定租户/主机/字段白名单 |
 
-主机公开接口的租户来自查询参数。受保护接口使用 `gaoming_session` Cookie。
+表中 shares/demo 同一行的后缀路径均继承该行的完整公开 namespace，不是私有 `/hosts` 的别名。
 
-所有受保护写操作额外要求允许的 Origin 和 `X-CSRF-Token`，认证响应不允许缓存。Cookie 默认 Secure/HttpOnly/SameSite=Lax，过期、用户禁用或租户停用后会话失效。初始化只在尚无用户且未完成引导时开放；本地恢复命令不开放为 HTTP 接口。配置、密码限制和请求限流见[登录手册](../02-guides/authentication.md)。主机匿名读取与 Agent 接入鉴权仍在 T03/T04 中处理。
+默认主机接口均为私有，空间来自已验证会话，省略 tenant 不扩大范围；伪造其他 tenant 返回 403。分享 Cookie 不能访问这些私有接口，所有私有/分享响应 no-store。范围与运维审计见[访问与分享](../02-guides/access-and-sharing.md)。
+
+所有受保护写操作额外要求允许的 Origin 和 `X-CSRF-Token`，认证响应不允许缓存。Cookie 默认 Secure/HttpOnly/SameSite=Lax，过期、用户禁用或租户停用后会话失效。初始化只在尚无用户且未完成引导时开放；本地恢复命令不开放为 HTTP 接口。配置、密码限制和请求限流见[登录手册](../02-guides/authentication.md)。私有读取、受限分享和运维范围已在 T03 接通；Agent 接入鉴权仍在 T04 中处理。
 
 ## ingest-gateway
 
@@ -76,10 +85,13 @@ Accept: text/event-stream
 | 路径 | 页面 | 权限 |
 | --- | --- | --- |
 | `/` | 跳转 `/default` | 无 |
-| `/:tenantCode` | Dashboard | 公开 |
+| `/:tenantCode` | Dashboard | 已登录且匹配会话空间 |
 | `/:tenantCode/login` | 本地密码登录，安全站内回跳 | 公开 |
 | `/:tenantCode/setup` | 一次性初始管理员引导 | 引导凭据 |
 | `/:tenantCode/users` | 用户管理 | 已登录且 Admin |
+| `/:tenantCode/shares` | 分享管理 | 已登录且 Admin |
+| `/share` | 受限只读分享 | fragment 兑换后的 Share Cookie |
+| `/demo` | 显式演示 | 配置主机/字段白名单 |
 
 当前代码没有独立移动端/PWA 页面路由。
 
@@ -142,6 +154,7 @@ net_tx_packets_ps
 | `host_status_current` | 活跃；当前快照主读模型 |
 | `users`、`user_identities`、`user_sessions` | 登录会话、用户查询/更新可用 |
 | `user_passwords`、`auth_bootstrap_state` | 租户内本地密码身份、一次性初始化状态 |
+| `access_shares`、`access_share_hosts`、`access_share_sessions` | 哈希分享凭据、可信范围、窄会话与撤销 |
 | `maintenance_windows` | 可创建，尚未参与状态计算 |
 | `alert_events` | 可 ACK，当前没有告警生产者 |
 | `host_groups`、`host_inventory` | 仅 Schema 定义 |

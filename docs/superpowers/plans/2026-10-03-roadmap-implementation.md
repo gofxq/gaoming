@@ -100,9 +100,11 @@ T01 → T02 → T03/T04 → T05 → T06/T07/T08/T09/T10 → T11/T12/T13 → T14/
 
 **Interfaces:** `CreateMaintenance(ctx,principal,req)` 与 `AckAlert(ctx,principal,alertID)` 在服务层验权；`POST/GET /shares`、`DELETE /shares/:id`；公开 `POST /public/shares/exchange` 将 token 兑换为窄范围 HttpOnly Cookie，链接 token 放 fragment 并在兑换后移除。demo 按配置指定租户与字段。
 
-- [ ] 回归 `TestPrivateReadsRejectMissingOrForgedTenant`、`TestOpsUseSessionTenantAndActor`、`TestShareScopeExpiryAndRevocation`：遗漏 tenant 不返回全量；任意 host/alert/scope 引用不越权；撤销后 SSE 关闭，刷新/历史同样受范围约束。
-- [ ] 将租户/操作者从 principal 传入仓储，返回真实资源不存在状态；界面展示无权限/分享过期，分享管理说明允许字段及到期。
-- [ ] 执行授权、HTTP 和 SSE 回归及 Web 构建，核对不能靠隐藏按钮或不可猜 tenant 达成隔离。
+- [x] 回归 `TestPrivateReadsRejectMissingOrForgedTenant`、`TestOpsUseSessionTenantAndActor`、`TestShareScopeExpiryAndRevocation`：遗漏 tenant 不返回全量；任意 host/alert/scope 引用不越权；撤销后 SSE 关闭，刷新/历史同样受范围约束。
+- [x] 将租户/操作者从 principal 传入仓储，返回真实资源不存在状态；界面展示无权限/分享过期，分享管理说明允许字段及到期。
+- [x] 执行授权、HTTP 和 SSE 回归及 Web 构建，核对不能靠隐藏按钮或不可猜 tenant 达成隔离。
+
+2026-10-10：T03 完成私有/分享/演示/运维授权、004 迁移、前端管理/接收流程和文档。全仓 Go/proto、真实 PG、race、17 项前端单元、10 项 Chromium 场景通过；独立审阅未发现权限绕过，重试恢复及畸形链接旧 Cookie 回退问题通过 RED→GREEN 修复。详细命令、截图、Docker 结果和限制见 TODO。旧 memory/master 仓储不属于运行时接口，保留原 API 并在 T10 收敛；SSE 快照衔接与带租户删除在 T09。后续迁移从 005 编号。
 
 ### T04：Agent/worker 接入凭据、资源边界和 TLS（M0，P0-04/P0-06/P0-07）
 
@@ -320,8 +322,8 @@ T01 → T02 → T03/T04 → T05 → T06/T07/T08/T09/T10 → T11/T12/T13 → T14/
 
 ## 当前状态与执行交接
 
-2026-10-10 已开始实施，T01/T02 已完成本地验收；其他未勾选任务尚未完成。实际进展、命令与安全检查以 [TODO](../../TODO.md) 为准。没有部署到生产或发送外部通知。
+2026-10-10 已开始实施，T01～T03 已完成本地验收；其他未勾选任务尚未完成。实际进展、命令与安全检查以 [TODO](../../TODO.md) 为准。没有部署到生产或发送外部通知。
 
-用户已要求按 roadmap/TODO 完整实施，并选择在当前目录保留改动供审阅；由主执行者顺序实施，逐步骤记录证据。下一步从 T03 开始，已有工作区内容须完整保留。
+用户已要求按 roadmap/TODO 完整实施，并选择在当前目录保留改动供审阅；由主执行者顺序实施，逐步骤记录证据。下一步从 T04 开始，已有工作区内容须完整保留。
 
 安全检查：本次仅新增计划文档，无新运行风险。接入鉴权、公开访问和租户绑定仍有既有风险；计划将其作为 M0 交付条件，并对出站探测/webhook、缓存、恢复和升级设置相应回归。

@@ -25,8 +25,9 @@ export function useLiveHostsData(props: {
   apiBaseUrl: string;
   streamPath: string;
   tenantCode: string;
+  onAccessCheck?: () => Promise<unknown>;
 }) {
-  const { apiBaseUrl, streamPath, tenantCode } = props;
+  const { apiBaseUrl, streamPath, tenantCode, onAccessCheck } = props;
   const [agents, setAgents] = useState<Record<string, HostSnapshot>>({});
   const [histories, setHistories] = useState<Record<string, HostHistoryMap>>({});
   const [metricSnapshots, setMetricSnapshots] = useState<Record<string, MetricSnapshot>>({});
@@ -48,6 +49,7 @@ export function useLiveHostsData(props: {
       credentials: "include",
     });
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) await onAccessCheck?.();
       throw new Error(`Failed to load hosts: ${response.status}`);
     }
 
@@ -55,7 +57,7 @@ export function useLiveHostsData(props: {
     startTransition(() => {
       setAgents(listToHostMap(payload.items || []));
     });
-  }, [hostsUrl]);
+  }, [hostsUrl, onAccessCheck]);
 
   const loadMetricSnapshot = useCallback(async (hostUID: string) => {
     if (!hostUID) {
@@ -65,6 +67,7 @@ export function useLiveHostsData(props: {
     const url = buildTenantScopedUrl(`${apiBaseUrl}/hosts/${encodedHostUID}/metrics/latest`, tenantCode);
     const response = await fetch(url, { credentials: "include" });
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) await onAccessCheck?.();
       throw new Error(`Failed to load metric snapshot: ${response.status}`);
     }
 
@@ -82,7 +85,7 @@ export function useLiveHostsData(props: {
       }
       return { ...current, [hostUID]: payload.snapshot };
     });
-  }, [apiBaseUrl, tenantCode]);
+  }, [apiBaseUrl, tenantCode, onAccessCheck]);
 
   useEffect(() => {
     startTransition(() => {
@@ -120,6 +123,7 @@ export function useLiveHostsData(props: {
 
     stream.addEventListener("error", () => {
       setStreamState("重连中");
+      void onAccessCheck?.();
     });
 
     stream.addEventListener("sync", (event) => {
@@ -199,7 +203,7 @@ export function useLiveHostsData(props: {
     return () => {
       stream.close();
     };
-  }, [streamUrl]);
+  }, [streamUrl, onAccessCheck]);
 
   const sortedHosts = useMemo(() => sortHosts(Object.values(agents)), [agents]);
 

@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofxq/gaoming/pkg/access"
 	"github.com/gofxq/gaoming/pkg/contracts"
+	"github.com/gofxq/gaoming/pkg/ids"
 	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/services/master-api/internal/auth"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const userContextKey = "session_user"
@@ -47,16 +50,38 @@ func (s *Server) Handler() nethttp.Handler {
 	engine.POST("/master/api/v1/install/tenant", s.handleAllocateInstallTenant)
 	engine.POST("/master/api/v1/agents/register", s.handleRegisterAgent)
 
-	public := engine.Group("/master/api/v1")
-	public.GET("/stream/hosts", s.handleHostStream)
-	public.GET("/hosts", s.handleListHosts)
-	public.GET("/hosts/:hostUID/metrics/latest", s.handleGetLatestMetricSnapshot)
-	public.GET("/hosts/:hostUID", s.handleGetHost)
+	privateReads := engine.Group("/master/api/v1")
+	privateReads.Use(s.requireSession())
+	privateReads.GET("/stream/hosts", s.handleHostStream)
+	privateReads.GET("/hosts", s.handleListHosts)
+	privateReads.GET("/hosts/:hostUID/metrics/latest", s.handleGetLatestMetricSnapshot)
+	privateReads.GET("/hosts/:hostUID", s.handleGetHost)
+
+	shared := engine.Group("/master/api/v1/public/shares")
+	shared.Use(s.requireAllowedOrigin())
+	shared.POST("/exchange", s.limitAuthWork(), s.handleExchangeShare)
+	shared.Use(s.requireShare())
+	shared.GET("/session", s.handleShareInfo)
+	shared.GET("/hosts", s.handleListHosts)
+	shared.GET("/hosts/:hostUID", s.handleGetHost)
+	shared.GET("/hosts/:hostUID/metrics/latest", s.handlePublicLatestMetrics)
+	shared.GET("/stream/hosts", s.handleHostStream)
+
+	demo := engine.Group("/master/api/v1/public/demo")
+	demo.Use(s.requireDemo())
+	demo.GET("/session", s.handleShareInfo)
+	demo.GET("/hosts", s.handleListHosts)
+	demo.GET("/hosts/:hostUID", s.handleGetHost)
+	demo.GET("/hosts/:hostUID/metrics/latest", s.handlePublicLatestMetrics)
+	demo.GET("/stream/hosts", s.handleHostStream)
 
 	protected := engine.Group("/master/api/v1")
 	protected.Use(s.requireSession(), s.requireAllowedOrigin(), s.requireCSRF())
 	protected.POST("/ops/maintenance", s.handleCreateMaintenance)
 	protected.POST("/ops/alerts/:alertID/ack", s.handleAckAlert)
+	protected.GET("/shares", requireAdmin(), s.handleListShares)
+	protected.POST("/shares", requireAdmin(), s.handleCreateShare)
+	protected.DELETE("/shares/:shareID", requireAdmin(), s.handleRevokeShare)
 
 	admin := protected.Group("/admin")
 	admin.Use(requireAdmin())
@@ -95,12 +120,13 @@ func (s *Server) handleRegisterAgent(c *gin.Context) {
 }
 
 func (s *Server) handleListHosts(c *gin.Context) {
-	items, err := s.svc.ListHosts(c.Request.Context(), tenantCodeFromContext(c))
+	p := principalFromContext(c)
+	items, err := s.svc.ReadHosts(c.Request.Context(), p)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
-	c.JSON(nethttp.StatusOK, gin.H{"items": items})
+	c.JSON(nethttp.StatusOK, gin.H{"items": service.ProjectHosts(p, items), "next_cursor": nil})
 }
 
 func (s *Server) handleGetHost(c *gin.Context) {
@@ -110,7 +136,8 @@ func (s *Server) handleGetHost(c *gin.Context) {
 		return
 	}
 
-	host, ok, err := s.svc.GetHost(c.Request.Context(), hostUID, tenantCodeFromContext(c))
+	p := principalFromContext(c)
+	host, ok, err := s.svc.ReadHost(c.Request.Context(), p, hostUID)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -119,7 +146,7 @@ func (s *Server) handleGetHost(c *gin.Context) {
 		c.JSON(nethttp.StatusNotFound, gin.H{"error": "host not found"})
 		return
 	}
-	c.JSON(nethttp.StatusOK, host)
+	c.JSON(nethttp.StatusOK, service.ProjectHost(p, host))
 }
 
 func (s *Server) handleGetLatestMetricSnapshot(c *gin.Context) {
@@ -166,7 +193,7 @@ func (s *Server) handleCreateMaintenance(c *gin.Context) {
 		return
 	}
 
-	resp, err := s.svc.CreateMaintenance(c.Request.Context(), req)
+	resp, err := s.svc.CreateMaintenance(c.Request.Context(), principalFromContext(c), req)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -187,7 +214,7 @@ func (s *Server) handleAckAlert(c *gin.Context) {
 		return
 	}
 
-	resp, err := s.svc.AckAlert(c.Request.Context(), alertID, req)
+	resp, err := s.svc.AckAlert(c.Request.Context(), principalFromContext(c), alertID)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -261,7 +288,7 @@ func tenantCodeFromContext(c *gin.Context) string {
 			return current.TenantCode
 		}
 	}
-	return strings.TrimSpace(c.Query("tenant"))
+	return ""
 }
 
 func (s *Server) requireSession() gin.HandlerFunc {
@@ -277,6 +304,17 @@ func (s *Server) requireSession() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		if user.ID <= 0 || user.TenantCode == "" || user.Status != auth.UserStatusActive {
+			writeError(c, service.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+		if requested := strings.TrimSpace(c.Query("tenant")); requested != "" && requested != user.TenantCode {
+			writeError(c, service.ErrForbidden)
+			c.Abort()
+			return
+		}
+		c.Header("Cache-Control", "no-store")
 		c.Set(userContextKey, user)
 		c.Next()
 	}
@@ -297,6 +335,16 @@ func currentUser(c *gin.Context) auth.User {
 	value, _ := c.Get(userContextKey)
 	user, _ := value.(auth.User)
 	return user
+}
+
+func principalFromContext(c *gin.Context) access.Principal {
+	if value, ok := c.Get(principalContextKey); ok {
+		if principal, ok := value.(access.Principal); ok {
+			return principal
+		}
+	}
+	user := currentUser(c)
+	return access.Principal{Kind: access.User, TenantCode: user.TenantCode, UserID: user.ID, Role: string(user.Role)}
 }
 
 func (s *Server) cookieName() string {
@@ -325,16 +373,27 @@ func (s *Server) clearSessionCookie(c *gin.Context) {
 }
 
 func writeError(c *gin.Context, err error) {
+	status := nethttp.StatusBadRequest
+	code, message := "invalid_request", "invalid request"
+	var databaseError *pgconn.PgError
 	switch {
 	case err == nil:
-		c.JSON(nethttp.StatusInternalServerError, gin.H{"error": "unknown error"})
-	case errors.Is(err, service.ErrUnauthorized):
-		c.JSON(nethttp.StatusUnauthorized, gin.H{"error": err.Error()})
-	case errors.Is(err, service.ErrForbidden):
-		c.JSON(nethttp.StatusForbidden, gin.H{"error": err.Error()})
+		status, code, message = 500, "internal_error", "request failed"
+	case errors.Is(err, service.ErrUnauthorized), errors.Is(err, access.ErrUnauthorized):
+		status, code, message = 401, "unauthorized", "unauthorized"
+	case errors.Is(err, access.ErrQuota):
+		c.Header("Retry-After", "60")
+		status, code, message = 429, "quota_exceeded", "access quota exceeded"
+	case errors.Is(err, service.ErrForbidden), errors.Is(err, access.ErrForbidden):
+		status, code, message = 403, "forbidden", "forbidden"
+	case errors.Is(err, access.ErrNotFound):
+		status, code, message = 404, "not_found", "resource not found"
 	case errors.Is(err, service.ErrAuthNotConfigured):
-		c.JSON(nethttp.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		status, code, message = 503, "unavailable", "auth is not configured"
+	case errors.As(err, &databaseError):
+		status, code, message = 500, "internal_error", "storage unavailable"
 	default:
-		c.JSON(nethttp.StatusBadRequest, gin.H{"error": err.Error()})
+		message = err.Error()
 	}
+	c.JSON(status, gin.H{"code": code, "message": message, "error": message, "request_id": ids.New("req")})
 }

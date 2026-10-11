@@ -24,8 +24,14 @@ tenant_code: default
 tenant_name: Default Tenant
 allow_custom_tenant_code: true
 session_cookie_name: gaoming_session
-session_secret: change-me-in-non-local-environments
 session_ttl_hours: 168
+# 仅用于本地 HTTP 联调；生产保持 Secure 并填写准确 HTTPS Origin。
+session_cookie_secure: false
+allowed_origins:
+  - http://127.0.0.1:5173
+  - http://localhost:5173
+  - http://127.0.0.1:8080
+  - http://localhost:8080
 ```
 
 `config/ingest-gateway.docker.yml`：
@@ -59,6 +65,8 @@ probe_interval_sec: 15
 ```
 
 若直接在宿主机运行后端，请创建不带 `.docker` 的同名文件，并把 PostgreSQL/Redis 地址改为 Compose 暴露的 `127.0.0.1:35432` 和 `127.0.0.1:36379`。
+
+主机查询和看板现在要求登录。先按[登录手册](./authentication.md)创建管理员；使用自己的 tenantCode 进入页面，不能通过 query 切换到其他空间。`session_secret` 是未使用的兼容字段，不能作为已启用的安全机制。`make smoke-agent` 需要 `SESSION_COOKIE_FILE` 指向已登录的 Cookie jar；完整独立验证可直接用 `make smoke-roadmap`，它自行创建临时管理员、Cookie 和数据库，结束后清理测试资源。分享与演示配置见[访问与分享](./access-and-sharing.md)。
 
 ## 2. 启动后端与 Web
 

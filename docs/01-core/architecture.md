@@ -232,11 +232,11 @@ flowchart TB
 
 ## 租户与认证边界
 
-- 主机列表、详情和 SSE 是公开接口，租户来自 `?tenant=`。
+- 主机列表、详情、最新指标和 SSE 默认要求会话；租户只来自已认证用户，query 不能扩大范围。分享与演示使用独立公开 namespace 和主机/字段白名单，不借用私有会话。
 - 受保护接口通过 `gaoming_session` Cookie 查找会话。
 - 用户管理要求已登录且角色为 `admin`，并限制在会话租户内。
 - 已接通本地密码登录和一次性初始管理员引导，已有环境可通过本机管理命令创建管理员；暂无 OAuth 回调。Cookie 默认 Secure/HttpOnly/SameSite=Lax，写操作校验 Origin 和会话派生 CSRF；认证响应 no-store。详见[登录手册](../02-guides/authentication.md)。
-- 维护窗和告警 ACK 虽要求会话，但底层操作仍使用服务默认租户，而非会话租户。
+- 维护窗和告警 ACK 从可信 principal 校验当前角色、租户和资源，忽略请求操作者，写入和审计同事务；分享支持到期/撤销及 SSE 重验。详见[访问与分享](../02-guides/access-and-sharing.md)。
 
 ## 部署形态
 
@@ -255,7 +255,7 @@ flowchart TB
 2. **Probe 闭环**：探测结果未落库，未参与 `reachability_state` 和 `overall_state` 计算。
 3. **Core 计算**：状态、告警和调度 pipeline 尚未实现。
 4. **可靠上报**：Agent 没有磁盘队列，`batch_seq` 不去重，进程重启后重新计数。
-5. **认证与租户**：登录流程已可用，但主机公开查询仍依赖可猜测的 tenant code；运维租户绑定、分享和 Agent 接入鉴权尚未闭环。
+5. **认证与租户**：登录、私有读取、受限分享和运维租户绑定已接通；Agent/worker 上报认证、TLS/网络边界仍待 T04。
 6. **扩展性**：每个 SSE 连接有独立 Redis 订阅，多实例 ingest 会重复执行离线扫描。
 
 ## 关键代码入口

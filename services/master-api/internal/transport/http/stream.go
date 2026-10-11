@@ -3,9 +3,11 @@ package http
 import (
 	"encoding/json"
 	"fmt"
+	nethttp "net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofxq/gaoming/pkg/hostruntime/repository"
 	"github.com/gofxq/gaoming/pkg/state"
 	"github.com/gofxq/gaoming/services/master-api/internal/service"
 )
@@ -29,104 +31,126 @@ type hostDeletePayload struct {
 }
 
 func (s *Server) handleHostStream(c *gin.Context) {
-	tenantCode := tenantCodeFromContext(c)
+	principal := principalFromContext(c)
 
-	flusher, ok := c.Writer.(gin.ResponseWriter)
-	if !ok {
-		c.JSON(500, gin.H{"error": "streaming not supported"})
+	items, err := s.svc.ReadHosts(c.Request.Context(), principal)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "host state unavailable"})
 		return
 	}
-
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no")
-
-	items, err := s.svc.ListHosts(c.Request.Context(), tenantCode)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-	histories, err := s.svc.GetAllHostMetricHistory(c.Request.Context(), hostUIDsFromSnapshots(items))
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
+	var histories map[string]map[state.MetricKey][]state.MetricPoint
+	if principal.AllowsField("metrics") && len(items) > 0 {
+		histories, err = s.svc.GetAllHostMetricHistory(c.Request.Context(), hostUIDsFromSnapshots(items))
+		if err != nil {
+			c.JSON(500, gin.H{"error": "history unavailable"})
+			return
+		}
+		filtered := make(map[string]map[state.MetricKey][]state.MetricPoint, len(items))
+		for _, item := range items {
+			if history, ok := histories[item.HostUID]; ok {
+				points := make(map[state.MetricKey][]state.MetricPoint)
+				for _, key := range repository.MetricKeys() {
+					if values, ok := history[key]; ok {
+						points[key] = values
+					}
+				}
+				filtered[item.HostUID] = points
+			}
+		}
+		histories = filtered
 	}
 	updates, err := s.svc.SubscribeHostEvents(c.Request.Context())
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(500, gin.H{"error": "live updates unavailable"})
 		return
 	}
 
 	heartbeat := time.NewTicker(20 * time.Second)
 	defer heartbeat.Stop()
+	recheck := time.NewTicker(s.svc.ReadAccessRecheckInterval())
+	defer recheck.Stop()
+	if !s.recheckReadAccess(c, principal) {
+		writeError(c, service.ErrUnauthorized)
+		return
+	}
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-store")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
 
 	now := time.Now().UTC()
-	payload, err := json.Marshal(hostSyncPayload{
-		Items:      items,
-		Histories:  histories,
-		Latest:     latestMetricPointsByHost(items),
-		ServerTime: now,
-	})
+	var latest map[string]map[state.MetricKey]state.MetricPoint
+	if principal.AllowsField("metrics") {
+		latest = latestMetricPointsByHost(items)
+	}
+	payload, err := json.Marshal(gin.H{"items": service.ProjectHosts(principal, items), "histories": histories, "latest": latest, "server_time": now})
 	if err == nil {
-		if _, err := fmt.Fprintf(c.Writer, "event: sync\ndata: %s\n\n", payload); err != nil {
+		if err := writeStreamEvent(c, "sync", payload); err != nil {
 			return
 		}
-		flusher.Flush()
 	}
 
 	for {
 		select {
 		case <-c.Request.Context().Done():
 			return
+		case <-recheck.C:
+			if !s.recheckReadAccess(c, principal) {
+				return
+			}
 		case event, ok := <-updates:
 			if !ok {
 				return
 			}
 
 			now := time.Now().UTC()
+			if !s.recheckReadAccess(c, principal) {
+				return
+			}
 			switch event.Type {
 			case service.HostEventDelete:
-				if tenantCode != "" {
-					continue
-				}
-				payload, err := json.Marshal(hostDeletePayload{
-					HostUID:    event.HostUID,
-					ServerTime: now,
-				})
-				if err != nil {
-					continue
-				}
-				if _, err := fmt.Fprintf(c.Writer, "event: host_delete\ndata: %s\n\n", payload); err != nil {
-					return
-				}
+				// Existing deletion messages have no trusted tenant. Fail closed
+				// until T09 introduces tenant-bearing, versioned deletion events.
+				continue
 			case service.HostEventUpsert:
 				if event.Snapshot == nil {
 					continue
 				}
-				if !matchesTenant(*event.Snapshot, tenantCode) {
+				if !principal.AllowsHost(event.Snapshot.TenantCode, event.Snapshot.HostUID) {
 					continue
 				}
-				payload, err := json.Marshal(hostUpsertPayload{
-					Item:       *event.Snapshot,
-					Latest:     latestMetricPointsFromSnapshot(*event.Snapshot),
-					ServerTime: now,
-				})
+				var latest map[state.MetricKey]state.MetricPoint
+				if principal.AllowsField("metrics") {
+					latest = latestMetricPointsFromSnapshot(*event.Snapshot)
+				}
+				payload, err := json.Marshal(gin.H{"item": service.ProjectHost(principal, *event.Snapshot), "latest": latest, "server_time": now})
 				if err != nil {
 					continue
 				}
-				if _, err := fmt.Fprintf(c.Writer, "event: host_upsert\ndata: %s\n\n", payload); err != nil {
+				if err := writeStreamEvent(c, "host_upsert", payload); err != nil {
 					return
 				}
 			}
-			flusher.Flush()
 		case <-heartbeat.C:
+			controller := nethttp.NewResponseController(c.Writer)
+			_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			if _, err := fmt.Fprint(c.Writer, ": keep-alive\n\n"); err != nil {
 				return
 			}
-			flusher.Flush()
+			if err := controller.Flush(); err != nil {
+				return
+			}
 		}
 	}
+}
+
+func writeStreamEvent(c *gin.Context, event string, payload []byte) error {
+	controller := nethttp.NewResponseController(c.Writer)
+	_ = controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event, payload); err != nil {
+		return err
+	}
+	return controller.Flush()
 }
 
 func hostUIDsFromSnapshots(items []state.HostSnapshot) []string {

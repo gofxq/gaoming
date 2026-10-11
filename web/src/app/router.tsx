@@ -5,6 +5,8 @@ import { LoginPage } from "../pc/pages/LoginPage";
 import { SetupPage } from "../pc/pages/SetupPage";
 import { UsersPage } from "../pc/pages/UsersPage";
 import { PcDashboardPage } from "../pc/pages/PcDashboardPage";
+import { SharePage } from "../pc/pages/SharePage";
+import { SharesManagePage } from "../pc/pages/SharesManagePage";
 
 function RootRedirect() {
   return <Navigate to="/default" replace />;
@@ -24,7 +26,7 @@ function RequireAuth() {
     return <Navigate to={`/${tenantCode}/login?${search.toString()}`} replace />;
   }
   if (user.tenant_code !== tenantCode) {
-    return <Navigate to={location.pathname.replace(`/${tenantCode}`, `/${user.tenant_code}`)} replace />;
+    return <div className="auth-page"><section className="auth-card"><h1>无权查看此空间</h1><p>当前账号只能访问自己的空间，请返回已授权的空间。</p><a href={`/${encodeURIComponent(user.tenant_code)}`}>返回自己的空间</a></section></div>;
   }
   return <Outlet />;
 }
@@ -32,7 +34,7 @@ function RequireAuth() {
 function RequireAdmin() {
   const { user } = useAuth();
   if (!user || user.role !== "admin") {
-    return <Navigate to=".." replace />;
+    return <div className="auth-card" role="alert"><h1>需要管理员权限</h1><p>当前账号可以查看主机，但不能管理成员或分享。</p></div>;
   }
   return <Outlet />;
 }
@@ -48,27 +50,17 @@ export const router = createBrowserRouter([
   },
   {
     path: "/:tenantCode",
+    element: <RequireAuth />,
     children: [
       {
         element: <TenantEntry />,
         children: [
+          { index: true, element: <PcDashboardPage /> },
           {
-            index: true,
-            element: <PcDashboardPage />,
-          },
-          {
-            path: "users",
-            element: <RequireAuth />,
+            element: <RequireAdmin />,
             children: [
-              {
-                element: <RequireAdmin />,
-                children: [
-                  {
-                    index: true,
-                    element: <UsersPage />,
-                  },
-                ],
-              },
+              { path: "users", element: <UsersPage /> },
+              { path: "shares", element: <SharesManagePage /> },
             ],
           },
         ],
@@ -80,6 +72,8 @@ export const router = createBrowserRouter([
     element: <LoginPage />,
   },
   { path: "/:tenantCode/setup", element: <SetupPage /> },
+  { path: "/share", element: <SharePage /> },
+  { path: "/demo", element: <SharePage /> },
   {
     path: "*",
     element: <Navigate to="/default" replace />,

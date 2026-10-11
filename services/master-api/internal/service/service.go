@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"fmt"
+	"github.com/gofxq/gaoming/pkg/access"
 	"github.com/gofxq/gaoming/pkg/clock"
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/hostruntime/repository"
@@ -11,6 +13,7 @@ import (
 	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/pkg/state"
 	"github.com/gofxq/gaoming/services/master-api/internal/auth"
+	"strings"
 )
 
 type Service struct {
@@ -22,6 +25,8 @@ type Service struct {
 	authConfig  AuthConfig
 	clock       clock.Clock
 	logger      *logx.Logger
+	shareStore  access.ShareStore
+	demo        access.Principal
 }
 
 type AuthConfig struct {
@@ -109,12 +114,24 @@ func (s *Service) GetHost(ctx context.Context, hostUID string, tenantCode string
 	return s.hostStore.GetHost(ctx, hostUID, tenantCode)
 }
 
-func (s *Service) CreateMaintenance(ctx context.Context, req contracts.CreateMaintenanceWindowRequest) (repository.MaintenanceWindow, error) {
-	return s.opsStore.CreateMaintenance(ctx, req)
+func (s *Service) CreateMaintenance(ctx context.Context, p access.Principal, req contracts.CreateMaintenanceWindowRequest) (repository.MaintenanceWindow, error) {
+	if !p.IsAdmin() {
+		return repository.MaintenanceWindow{}, ErrForbidden
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.ScopeRef = strings.TrimSpace(req.ScopeRef)
+	if req.Title == "" || len(req.Title) > 128 || req.ScopeRef == "" || len(req.ScopeRef) > 128 || len(req.Reason) > 4096 || !req.EndAt.After(req.StartAt) || req.EndAt.Sub(req.StartAt) > 30*24*time.Hour || !req.EndAt.After(s.clock.Now()) {
+		return repository.MaintenanceWindow{}, fmt.Errorf("invalid maintenance scope, title or time range")
+	}
+	req.CreatedBy = p.Actor()
+	return s.opsStore.CreateMaintenance(ctx, p, req)
 }
 
-func (s *Service) AckAlert(ctx context.Context, alertID string, req contracts.AckAlertRequest) (contracts.AckResponse, error) {
-	if err := s.opsStore.AckAlert(ctx, alertID, req.AckedBy, s.clock.Now()); err != nil {
+func (s *Service) AckAlert(ctx context.Context, p access.Principal, alertID string) (contracts.AckResponse, error) {
+	if !p.IsUser() {
+		return contracts.AckResponse{}, ErrForbidden
+	}
+	if err := s.opsStore.AckAlert(ctx, p, alertID, s.clock.Now()); err != nil {
 		return contracts.AckResponse{}, err
 	}
 	return contracts.AckResponse{

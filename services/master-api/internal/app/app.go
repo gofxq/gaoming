@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gofxq/gaoming/pkg/access"
+	accesspg "github.com/gofxq/gaoming/pkg/access/postgres"
 	"github.com/gofxq/gaoming/pkg/clock"
 	postgresrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/postgres"
 	redisrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/redis"
@@ -101,6 +103,7 @@ func New() (*App, error) {
 		clock.Real{},
 		logger,
 	)
+	svc.ConfigureAccess(accesspg.NewStore(gormDB), access.Principal{Kind: access.Demo, TenantCode: cfg.DemoTenantCode, AllowedHosts: cfg.DemoHostUIDs, Fields: cfg.DemoFields})
 	handler := httptransport.NewServer(svc, logger).Handler()
 	_, cancel := context.WithCancel(context.Background())
 
