@@ -62,23 +62,23 @@ Agent 采集主机指标
 
 ## 快速开始
 
-本地推荐组合是：后端和依赖运行在 Docker，Agent 运行在宿主机，Web 由 Compose 中的 Vite 容器提供。
+本地推荐使用原生 PostgreSQL/Redis、统一后端和 Vite，Agent 独立运行在宿主机。先安装 PostgreSQL 服务端和 Redis，详见[本地开发与验证](./02-guides/local-development.md)。
 
 ```bash
-make up
-make smoke
+make deps-up
+make dev
 ```
 
 另开一个终端运行 Agent：
 
 ```bash
-make agent
+make run-agent
 ```
 
 再从第三个终端验证上报链路：
 
 ```bash
-TENANT=default make smoke-agent
+TENANT=default SESSION_COOKIE_FILE=/path/to/login-cookies.txt make smoke-agent
 ```
 
 启动前需要准备被 `.gitignore` 排除的 `config/*.yml` 和根目录 `agent-config.yaml`。完整示例及验证方法见[本地开发与验证](./02-guides/local-development.md)。

@@ -242,8 +242,8 @@ flowchart TB
 
 `docker-compose.yml` 默认定义 PostgreSQL、Redis 和四个后端服务；`web` 与 `agent` 通过 profile 启用：
 
-- `make up`：启用 `web` profile。
-- `make up-full`：同时启用 `web` 和 `container-agent` profile。
+- `make docker-up`：启用 `web` profile。
+- `make docker-up DOCKER_PROFILES="--profile web --profile container-agent"`：同时启用 `web` 和 `container-agent` profile。
 - 宿主机 Agent 使用根目录 `agent-config.yaml`。
 - 各后端进程固定读取 `config/<service>.yml`；Compose 挂载 `config/<service>.docker.yml`。
 

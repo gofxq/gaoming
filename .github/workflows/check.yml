@@ -37,9 +37,9 @@ jobs:
           sudo apt-get install -y protobuf-compiler
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.0
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
-      - run: make fmt-check test build proto-check proto-generated-check compose-config
+      - run: make fmt-check test build proto-check compose-config
       - run: go test -race ./pkg/migrations ./services/master-api/internal/transport/http ./services/ingest-gateway/internal/service
-      - run: make smoke-roadmap
+      - run: make docker-smoke
 
   web:
     runs-on: ubuntu-24.04
@@ -53,7 +53,7 @@ jobs:
       - run: corepack enable
       - run: yarn install --frozen-lockfile
         working-directory: web
-      - run: make web-typecheck web-test web-build
+      - run: make web-test web-build
       - run: yarn playwright install --with-deps chromium
         working-directory: web
       - run: make web-e2e

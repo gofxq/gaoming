@@ -17,15 +17,15 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 cat > "$task_dir/master.yml" <<'EOF'
-http_addr: ":8080"
+http_addr: "0.0.0.0:8080"
 postgres_dsn: "postgres://gaoming:smoke-only-password@postgres:5432/gaoming?sslmode=disable"
 redis_addr: "redis:6379"
 tenant_code: "default"
 session_cookie_secure: false
 EOF
 cat > "$task_dir/ingest.yml" <<'EOF'
-http_addr: ":8090"
-grpc_addr: ":8091"
+http_addr: "0.0.0.0:8090"
+grpc_addr: "0.0.0.0:8091"
 postgres_dsn: "postgres://gaoming:smoke-only-password@postgres:5432/gaoming?sslmode=disable"
 redis_addr: "redis:6379"
 tenant_code: "default"
@@ -45,7 +45,7 @@ services:
       POSTGRES_USER: gaoming
       POSTGRES_PASSWORD: smoke-only-password
       POSTGRES_DB: gaoming
-    ports: ["127.0.0.1::5432"]
+    ports: ["0.0.0.0::5432"]
     volumes: ["database:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gaoming -d gaoming"]
@@ -74,7 +74,7 @@ services:
       dockerfile: deployments/docker/Dockerfile
       args: {SERVICE_PATH: ./services/master-api/cmd/server}
     volumes: ["$task_dir/master.yml:/app/config/master-api.yml:ro"]
-    ports: ["127.0.0.1::8080"]
+    ports: ["0.0.0.0::8080"]
     depends_on:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
@@ -89,7 +89,7 @@ services:
       dockerfile: deployments/docker/Dockerfile
       args: {SERVICE_PATH: ./services/ingest-gateway/cmd/server}
     volumes: ["$task_dir/ingest.yml:/app/config/ingest-gateway.yml:ro"]
-    ports: ["127.0.0.1::8090"]
+    ports: ["0.0.0.0::8090"]
     depends_on:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

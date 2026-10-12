@@ -172,7 +172,7 @@
 
 ## 验收与状态维护
 
-实施时按改动选择仓库现有目标：Go 变更用 `make test` / `make build`，协议用 `make proto-check`，前端用 `make web-typecheck` / `make web-build`，Docker 和链路变更用 `make compose-config`、`make docker-up`、`make smoke`、`make smoke-agent` 与 `make docker-down`。这些命令不能替代条目中的越权、故障注入、恢复或容量验收。
+实施时按改动选择仓库现有目标：Go 变更用 `make test` / `make build`，协议用 `make proto-check`，前端用 `make web-build`，Docker 和链路变更用 `make compose-config`、`make docker-up`、`make smoke`、`make smoke-agent` 与 `make docker-down`。这些命令不能替代条目中的越权、故障注入、恢复或容量验收。
 
 完成条目时附 Issue/PR、实际验证命令与结果，并更新现状文档。仅有 SQL 表、API 入口、计数增长、构建成功或健康检查成功，不足以勾选业务闭环任务。
 

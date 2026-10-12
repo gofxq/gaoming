@@ -47,3 +47,6 @@ config/
 .superpowers/
 web/test-results/
 web/playwright-report/
+
+# Native development PostgreSQL data and private Redis credentials
+.local-data/

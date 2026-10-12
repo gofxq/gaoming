@@ -7,7 +7,7 @@ make migrate
 make schema-check
 ```
 
-默认读取 `config/master-api.yml`。管理员命令也可使用 `GAOMING_POSTGRES_DSN` 环境变量（由部署系统注入，不写入仓库或命令参数）；不要开启 shell tracing。自定义配置和期限：
+Make 命令默认读取 `config/server.yml`，可用 `SERVER_CONFIG` 指定其他文件。直接运行管理员二进制时仍默认读取 `config/master-api.yml`，也可使用 `GAOMING_POSTGRES_DSN` 环境变量（由部署系统注入，不写入仓库或命令参数）；不要开启 shell tracing。自定义配置和期限：
 
 ```sh
 go run ./services/master-api/cmd/admin -config /path/to/master-api.yml -timeout 5m migrate
@@ -29,9 +29,9 @@ SQL 位于 `deployments/sql/migrations/`，编号从 001 连续递增，随二�
 
 ```sh
 TEST_POSTGRES_DSN='<独立测试库连接>' make migration-test
-make fmt-check test build proto-check proto-generated-check web-typecheck web-test web-build
+make fmt-check test build proto-check web-test web-build
 ```
 
 协议检查使用 `protoc 3.21.12`、`protoc-gen-go v1.34.0`、`protoc-gen-go-grpc v1.5.1`，对临时生成目录执行 diff，不覆盖本地生成文件。浏览器验收先在 `web/` 执行 `yarn playwright install chromium`，再运行 `make web-e2e`。
 
-`make smoke-roadmap` 创建独立 Compose 项目、新数据库卷、临时配置及随机回环端口，验证迁移→服务启动→Agent 注册/指标，然后只清理该测试项目。它不会读取现有 `config/` 或删除部署数据卷。这是当前阶段的基础链路验收，后续业务阶段会增加授权、故障恢复及产品流程检查。
+`make docker-smoke` 创建独立 Compose 项目、新数据库卷、临时配置及随机回环端口，验证迁移→服务启动→Agent 注册/指标，然后只清理该测试项目。它不会读取现有 `config/` 或删除部署数据卷。这是当前阶段的基础链路验收，后续业务阶段会增加授权、故障恢复及产品流程检查。

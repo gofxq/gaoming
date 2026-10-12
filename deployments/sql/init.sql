@@ -1,4 +1,6 @@
--- Fresh database schema. Existing installations must use `make migrate`.
+-- Fresh database schema for Docker volume initialization.
+-- Native `make deps-up` creates an empty database; `make migrate` applies the
+-- versioned schema to native and existing installations.
 -- Keep structural changes synchronized with new immutable migrations.
 create table tenants (
     id                  bigserial primary key,

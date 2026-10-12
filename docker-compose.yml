@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: gaoming
       POSTGRES_PASSWORD: gaoming
     ports:
-      - "35432:5432"
+      - "0.0.0.0:${POSTGRES_PORT:-35432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deployments/sql/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
@@ -23,7 +23,7 @@ services:
     container_name: gaoming-redis
     restart: unless-stopped
     ports:
-      - "36379:6379"
+      - "0.0.0.0:${REDIS_PORT:-36379}:6379"
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -41,7 +41,7 @@ services:
     volumes:
       - ./config/master-api.docker.yml:/app/config/master-api.yml:ro
     ports:
-      - "8080:8080"
+      - "0.0.0.0:${MASTER_PORT:-8080}:8080"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -66,8 +66,8 @@ services:
     volumes:
       - ./config/ingest-gateway.docker.yml:/app/config/ingest-gateway.yml:ro
     ports:
-      - "8090:8090"
-      - "8091:8091"
+      - "0.0.0.0:${INGEST_HTTP_PORT:-8090}:8090"
+      - "0.0.0.0:${INGEST_GRPC_PORT:-8091}:8091"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -156,7 +156,7 @@ services:
     environment:
       VITE_PROXY_TARGET: http://master-api:8080
     ports:
-      - "5173:5173"
+      - "0.0.0.0:${WEB_PORT:-5173}:5173"
     depends_on:
       master-api:
         condition: service_healthy

@@ -100,77 +100,53 @@ flowchart LR
 
 ## ⚡️ 快速开始
 
-推荐本地开发模式：
+推荐本地直接运行，不使用 Docker：四个业务后端集成到一个 Go 服务中，使用本机 PostgreSQL 和 Redis；Agent 单独运行，采集宿主机数据。
 
-- 后端服务走 Docker
-- Agent 直接运行在宿主机，采集真实宿主机数据
-
-后端服务配置统一放在仓库根目录的 `config/` 下：
-
-- `config/master-api.yml`
-- `config/ingest-gateway.yml`
-- `config/core-worker.yml`
-- `config/probe-worker.yml`
-
-如果需要示例模板或 Docker 联调配置，可直接使用同目录下的 `*.demo.yml` 和 `*.docker.yml`。
-
-启动：
+首次准备依赖与配置，详见[本地开发与验证](docs/02-guides/local-development.md)：
 
 ```bash
-make docker-up
-make run-agent
+make deps-up       # 启动项目自己的本机 PostgreSQL / Redis，首次生成随机凭据
+make dev           # 迁移数据库，启动统一后端与前端；Ctrl-C 停止
+make deps-down     # 停止本机依赖，保留数据
 ```
 
-`docker-compose.yml` 已配置 `restart: unless-stopped`，宿主机关机重启后，Docker daemon 恢复时会自动拉起这些服务；如果你手工 `docker compose stop`，则不会强制重启。
+页面地址：`http://127.0.0.1:5173/default`。统一 HTTP 端口 8080 同时提供 `/master/*` 和 `/ingest/*`，gRPC 端口 8091 提供 Agent 接入；端口均监听 `0.0.0.0`。
 
-如果要从宿主机验证标准 gRPC 上报，先准备当前目录下的 `agent-config.yaml`：
+另一终端准备 `agent-config.yaml` 并运行：
 
-```bash
-cat > agent-config.yaml <<'EOF'
+```yaml
 master_api_url: "http://127.0.0.1:8080"
 ingest_gateway_grpc_addr: "127.0.0.1:8091"
-region: "local"
-env: "dev"
-role: "node"
-tenant_code: "default"
+region: local
+env: dev
+role: node
+tenant_code: default
 loop_interval_sec: 1
-EOF
+```
 
+```bash
 make run-agent
 ```
 
-打开：
-
-```text
-http://127.0.0.1:8080/default
-```
+网页没有默认测试账号，按[本地登录步骤](docs/02-guides/local-development.md#3-创建测试管理员)创建管理员后登录。
 
 常用命令：
 
 ```bash
-make smoke
-make smoke-agent
-make docker-logs
-make docker-down
-make check
+make backend       # 只运行统一后端
+make air           # 热更新统一后端 + 前端
+make smoke         # 验证统一后端健康及接入计数器
+make test          # Go 测试
+make web-install   # 首次安装前端依赖
+make test-all      # Go + 前端测试
+make help          # 分组命令说明
 ```
 
-宿主机 gRPC 模式可这样验：
+端口冲突时用 `make dev HTTP_PORT=18080 GRPC_PORT=18091 WEB_PORT=15173`，同步更新 Agent 地址和配置里的 `allowed_origins`。数据库端口在 `config/server.yml` 中设置。
 
-```bash
-TENANT=<agent-config.yaml 里的 tenant_code> \
-MASTER_URL=http://127.0.0.1:8080 \
-INGEST_URL=http://127.0.0.1:8090 \
-make smoke-agent
-```
+本机依赖需要先安装 PostgreSQL 服务端和 Redis，数据保存在 `.local-data/`，`make clean` 会保留。使用已有本机实例时可执行 `make dev-init` 并修改配置中的凭据。
 
-如果你想连 Agent 也跑在容器里：
-
-```bash
-make docker-up-full
-```
-
-这会把前端也跑在 Docker 里，但 `web` 容器内部直接启动 `yarn dev`，并通过 Vite 代理访问 Compose 网络中的 `master-api`。
+Docker 配置仍保留，容器方式显式执行 `make docker-up` / `make docker-down`；前端独立启动使用 `make web-dev`。
 
 ## 📦 安装 Agent
 
