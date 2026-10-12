@@ -91,7 +91,7 @@ func saveDockerState(root string, state DockerState) error {
 }
 
 func (m Manager) DockerUp(ctx context.Context, cfg Config, command string) error {
-	root, _, _, err := m.paths()
+	root, err := m.root()
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (m Manager) DockerUp(ctx context.Context, cfg Config, command string) error
 }
 
 func (m Manager) DockerDown(ctx context.Context, command string) error {
-	root, _, _, err := m.paths()
+	root, err := m.root()
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,7 @@ umask 077
 # volumes are read, and only this randomly named Compose project is removed.
 task_repo=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 task_dir=$(mktemp -d)
+task_setup_token=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
 task_admin_password=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')
 task_project="gaoming-roadmap-$(basename "$task_dir" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
 compose() { docker compose -p "$task_project" -f "$task_dir/compose.yml" "$@"; }
@@ -62,7 +63,7 @@ services:
       retries: 30
   server:
     environment:
-      GAOMING_ADMIN_PASSWORD: "$task_admin_password"
+      GAOMING_SETUP_TOKEN: "$task_setup_token"
     build:
       context: "$task_repo"
       dockerfile: deployments/docker/Dockerfile
@@ -93,12 +94,15 @@ compose up --build -d --wait --wait-timeout 90 postgres redis server agent
 task_master_port=$(compose port server 8080 | sed 's/.*://')
 cd "$task_repo"
 umask 077
-# Log in using the randomly generated startup administrator password.
-# The request body is private and no password appears in command arguments.
+# Private request bodies keep setup credentials/passwords out of arguments/logs.
+printf '%s\n%s' "$task_setup_token" "$task_admin_password" | python3 -c 'import json, sys; token, password = sys.stdin.read().split("\n", 1); json.dump({"setup_token": token, "tenant_code": "default", "username": "admin", "display_name": "Smoke Administrator", "password": password}, open(sys.argv[1], "w"))' "$task_dir/setup.json"
 printf '%s' "$task_admin_password" | python3 -c 'import json, sys; json.dump({"tenant_code": "default", "username": "admin", "password": sys.stdin.read()}, open(sys.argv[1], "w"))' "$task_dir/login.json"
 task_master_origin="http://127.0.0.1:$task_master_port"
+curl -fsS -c "$task_dir/session.cookies" -H 'Content-Type: application/json' -H "Origin: $task_master_origin" --data-binary "@$task_dir/setup.json" "$task_master_origin/master/api/v1/auth/setup" > "$task_dir/session.json"
+task_repeat_status=$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -H "Origin: $task_master_origin" --data-binary "@$task_dir/setup.json" "$task_master_origin/master/api/v1/auth/setup")
+[ "$task_repeat_status" = 403 ] || { echo 'repeat setup was not rejected' >&2; exit 1; }
 curl -fsS -c "$task_dir/session.cookies" -H 'Content-Type: application/json' -H "Origin: $task_master_origin" --data-binary "@$task_dir/login.json" "$task_master_origin/master/api/v1/auth/login" > "$task_dir/session.json"
-rm -f "$task_dir/login.json" "$task_dir/session.json"
+rm -f "$task_dir/setup.json" "$task_dir/login.json" "$task_dir/session.json"
 task_anon_status=$(curl -s -o /dev/null -w '%{http_code}' "$task_master_origin/master/api/v1/hosts")
 [ "$task_anon_status" = 401 ] || { echo 'anonymous host read was not rejected' >&2; exit 1; }
 MASTER_URL="http://127.0.0.1:$task_master_port/master" INGEST_URL="http://127.0.0.1:$task_master_port/ingest" make smoke

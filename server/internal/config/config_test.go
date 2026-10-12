@@ -15,8 +15,8 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Master.HTTPAddr != "0.0.0.0:8080" || cfg.GRPCAddr != "0.0.0.0:8091" || cfg.CoreIntervalSec != 15 || cfg.ProbeIntervalSec != 15 {
-		t.Fatalf("unexpected defaults: http=%s grpc=%s core=%d probe=%d", cfg.Master.HTTPAddr, cfg.GRPCAddr, cfg.CoreIntervalSec, cfg.ProbeIntervalSec)
+	if cfg.Master.HTTPAddr != "0.0.0.0:8080" || cfg.GRPCAddr != "0.0.0.0:8091" || cfg.ProbeIntervalSec != 15 {
+		t.Fatalf("unexpected defaults: http=%s grpc=%s probe=%d", cfg.Master.HTTPAddr, cfg.GRPCAddr, cfg.ProbeIntervalSec)
 	}
 	if cfg.Master.SessionCookieSecure {
 		t.Fatal("HTTP development setting ignored")
@@ -24,7 +24,7 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidConfig(t *testing.T) {
-	for _, body := range []string{"http_addr: bad\n", "grpc_addr: bad\n", "http_addr: '0.0.0.0:99999'\n", "core_interval_sec: -1\n", "probe_interval_sec: -1\n", "probe_target_url: file:///etc/passwd\n"} {
+	for _, body := range []string{"http_addr: bad\n", "grpc_addr: bad\n", "http_addr: '0.0.0.0:99999'\n", "probe_interval_sec: -1\n", "probe_target_url: file:///etc/passwd\n"} {
 		t.Run(body, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "server.yml")
 			if err := os.WriteFile(path, []byte(body), 0600); err != nil {

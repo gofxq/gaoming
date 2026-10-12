@@ -55,7 +55,6 @@ flowchart LR
     subgraph Server["server：单一 Go 后端进程"]
         Master["master：查询 / SSE / 认证"]
         Ingest["ingest：HTTP / gRPC 接入"]
-        Core["core：周期任务占位"]
         Probe["probe：HTTP 探测"]
     end
     PG[(PostgreSQL)]
@@ -106,7 +105,7 @@ loop_interval_sec: 1
 make run-agent
 ```
 
-统一后端启动时，若整个数据库的用户表为空，会创建 `default` 租户的管理员 `admin`。密码优先读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空时使用 `G@oming`；已有用户时跳过，不修改现有密码。非本机环境应在首次启动前设置强密码，详见[本地登录步骤](docs/02-guides/local-development.md#3-管理员登录)。
+初始管理员只通过网页 setup 创建，没有默认账号或密码。新生成的 `config/server.yml` 包含随机 `setup_token`；已有配置需自行设置该字段，或通过 `GAOMING_SETUP_TOKEN` 传入至少 32 字节的随机引导凭据。打开 `/default/setup`，输入凭据并设置管理员账号，详见[本地初始化步骤](docs/02-guides/local-development.md#3-网页初始化与登录)。
 
 常用命令：
 
@@ -202,7 +201,7 @@ go build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
 
 ## 🧩 服务组成
 
-- `server`: 唯一后端服务，源码位于 `server/`；内部包含 master 查询/认证、ingest 接入、core 周期任务和 probe 探测模块。
+- `server`: 唯一后端服务，源码位于 `server/`；内部包含 master 查询/认证、ingest 接入、probe 探测模块。
 - `agent`: 独立宿主机采集与上报进程。
 
 Docker 与本机均使用统一后端，HTTP 8080 同时提供 `/master/*`、`/ingest/*`，gRPC 8091 用于 Agent。Docker 示例配置为 `deployments/server-config.docker.yaml`。

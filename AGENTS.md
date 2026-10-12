@@ -6,7 +6,7 @@
 
 ## 项目结构与模块组织
 
-`gaoming` 是一个面向主机监控的单仓库项目。后端源码统一位于 `server/`：`cmd/server` 是唯一在线服务入口；`internal/app` 负责统一装配，`internal/config` 读取统一配置，`internal/master`、`internal/ingest`、`internal/core`、`internal/probe` 是同一进程内的业务模块，不再保留独立服务入口。宿主机 Agent 位于 `agent/daemon`，独立运行。通用 Go 包放在 `pkg/`，协议定义放在 `api/proto/`，React + Vite 前端位于 `web/`。`README.md` 保持高层说明，设计细节和运行手册放入 `docs/`。
+`gaoming` 是一个面向主机监控的单仓库项目。后端源码统一位于 `server/`：`cmd/server` 是唯一在线服务入口；`internal/app` 负责统一装配，`internal/config` 读取统一配置，`internal/master`、`internal/ingest`、`internal/probe` 是同一进程内的业务模块，不再保留独立服务入口。宿主机 Agent 位于 `agent/daemon`，独立运行。通用 Go 包放在 `pkg/`，协议定义放在 `api/proto/`，React + Vite 前端位于 `web/`。`README.md` 保持高层说明，设计细节和运行手册放入 `docs/`。
 
 ## 构建、测试与开发命令
 
@@ -38,6 +38,6 @@ Go 测试文件与实现文件相邻放置，文件名使用标准 `_test.go` �
 
 ## 安全与配置提示
 
-不要提交密钥或机器本地专用配置。数据库由使用者直接连接 PostgreSQL 管理，空库执行 `deployments/sql/init.sql`；后端不提供离线管理员命令、自动迁移或迁移版本校验。`config/` 是被忽略的本机配置目录；Docker 示例配置位于 `deployments/server-config.docker.yaml`。统一 HTTP 8080 提供 `/master/*` 和 `/ingest/*`，gRPC 8091 提供 Agent 接入。首次启动非本机环境前设置强 `GAOMING_ADMIN_PASSWORD`，生产使用 HTTPS/Secure Cookie 并限制数据库与 Redis 访问。若变更影响数据库初始化或启动流程，请同步更新 `deployments/sql/init.sql` 及相关文档。
+不要提交密钥或机器本地专用配置。数据库由使用者直接连接 PostgreSQL 管理，空库执行 `deployments/sql/init.sql`；后端不提供离线管理员命令、自动迁移或迁移版本校验。`config/` 是被忽略的本机配置目录；Docker 示例配置位于 `deployments/server-config.docker.yaml`。统一 HTTP 8080 提供 `/master/*` 和 `/ingest/*`，gRPC 8091 提供 Agent 接入。首次网页 setup 前配置随机 `GAOMING_SETUP_TOKEN`（至少 32 字节），生产使用 HTTPS/Secure Cookie 并限制数据库与 Redis 访问。若变更影响数据库初始化或启动流程，请同步更新 `deployments/sql/init.sql` 及相关文档。
 
 ## 执行给出一个合适的git message

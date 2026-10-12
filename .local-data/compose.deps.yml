@@ -1,0 +1,53 @@
+secrets:
+    postgres_password:
+        file: /home/u/dev/github.com/gofxq/gaoming/.local-data/postgres-password
+    redis_config:
+        file: /home/u/dev/github.com/gofxq/gaoming/.local-data/redis.conf
+    redis_password:
+        file: /home/u/dev/github.com/gofxq/gaoming/.local-data/redis-password
+services:
+    postgres:
+        environment:
+            POSTGRES_DB: gaoming
+            POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+            POSTGRES_USER: gaoming
+        healthcheck:
+            interval: 2s
+            retries: 30
+            test:
+                - CMD
+                - pg_isready
+                - -U
+                - gaoming
+                - -d
+                - gaoming
+            timeout: 3s
+        image: postgres:16-alpine
+        ports:
+            - 0.0.0.0:5432:5432
+        restart: unless-stopped
+        secrets:
+            - postgres_password
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+    redis:
+        entrypoint:
+            - sh
+            - -ec
+            - cp /run/secrets/redis_config /tmp/gaoming-redis.conf; chown redis:redis /tmp/gaoming-redis.conf; chmod 600 /tmp/gaoming-redis.conf; exec /usr/local/bin/docker-entrypoint.sh redis-server /tmp/gaoming-redis.conf
+        healthcheck:
+            interval: 2s
+            retries: 30
+            test:
+                - CMD-SHELL
+                - REDISCLI_AUTH="$$(cat /run/secrets/redis_password)" redis-cli ping
+            timeout: 3s
+        image: redis:7-alpine
+        ports:
+            - 0.0.0.0:26379:6379
+        restart: unless-stopped
+        secrets:
+            - redis_password
+            - redis_config
+volumes:
+    postgres_data: {}

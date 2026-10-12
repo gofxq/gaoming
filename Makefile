@@ -31,7 +31,7 @@ help: ## 显示命令说明（默认目标）
 	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-28s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf '\n首次启动：make deps-up → 数据库客户端执行 deployments/sql/init.sql → make dev\n端口覆盖：make dev HTTP_PORT=18080 GRPC_PORT=18091 WEB_PORT=15173\n'
 
-dev-init: ## 生成缺失配置和随机数据库/Redis 密码，保留已有配置
+dev-init: ## 生成缺失配置和随机数据库/Redis 密码与 setup 凭据，保留已有配置
 	$(LOCAL_DEPS) init
 
 deps-up: dev-init ## 通过 Docker 启动 PostgreSQL 和 Redis（后端仍在本机运行）
@@ -40,7 +40,7 @@ deps-up: dev-init ## 通过 Docker 启动 PostgreSQL 和 Redis（后端仍在本
 deps-down: ## 停止依赖容器，保留 PostgreSQL 数据卷
 	$(LOCAL_DEPS) down
 
-backend: ## 只运行统一后端（master + ingest + core + probe）
+backend: ## 只运行统一后端（master + ingest + probe）
 	$(LOCAL_ENV) $(GO) run ./server/cmd/server -config "$(SERVER_CONFIG)"
 
 dev: web-install ## 启动统一后端和前端，Ctrl-C 停止

@@ -20,7 +20,6 @@
 - `server/internal/config`：读取 `config/server.yml` 和端口环境变量。
 - `server/internal/master`：查询、认证、用户管理和 `/master/*` HTTP/SSE；含 auth、config、service、transport。
 - `server/internal/ingest`：Agent 注册、指标流、离线扫描及 `/ingest/*` HTTP/gRPC 接入。
-- `server/internal/core`：周期占位 runner。
 - `server/internal/probe`：固定目标 HTTP 探测与结果上报。
 
 上述业务模块在同一进程运行，不提供独立启动入口。
@@ -38,7 +37,6 @@
 - `pkg/hostruntime/repository`：当前 master/ingest 共用的仓储接口及实现。
 - `pkg/clock`、`pkg/httpx`、`pkg/ids`、`pkg/logx`：基础工具。
 
-`server/internal/master/repository` 是旧仓储实现，当前统一 app 不使用它。
 
 ## Web
 

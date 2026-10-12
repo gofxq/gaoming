@@ -1,4 +1,4 @@
-// Package localdeps manages only this project's native development dependencies.
+// Package localdeps manages only this project's Docker development dependencies.
 package localdeps
 
 import (
@@ -116,11 +116,19 @@ func InitConfig(path, template string) error {
 	if err != nil {
 		return err
 	}
+	setupToken, err := password()
+	if err != nil {
+		return err
+	}
 	mapping := doc.Content[0]
-	foundPG, foundRedis := false, false
+	foundPG, foundRedis, foundSetup := false, false, false
 	for i := 0; i < len(mapping.Content); i += 2 {
 		key, value := mapping.Content[i], mapping.Content[i+1]
 		switch key.Value {
+		case "setup_token":
+			value.Value = setupToken
+			value.Tag = "!!str"
+			foundSetup = true
 		case "postgres_dsn":
 			u, err := url.Parse(value.Value)
 			if err != nil || u.User == nil {
@@ -134,6 +142,11 @@ func InitConfig(path, template string) error {
 			value.Tag = "!!str"
 			foundRedis = true
 		}
+	}
+	if !foundSetup {
+		mapping.Content = append(mapping.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "setup_token"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: setupToken})
 	}
 	if !foundPG || !foundRedis {
 		return fmt.Errorf("template lacks dependency credentials")

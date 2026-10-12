@@ -14,7 +14,6 @@ import (
 	redisrepo "github.com/gofxq/gaoming/pkg/hostruntime/repository/redis"
 	"github.com/gofxq/gaoming/pkg/logx"
 	"github.com/gofxq/gaoming/server/internal/config"
-	core "github.com/gofxq/gaoming/server/internal/core"
 	ingest "github.com/gofxq/gaoming/server/internal/ingest"
 	master "github.com/gofxq/gaoming/server/internal/master"
 	probe "github.com/gofxq/gaoming/server/internal/probe"
@@ -59,18 +58,15 @@ func New(ctx context.Context, cfg config.Config) (_ *App, err error) {
 		}
 	}()
 	if err = sqlDB.PingContext(initCtx); err != nil {
-		return nil, fmt.Errorf("PostgreSQL unavailable; check config/server.yml and start native PostgreSQL")
+		return nil, fmt.Errorf("PostgreSQL unavailable; check config/server.yml and start the configured PostgreSQL service")
 	}
 	a.redisClient = redis.NewClient(&redis.Options{Addr: cfg.Master.RedisAddr, Password: cfg.Master.RedisPassword, DB: cfg.Master.RedisDB})
 	if err = a.redisClient.Ping(initCtx).Err(); err != nil {
-		return nil, fmt.Errorf("Redis unavailable; check config/server.yml and start native Redis")
+		return nil, fmt.Errorf("Redis unavailable; check config/server.yml and start the configured Redis service")
 	}
 	store, err := postgresrepo.NewStore(initCtx, db, postgresrepo.Config{TenantCode: cfg.Master.TenantCode, TenantName: cfg.Master.TenantName, AllowCustomTenantCode: cfg.Master.AllowCustomTenantCode})
 	if err != nil {
 		return nil, err
-	}
-	if err := master.InitializeAdmin(initCtx, db, a.logger); err != nil {
-		return nil, fmt.Errorf("initialize startup administrator: %w", err)
 	}
 	metricPrefix, eventChannel := "", ""
 	if cfg.RedisNamespace != "" {
@@ -126,7 +122,7 @@ func (a *App) Run(ctx context.Context) error {
 func (a *App) serve(ctx context.Context, httpListener, grpcListener net.Listener) error {
 	workCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	errCh := make(chan error, 5)
+	errCh := make(chan error, 4)
 	var workers sync.WaitGroup
 	start := func(name string, run func() error) {
 		workers.Add(1)
@@ -143,9 +139,6 @@ func (a *App) serve(ctx context.Context, httpListener, grpcListener net.Listener
 	start("gRPC", func() error { return a.grpcServer.Serve(grpcListener) })
 	if a.logger != nil {
 		a.logger.Info("starting unified backend", "http_addr", httpListener.Addr().String(), "grpc_addr", grpcListener.Addr().String())
-		start("core-worker", func() error {
-			return core.NewRunner(a.logger, time.Duration(a.cfg.CoreIntervalSec)*time.Second).Run(workCtx)
-		})
 		start("probe-worker", func() error {
 			base := localHTTPBase(httpListener.Addr().String())
 			target := a.cfg.ProbeTargetURL

@@ -2,7 +2,7 @@
 
 ## 推荐方式：本机统一后端
 
-本地仅 PostgreSQL 和 Redis 使用 Docker。`master-api`、`ingest-gateway`、`core-worker`、`probe-worker` 在一个 Go 进程中运行，共享 PostgreSQL 连接池和 Redis 客户端。Agent 单独在宿主机运行，Vite 单独提供前端页面。
+本地仅 PostgreSQL 和 Redis 使用 Docker。`master-api`、`ingest-gateway`、`probe-worker` 在一个 Go 进程中运行，共享 PostgreSQL 连接池和 Redis 客户端。Agent 单独在宿主机运行，Vite 单独提供前端页面。
 
 需要 Go（版本以 `go.mod` 为准）、Node/Yarn 和 Docker Compose。PostgreSQL、Redis 使用 Docker 容器；四个业务后端合并成一个 Go 进程，在宿主机运行，前端使用本机 Vite。热更新另外需要 Air。
 
@@ -38,7 +38,7 @@ make deps-down
 - Agent gRPC：`0.0.0.0:8091`。
 - 前端：`0.0.0.0:5173`。
 
-`core_interval_sec` 和 `probe_interval_sec` 控制后台任务周期。省略 `probe_target_url` 时，probe-worker 探测本进程的 `/master/healthz` 并向同一 HTTP 端口提交报告。
+`probe_interval_sec` 控制探测任务周期。省略 `probe_target_url` 时，probe-worker 探测本进程的 `/master/healthz` 并向同一 HTTP 端口提交报告。
 
 ## 2. 启动本机服务
 
@@ -70,31 +70,17 @@ make smoke HTTP_PORT=18080
 
 `SERVER_CONFIG` 可指向其他 YAML 文件，例如 `make dev SERVER_CONFIG=config/server-local.yml`。`make backend`、`make dev`、`make air` 显式使用端口变量；直接运行二进制时使用 YAML 中的监听地址，也可通过 `GAOMING_HTTP_ADDR`、`GAOMING_GRPC_ADDR` 覆盖。数据库与 Redis 的监听端口在 `config/server.yml` 中设置。
 
-## 3. 管理员登录
+## 3. 网页初始化与登录
 
-统一后端每次启动时检查整个 `users` 表。仅在没有任何用户时，自动创建用户名 `admin`、显示名称 `Administrator`、角色 `admin`、所属租户 `default` 的启用账号。密码优先读取环境变量 `GAOMING_ADMIN_PASSWORD`；变量未设置或为空时使用 `G@oming`。
+后端启动不会创建用户，没有默认管理员或默认密码。首次使用空库时，打开 `http://127.0.0.1:5173/default/setup`，输入引导凭据、用户名、显示名称和 12～72 字节密码，创建并登录管理员。
 
-```text
-页面：http://127.0.0.1:5173/default/login
-用户名：admin
-默认密码：G@oming
-```
+`make dev-init` 为新配置生成独立随机 `setup_token`，存放在权限 0600 的 `config/server.yml` 中。已有配置保持不变：若缺少凭据，请自行添加至少 32 字节的随机 `setup_token`，或通过环境变量 `GAOMING_SETUP_TOKEN` 传入；环境变量优先。不要把凭据写入 URL、日志、截图或版本库。
 
-首次启动前，可在 zsh 中隐藏输入初始化密码：
+网页 setup 只在整个数据库没有用户、且 `auth_bootstrap_state` 尚无完成记录时开放。并发请求只能成功一次。初始化成功后撤销引导凭据；重启或删除所有用户都不会重新开放初始化。
 
-```zsh
-read -rs 'GAOMING_ADMIN_PASSWORD?输入初始化管理员密码: '
-printf '\n'
-export GAOMING_ADMIN_PASSWORD
-make dev
-unset GAOMING_ADMIN_PASSWORD
-```
+已有用户直接访问 `/default/login`（或所属租户的登录页）。旧版本已经创建的管理员账号保持不变；本次更新不会删除或重置已有账号。账号丢失时由可信数据库管理员维护，密码必须保存为 bcrypt 哈希。
 
-初始化密码只用于首次写入账号，存储为 bcrypt 哈希，不写入日志。启动检查和创建在同一事务中加锁，多实例并发启动只创建一次；数据库已有任意租户的任意用户时，账号和密码均保持原状。修改环境变量后重启不会重置已有密码。若所有用户被删除，下次启动会重新初始化该账号，即使网页初始化标记已存在。
-
-启动初始化路径接受 1～72 字节密码，兼容上述短默认密码；网页初始化等普通创建账号流程仍要求 12～72 字节。强烈建议首次启动前通过环境变量设置至少 12 字节的独立强密码；已创建的默认账号不会因之后设置环境变量而改变密码。
-
-需要维护额外账号时，通过现有页面功能或数据库客户端操作；密码字段只能保存 bcrypt 哈希。更多配置见[登录手册](./authentication.md)。
+Docker 首次使用前通过部署环境提供 `GAOMING_SETUP_TOKEN`，再执行 `make docker-up`；已初始化部署无需该变量。更多配置见[登录手册](./authentication.md)。
 
 ## 4. 启动宿主机 Agent
 
@@ -140,7 +126,7 @@ curl http://127.0.0.1:8080/ingest/debug/counters
 curl --cookie /path/to/login-cookies.txt http://127.0.0.1:8080/master/api/v1/hosts
 ```
 
-Agent 上报后主机出现在看板中，`metric_batches` 持续增长；内置 probe-worker 的 `probe_reports` 持续增长。core-worker 保留现有周期任务行为，目前仅记录 pipeline tick，合并运行不额外实现告警/调度算法。
+Agent 上报后主机出现在看板中，`metric_batches` 持续增长；内置 probe-worker 的 `probe_reports` 持续增长。
 
 ## 6. 可选 Docker 部署
 

@@ -12,7 +12,6 @@ flowchart LR
         Master["master HTTP/SSE :8080"]
         Ingest["ingest HTTP :8080 / gRPC :8091"]
         Probe[probe HTTP 探测]
-        Core[core 周期占位任务]
         Probe --> Ingest
     end
     PG[(PostgreSQL)]
@@ -36,11 +35,11 @@ Agent metric batch
   -> Web Dashboard
 ```
 
-`probe-worker` 可以发起探测并上报，但结果没有继续落库；`core-worker` 尚未参与数据处理。
+`probe-worker` 可以发起探测并上报，但结果没有继续落库。
 
 ## 运行单元
 
-唯一后端入口为 `server/cmd/server`。以下 master、ingest、probe、core 是内部模块，均在同一进程中运行。
+唯一后端入口为 `server/cmd/server`。以下 master、ingest、probe 是内部模块，均在同一进程中运行。
 
 | 单元 | 默认端口/入口 | 职责 | 状态 |
 | --- | --- | --- | --- |
@@ -49,7 +48,6 @@ Agent metric batch
 | master-api | HTTP `:8080` | 查询、SSE、会话解析、用户与运维接口 | 已实现 |
 | ingest-gateway | 共享 HTTP `:8080`、gRPC `:8091` | Agent 接入、快照写入、指标窗口、离线判定 | 已实现 |
 | probe-worker | 主动发起 HTTP | 固定目标探测与结果上报 | 部分实现 |
-| core-worker | 无监听 | 周期输出 pipeline 日志 | 占位 |
 | PostgreSQL | Compose 宿主 `:35432` | 租户、主机、当前状态、用户和运维数据 | 已实现 |
 | Redis | Compose 宿主 `:36379` | 短期指标列表和主机事件 Pub/Sub | 已实现 |
 
@@ -116,11 +114,11 @@ SSE 连接建立后，`master-api` 从 PostgreSQL 读取当前主机列表，从
 
 `ingest-gateway` 每 5 秒扫描一次。主机超过 15 秒没有 Agent 上报时，会被标记为 `OFFLINE` 并发布新的 `host_upsert`。
 
-### Probe 与 Core
+### Probe
 
 `probe-worker` 定时 GET 配置的目标地址，再 POST 到 `/ingest/api/v1/probes`。`ingest-gateway` 当前仅增加进程内计数，不写 `probe_results`，也不更新 `last_probe_at` 或可达性状态。
 
-`core-worker` 当前只按配置周期输出 `status-engine`、`alert-engine` 和 `probe-scheduler` 的占位日志，没有外部 I/O。
+core 占位任务已移除。
 
 ## 服务内部边界
 
@@ -172,7 +170,6 @@ flowchart TB
     style Storage fill:#f0fdf4,stroke:#a7f3d0
 ```
 
-`server/internal/master/repository` 下还保留旧仓储实现，但当前 App 使用的是共享仓储层，不存在运行时双写。
 
 ## 数据职责
 
@@ -187,7 +184,7 @@ flowchart TB
 - `users`、`user_identities`、`user_sessions`：用户和已有会话解析。
 - `maintenance_windows`、`alert_events`：部分运维操作。
 
-新数据库结构见 `deployments/sql/init.sql`；数据库结构由使用者直接连接 PostgreSQL 管理。Compose 仅在新数据卷首次启动时执行初始化 SQL；已有库需自行更新。服务不校验迁移版本，用户表为空时初始化管理员。操作说明见[数据库初始化](../02-guides/database-setup.md)。
+新数据库结构见 `deployments/sql/init.sql`；数据库结构由使用者直接连接 PostgreSQL 管理。Compose 仅在新数据卷首次启动时执行初始化 SQL；已有库需自行更新。服务不校验迁移版本，也不在启动时创建账号；初始管理员只通过网页 setup 创建。操作说明见[数据库初始化](../02-guides/database-setup.md)。
 
 ### Redis
 
@@ -221,7 +218,7 @@ flowchart TB
 
 1. **数据一致性**：PostgreSQL、Redis Lists 和 Pub/Sub 缺少统一事务或可靠事件机制。
 2. **Probe 闭环**：探测结果未落库，未参与 `reachability_state` 和 `overall_state` 计算。
-3. **Core 计算**：状态、告警和调度 pipeline 尚未实现。
+3. **后台计算**：状态、告警和调度尚未实现，原 core 占位 runner 已移除。
 4. **可靠上报**：Agent 没有磁盘队列，`batch_seq` 不去重，进程重启后重新计数。
 5. **认证与租户**：登录、私有读取、受限分享和运维租户绑定已接通；Agent/worker 上报认证、TLS/网络边界仍待 T04。
 6. **扩展性**：每个 SSE 连接有独立 Redis 订阅，多实例 ingest 会重复执行离线扫描。

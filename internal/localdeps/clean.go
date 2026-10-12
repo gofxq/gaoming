@@ -1,26 +1,14 @@
 package localdeps
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// Clean preserves native data and registered server tools, including nested paths.
+// Clean preserves the private dependency directory, including nested paths.
 func (m Manager) Clean() error {
 	paths := []string{m.Dir}
-	if m.PGBinDir != "" {
-		paths = append(paths, m.PGBinDir)
-	}
-	state, err := readState(m.Dir)
-	if err == nil {
-		if state.PGBin != "" {
-			paths = append(paths, state.PGBin)
-		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("cannot read dependency ownership state; cleaning aborted: %w", err)
-	}
 	protected := make([]string, 0, len(paths))
 	for _, path := range paths {
 		absolute, err := filepath.Abs(path)
@@ -51,7 +39,7 @@ func (m Manager) Clean() error {
 			}
 		}
 		if keep {
-			fmt.Printf("Preserving %s because it contains native dependency data or tools\n", path)
+			// Keep the enclosing directory intact so private state is never removed.
 			continue
 		}
 		if err := os.RemoveAll(path); err != nil {

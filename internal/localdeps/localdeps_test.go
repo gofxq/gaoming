@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestInitConfigPreservesExistingAndGeneratesSecrets(t *testing.T) {
@@ -26,6 +28,15 @@ func TestInitConfigPreservesExistingAndGeneratesSecrets(t *testing.T) {
 	}
 	if len(cfg.PG.Password) < 24 || len(cfg.RedisPassword) < 24 || cfg.PG.Password == cfg.RedisPassword {
 		t.Fatal("credentials were not independently generated")
+	}
+	var fields struct {
+		SetupToken string `yaml:"setup_token"`
+	}
+	if err := yaml.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if len(fields.SetupToken) < 32 || fields.SetupToken == cfg.PG.Password || fields.SetupToken == cfg.RedisPassword {
+		t.Fatal("web setup needs an independently generated credential")
 	}
 	if mode, err := os.Stat(path); err != nil || mode.Mode().Perm()&0077 != 0 {
 		t.Fatal("credentials file must be private")
@@ -83,11 +94,11 @@ func TestStateUpdateFailurePreservesOwnership(t *testing.T) {
 		t.Skip("requires regular user permission enforcement")
 	}
 	root := t.TempDir()
-	original := State{PGBin: "/owned/postgres/bin", PGPort: 5432, RedisPort: 6379, Fingerprint: "original"}
-	if err := writeState(root, original); err != nil {
+	original := DockerState{Project: "owned-docker-project", Fingerprint: "original"}
+	if err := saveDockerState(root, original); err != nil {
 		t.Fatal(err)
 	}
-	before, err := os.ReadFile(filepath.Join(root, "state.json"))
+	before, err := os.ReadFile(filepath.Join(root, "docker-state.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,38 +106,15 @@ func TestStateUpdateFailurePreservesOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chmod(root, 0700) })
-	if err := writeState(root, State{Fingerprint: "replacement"}); err == nil {
+	if err := saveDockerState(root, DockerState{Fingerprint: "replacement"}); err == nil {
 		t.Fatal("state update should fail when replacement cannot be created")
 	}
-	after, err := os.ReadFile(filepath.Join(root, "state.json"))
+	after, err := os.ReadFile(filepath.Join(root, "docker-state.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(before) != string(after) {
 		t.Fatal("ownership metadata changed after failed update")
-	}
-}
-
-func TestCleanPreservesRegisteredPostgresTools(t *testing.T) {
-	t.Chdir(t.TempDir())
-	tools := filepath.Join(".tmp", "postgres-tools", "bin")
-	if err := os.MkdirAll(tools, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(tools, "pg_ctl"), []byte("native tool"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(".local-data", 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeState(".local-data", State{PGBin: tools}); err != nil {
-		t.Fatal(err)
-	}
-	if err := (Manager{Dir: ".local-data"}).Clean(); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(tools, "pg_ctl")); err != nil {
-		t.Fatal("native stop executable was deleted", err)
 	}
 }
 
@@ -149,6 +137,6 @@ func TestDependencySetupDoesNotReuseAmbientDatabasePassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadConfig(path); err == nil {
-		t.Fatal("new native cluster would reuse an ambient credential")
+		t.Fatal("dependency setup would reuse an ambient credential")
 	}
 }

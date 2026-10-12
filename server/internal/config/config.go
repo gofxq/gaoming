@@ -16,7 +16,6 @@ const DefaultConfigFile = "config/server.yml"
 type Config struct {
 	Master           masterconfig.Config `yaml:"-"`
 	GRPCAddr         string              `yaml:"grpc_addr"`
-	CoreIntervalSec  int                 `yaml:"core_interval_sec"`
 	ProbeIntervalSec int                 `yaml:"probe_interval_sec"`
 	ProbeTargetURL   string              `yaml:"probe_target_url"`
 	RedisNamespace   string              `yaml:"redis_namespace"`
@@ -31,7 +30,7 @@ func Load(path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	cfg := Config{Master: master, GRPCAddr: "0.0.0.0:8091", CoreIntervalSec: 15, ProbeIntervalSec: 15}
+	cfg := Config{Master: master, GRPCAddr: "0.0.0.0:8091", ProbeIntervalSec: 15}
 	// Unlike legacy wildcard defaults, the unified defaults explicitly bind IPv4.
 	var listen struct {
 		HTTPAddr string `yaml:"http_addr"`
@@ -74,8 +73,8 @@ func (c Config) Validate() error {
 			return fmt.Errorf("invalid %s port", name)
 		}
 	}
-	if c.CoreIntervalSec <= 0 || c.ProbeIntervalSec <= 0 {
-		return fmt.Errorf("worker intervals must be positive")
+	if c.ProbeIntervalSec <= 0 {
+		return fmt.Errorf("probe interval must be positive")
 	}
 	if c.ProbeTargetURL != "" {
 		u, err := url.Parse(c.ProbeTargetURL)

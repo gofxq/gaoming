@@ -60,6 +60,28 @@ func TestSetupTokenSingleUse(t *testing.T) {
 	}
 }
 
+func TestSetupRemainsClosedAfterUsersDeleted(t *testing.T) {
+	svc, db := authService(t)
+	ctx := context.Background()
+	req := SetupRequest{SetupToken: strings.Repeat("s", 32), TenantCode: "team", Username: "admin", DisplayName: "Admin", Password: "correct-password"}
+	if _, err := svc.Setup(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"user_sessions", "user_passwords", "users"} {
+		if err := db.Exec("DELETE FROM " + table).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Reconstruct the service as a restart would, keeping the persistent marker.
+	svc = New(nil, nil, nil, nil, auth.NewStore(db), AuthConfig{SetupToken: req.SetupToken}, clock.Real{}, nil)
+	if available, err := svc.SetupAvailable(ctx); err != nil || available {
+		t.Fatalf("setup reopened after deletion/restart: %v %v", available, err)
+	}
+	if _, err := svc.Setup(ctx, req); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("repeated setup accepted after deletion: %v", err)
+	}
+}
+
 func TestLoginDisabledAndExpiredSession(t *testing.T) {
 	svc, db := authService(t)
 	ctx := context.Background()

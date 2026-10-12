@@ -37,7 +37,7 @@ services:
     container_name: gaoming-server
     restart: unless-stopped
     environment:
-      GAOMING_ADMIN_PASSWORD: ${GAOMING_ADMIN_PASSWORD:-}
+      GAOMING_SETUP_TOKEN: ${GAOMING_SETUP_TOKEN:-}
     volumes:
       - ./deployments/server-config.docker.yaml:/app/config/server.yml:ro
     ports:

@@ -50,10 +50,16 @@ func TestUnifiedBackendNativeIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("GAOMING_LOG_DIR", t.TempDir())
-	t.Setenv("GAOMING_ADMIN_PASSWORD", "integration-test-password")
 	a, err := New(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
+	}
+	var userCount int
+	if err := fixture.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount); err != nil {
+		t.Fatal(err)
+	}
+	if userCount != 0 {
+		t.Fatal("backend startup created an administrator without web setup")
 	}
 	t.Cleanup(a.Close)
 	t.Cleanup(func() {
@@ -124,9 +130,9 @@ func TestUnifiedBackendNativeIntegration(t *testing.T) {
 	if resp.StatusCode != 401 {
 		t.Fatalf("anonymous private read accepted: %d", resp.StatusCode)
 	}
-	payload := map[string]string{"tenant_code": "default", "username": "admin", "password": "integration-test-password"}
+	payload := map[string]string{"setup_token": strings.Repeat("s", 32), "tenant_code": "default", "username": "admin", "display_name": "Administrator", "password": "integration-test-password"}
 	raw, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", base+"/master/api/v1/auth/login", bytes.NewReader(raw))
+	req, _ := http.NewRequest("POST", base+"/master/api/v1/auth/setup", bytes.NewReader(raw))
 	req.Header.Set("Origin", base)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = client.Do(req)
@@ -136,7 +142,7 @@ func TestUnifiedBackendNativeIntegration(t *testing.T) {
 	cookies := resp.Cookies()
 	resp.Body.Close()
 	if resp.StatusCode != 201 && resp.StatusCode != 200 {
-		t.Fatalf("startup administrator login failed: %d", resp.StatusCode)
+		t.Fatalf("web administrator setup failed: %d", resp.StatusCode)
 	}
 	conn, err := grpc.NewClient(gl.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

@@ -13,6 +13,8 @@ tenant_name: Default Tenant
 allow_custom_tenant_code: true
 session_cookie_name: gaoming_session
 session_ttl_hours: 168
+# dev-init 为新配置生成随机一次性引导凭据；已有配置需自行设置。
+setup_token: ""
 # 仅用于可信本机/局域网 HTTP 联调，生产环境必须使用 Secure Cookie 和 HTTPS。
 session_cookie_secure: false
 allowed_origins:
@@ -20,6 +22,5 @@ allowed_origins:
   - http://localhost:5173
   - http://127.0.0.1:8080
   - http://localhost:8080
-core_interval_sec: 15
 probe_interval_sec: 15
 # 省略 probe_target_url 时探测统一后端自己的 /master/healthz。

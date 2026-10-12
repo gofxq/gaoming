@@ -1,9 +1,8 @@
 -- Fresh database schema. Run directly against an empty database, or mount
 -- into PostgreSQL docker-entrypoint-initdb.d for new Docker volumes.
 -- Existing databases must be updated explicitly by their operator.
--- The unified server creates admin/default at startup only when users is empty;
--- credentials are provided by GAOMING_ADMIN_PASSWORD (fallback handled in code),
--- never seeded as plaintext or fixed hashes in SQL.
+-- Initial administrator is created only through authenticated web setup;
+-- no credentials are seeded as plaintext or fixed hashes in SQL.
 create table tenants (
     id                  bigserial primary key,
     tenant_code         varchar(64) not null unique,
