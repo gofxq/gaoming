@@ -5,7 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/gofxq/gaoming/agent/daemon/internal/app"
+	"github.com/gofxq/gaoming/agent/internal/app"
 )
 
 func main() {

@@ -1,5 +1,3 @@
-.DEFAULT_GOAL := help
-
 GO ?= go
 YARN ?= yarn
 AIR ?= air
@@ -25,11 +23,6 @@ LOCAL_ENV = GAOMING_HTTP_ADDR="0.0.0.0:$(HTTP_PORT)" GAOMING_GRPC_ADDR="0.0.0.0:
 .PHONY: proto-check proto-lint proto-generate
 .PHONY: compose-config docker-up docker-down docker-logs docker-ps docker-smoke
 .PHONY: smoke smoke-agent install-agent-local-service
-
-##@ 本机开发
-help: ## 显示命令说明（默认目标）
-	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-28s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-	@printf '\n首次启动：make deps-up → 数据库客户端执行 deployments/sql/init.sql → make dev\n端口覆盖：make dev HTTP_PORT=18080 GRPC_PORT=18091 WEB_PORT=15173\n'
 
 dev-init: ## 生成缺失配置和随机数据库/Redis 密码与 setup 凭据，保留已有配置
 	$(LOCAL_DEPS) init

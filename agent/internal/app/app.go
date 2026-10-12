@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/gofxq/gaoming/agent/daemon/internal/config"
-	"github.com/gofxq/gaoming/agent/daemon/internal/identity"
-	"github.com/gofxq/gaoming/agent/daemon/internal/service"
+	"github.com/gofxq/gaoming/agent/internal/config"
+	"github.com/gofxq/gaoming/agent/internal/identity"
+	"github.com/gofxq/gaoming/agent/internal/service"
 	"github.com/gofxq/gaoming/pkg/logx"
 )
 
