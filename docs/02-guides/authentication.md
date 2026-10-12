@@ -1,25 +1,22 @@
 # 登录与管理员引导
 
-本地用户名在空间内唯一，字母不区分大小写；密码要求 12～72 字节，bcrypt cost 12。用户属于一个空间；管理员和成员仍受租户权限边界约束。不要设置已知默认密码。
+本地用户名在空间内唯一，字母不区分大小写；密码要求 12～72 字节，bcrypt cost 12。用户属于一个空间；管理员和成员仍受租户权限边界约束。普通账号创建应使用独立强密码。
+
+## 统一后端启动初始化
+
+`server/cmd/server` 在连接数据库后、开始监听前检查整个用户表。没有任何用户时，自动创建 `default` 租户的管理员 `admin`，密码读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空则使用 `G@oming`。并发启动由数据库事务锁串行化，密码只以 bcrypt 哈希存储，日志不显示密码。
+
+已有任意用户时不创建、不重置账号；环境变量改变不能重置已有密码。所有用户被删除后，下次统一后端启动重新初始化，历史 `auth_bootstrap_state` 不阻止这条启动路径。网页 setup 仍遵守其一次性引导规则。启动初始化为兼容默认密码单独允许 1～72 字节，其他创建用户入口仍要求 12～72 字节。
+
+默认密码是已知弱密码，部署到可信本机以外的环境前必须通过环境变量设置强密码；端口监听全部网卡时也应限制访问。账号维护可直接连接数据库或使用已有页面功能。
 
 ## 首次安装
 
-先执行数据库迁移。由部署管理员通过秘密管理系统设置随机 `GAOMING_SETUP_TOKEN`（至少 32 字节），或在权限 0600 的 master 配置中设置 `setup_token`。不要将 token 放入 URL、命令行参数、日志或仓库。
+先在空数据库执行 `deployments/sql/init.sql`。由部署管理员通过秘密管理系统设置随机 `GAOMING_SETUP_TOKEN`（至少 32 字节），或在权限 0600 的 master 配置中设置 `setup_token`。不要将 token 放入 URL、命令行参数、日志或仓库。
 
 访问 `/<tenantCode>/login`，初始化可用时可进入 `/<tenantCode>/setup`，输入引导凭据、用户名、显示名称和密码。仅当整个环境尚无用户、且引导未完成时允许初始化；并发初始化只能成功一次。数据库持久记录引导完成，用户删除或服务重启不会重新开放。完成后撤销配置中的引导秘密。
 
-已有用户的环境通过本机命令创建新的管理员账号，无需手工插入会话。只在可信管理终端执行；密码通过标准输入提供（不会成为命令行参数）。例如 Bash 中：
-
-```bash
-read -r -s -p 'New administrator password: ' task_password
-printf '\n'
-printf '%s\n' "$task_password" | go run ./services/master-api/cmd/admin \
-  -tenant default -username recovery-admin -display-name 'Recovery administrator' \
-  -password-stdin create-admin
-unset task_password
-```
-
-禁止开启 `set -x`，不要把真实密码写进脚本或 shell 历史。命令读取 `config/master-api.yml` 或部署注入的 `GAOMING_POSTGRES_DSN`，只创建新账号，已有重复用户名拒绝；没有自动修改现有用户密码的接口。
+已有用户的环境通过页面管理账号，或由可信数据库管理员直接维护。密码字段必须保存 bcrypt 哈希，不能写入明文；租户、用户身份和会话关系须保持一致。
 
 ## HTTPS、代理与会话
 

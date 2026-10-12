@@ -62,10 +62,15 @@ Agent 采集主机指标
 
 ## 快速开始
 
-本地推荐使用原生 PostgreSQL/Redis、统一后端和 Vite，Agent 独立运行在宿主机。先安装 PostgreSQL 服务端和 Redis，详见[本地开发与验证](./02-guides/local-development.md)。
+本地推荐使用 Docker PostgreSQL/Redis、本机统一后端和 Vite，Agent 独立运行在宿主机。先安装 Docker Compose，详见[本地开发与验证](./02-guides/local-development.md)。
 
 ```bash
 make deps-up
+```
+
+首次使用空库时，通过 PostgreSQL 客户端执行 `deployments/sql/init.sql`，见[数据库初始化](./02-guides/database-setup.md)。完成后：
+
+```bash
 make dev
 ```
 
@@ -87,7 +92,7 @@ TENANT=default SESSION_COOKIE_FILE=/path/to/login-cookies.txt make smoke-agent
 
 - Web：`http://127.0.0.1:5173/default`
 - master-api：`http://127.0.0.1:8080/master/healthz`
-- ingest-gateway：`http://127.0.0.1:8090/ingest/healthz`
+- ingest-gateway：`http://127.0.0.1:8080/ingest/healthz`
 
 ## 文档维护约定
 

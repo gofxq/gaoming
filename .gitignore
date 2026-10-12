@@ -50,3 +50,10 @@ web/playwright-report/
 
 # Native development PostgreSQL data and private Redis credentials
 .local-data/
+
+# Version the unified backend config source and repository instructions.
+!server/internal/config/
+!server/internal/config/**
+!server/internal/master/config/
+!server/internal/master/config/**
+!AGENTS.md

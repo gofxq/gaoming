@@ -21,6 +21,7 @@ import (
 type Config struct {
 	PG            *pgx.ConnConfig
 	RedisPort     int
+	RedisHost     string
 	RedisPassword string
 	fingerprint   string
 }
@@ -77,7 +78,7 @@ func LoadConfig(path string) (Config, error) {
 		}
 	}
 	sum := sha256.Sum256([]byte(pg.User + "\x00" + pg.Database + "\x00" + pg.Password + "\x00" + fields.RedisPassword))
-	return Config{PG: pg, RedisPort: redisPort, RedisPassword: fields.RedisPassword, fingerprint: fmt.Sprintf("%x", sum)}, nil
+	return Config{PG: pg, RedisHost: host, RedisPort: redisPort, RedisPassword: fields.RedisPassword, fingerprint: fmt.Sprintf("%x", sum)}, nil
 }
 
 func localHost(host string) bool { return host == "localhost" || host == "127.0.0.1" || host == "::1" }

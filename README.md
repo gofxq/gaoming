@@ -50,64 +50,42 @@ loop-interval-sec [5]: 1
 
 ```mermaid
 flowchart LR
-    %% ===== External =====
-    Agent["Agent"]
-    UI["Web UI / Dashboard"]
-
-    %% ===== Control Plane =====
-    subgraph ControlPlane["master-api (控制 + 状态)"]
-        Master["Master API - 主机状态查询 - SSE 推送"]
+    Agent["宿主机 Agent"]
+    UI["Web Dashboard"]
+    subgraph Server["server：单一 Go 后端进程"]
+        Master["master：查询 / SSE / 认证"]
+        Ingest["ingest：HTTP / gRPC 接入"]
+        Core["core：周期任务占位"]
+        Probe["probe：HTTP 探测"]
     end
-
-    %% ===== Ingest Layer =====
-    subgraph IngestLayer["ingest-gateway (数据接入)"]
-        Ingest["Ingest Gateway - 注册 - metrics stream - 状态写入 - ack"]
-    end
-
-    %% ===== Compute Layer =====
-    subgraph ComputeLayer["core-worker (后台计算)"]
-        Core["Core Worker - 状态计算 - 告警 - 调度"]
-    end
-
-    %% ===== Probe =====
-    subgraph ProbeLayer["probe-worker (主动探测)"]
-        Probe["Probe Worker - HTTP 探测 - 延迟/可用性"]
-    end
-
-    %% ===== Flows =====
-    Agent -->|gRPC 注册/指标流| Ingest
+    PG[(PostgreSQL)]
+    Redis[(Redis)]
+    Agent -->|gRPC :8091| Ingest
+    UI -->|HTTP :8080| Master
     Master -->|SSE| UI
-    Probe -->|探测结果| Ingest
-    Ingest -->|数据流| Core
-    Ingest -->|状态数据| Master
-    Master -->|状态数据| Core
-    Core -->|计算结果| Master
-
-    %% ===== Styles =====
-    classDef control fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#0d47a1;
-    classDef ingest fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1b5e20;
-    classDef compute fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c;
-    classDef probe fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#e65100;
-    classDef external fill:#eeeeee,stroke:#757575,stroke-width:1px,color:#212121;
-
-    class Master control;
-    class Ingest ingest;
-    class Core compute;
-    class Probe probe;
-    class Agent,UI external;
+    Probe -->|探测报告| Ingest
+    Ingest --> PG
+    Ingest --> Redis
+    Master --> PG
+    Master --> Redis
 ```
 
 
 ## ⚡️ 快速开始
 
-推荐本地直接运行，不使用 Docker：四个业务后端集成到一个 Go 服务中，使用本机 PostgreSQL 和 Redis；Agent 单独运行，采集宿主机数据。
+推荐本地开发：PostgreSQL 和 Redis 使用 Docker，后端 `server` 是一个 Go 服务并在宿主机运行；Agent 单独运行，采集宿主机数据。
 
 首次准备依赖与配置，详见[本地开发与验证](docs/02-guides/local-development.md)：
 
 ```bash
-make deps-up       # 启动项目自己的本机 PostgreSQL / Redis，首次生成随机凭据
-make dev           # 迁移数据库，启动统一后端与前端；Ctrl-C 停止
-make deps-down     # 停止本机依赖，保留数据
+make deps-up       # 通过 Docker 启动 PostgreSQL / Redis，首次生成随机凭据
+```
+
+首次使用空库时，先通过 PostgreSQL 客户端执行 `deployments/sql/init.sql`，见[数据库初始化](docs/02-guides/database-setup.md)。完成后启动服务：
+
+```bash
+make dev           # 启动统一后端与前端；Ctrl-C 停止
+make deps-down     # 停止依赖容器，保留数据库卷
 ```
 
 页面地址：`http://127.0.0.1:5173/default`。统一 HTTP 端口 8080 同时提供 `/master/*` 和 `/ingest/*`，gRPC 端口 8091 提供 Agent 接入；端口均监听 `0.0.0.0`。
@@ -128,7 +106,7 @@ loop_interval_sec: 1
 make run-agent
 ```
 
-网页没有默认测试账号，按[本地登录步骤](docs/02-guides/local-development.md#3-创建测试管理员)创建管理员后登录。
+统一后端启动时，若整个数据库的用户表为空，会创建 `default` 租户的管理员 `admin`。密码优先读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空时使用 `G@oming`；已有用户时跳过，不修改现有密码。非本机环境应在首次启动前设置强密码，详见[本地登录步骤](docs/02-guides/local-development.md#3-管理员登录)。
 
 常用命令：
 
@@ -144,7 +122,7 @@ make help          # 分组命令说明
 
 端口冲突时用 `make dev HTTP_PORT=18080 GRPC_PORT=18091 WEB_PORT=15173`，同步更新 Agent 地址和配置里的 `allowed_origins`。数据库端口在 `config/server.yml` 中设置。
 
-本机依赖需要先安装 PostgreSQL 服务端和 Redis，数据保存在 `.local-data/`，`make clean` 会保留。使用已有本机实例时可执行 `make dev-init` 并修改配置中的凭据。
+依赖需要 Docker Compose，PostgreSQL 数据保存在持久数据卷，`.local-data/` 保存私有配置和管理状态，`make clean` 会保留。使用已有本机实例时可执行 `make dev-init` 并修改配置中的凭据。
 
 Docker 配置仍保留，容器方式显式执行 `make docker-up` / `make docker-down`；前端独立启动使用 `make web-dev`。
 
@@ -224,12 +202,10 @@ go build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
 
 ## 🧩 服务组成
 
-- `master-api`: 主机状态查询、SSE 推送
-- `ingest-gateway`: Agent 注册、指标流、事件、探测数据接入
-- `core-worker`: 后台计算与聚合
-- `probe-worker`: 主动探测
-- `agent`: 主机侧采集与上报
+- `server`: 唯一后端服务，源码位于 `server/`；内部包含 master 查询/认证、ingest 接入、core 周期任务和 probe 探测模块。
+- `agent`: 独立宿主机采集与上报进程。
 
+Docker 与本机均使用统一后端，HTTP 8080 同时提供 `/master/*`、`/ingest/*`，gRPC 8091 用于 Agent。Docker 示例配置为 `deployments/server-config.docker.yaml`。
 ## 📚 文档
 
 - [中文文档概要与索引](docs/README_cn.md)

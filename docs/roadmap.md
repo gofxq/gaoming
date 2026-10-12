@@ -34,7 +34,7 @@ Gaoming 的目标是让用户以较低的接入和维护成本，持续掌握主
 | 团队使用 | 有用户管理页、角色/启用状态编辑及已有会话解析 | 登录页仍是占位；邀请成员、共享范围、操作记录和主机生命周期管理尚未完整提供 |
 | 手机查看 | 现有页面有部分移动布局处理 | 独立移动/PWA 路由尚未接入；小屏浏览、图表交互、安装和更新流程需要验收 |
 
-现状依据：[Dashboard](../web/src/pc/pages/PcDashboardPage.tsx)、[页面壳层](../web/src/pc/pages/PcShell.tsx)、[实时数据](../web/src/shared/features/hosts/useLiveHostsData.ts)、[路由](../web/src/app/router.tsx)、[用户页](../web/src/pc/pages/UsersPage.tsx)、[历史窗口装配](../services/master-api/internal/app/app.go)、[接入处理](../services/ingest-gateway/internal/service/service.go)。
+现状依据：[Dashboard](../web/src/pc/pages/PcDashboardPage.tsx)、[页面壳层](../web/src/pc/pages/PcShell.tsx)、[实时数据](../web/src/shared/features/hosts/useLiveHostsData.ts)、[路由](../web/src/app/router.tsx)、[用户页](../web/src/pc/pages/UsersPage.tsx)、[历史窗口装配](../server/internal/master/module.go)、[接入处理](../server/internal/ingest/service/service.go)。
 
 ## 3. 用户旅程与产品优先顺序
 

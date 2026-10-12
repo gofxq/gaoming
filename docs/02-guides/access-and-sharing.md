@@ -43,7 +43,7 @@ demo_fields:
 
 ## 开发验证与升级
 
-先执行 `make migrate`，应用 004 access-shares；禁止修改已发布迁移或删除数据卷。`make smoke-agent` 现在要求 `SESSION_COOKIE_FILE` 指向已登录 Cookie jar，不能继续使用匿名读取。`make docker-smoke` 自动建立独立数据库、临时管理员和权限 0600 的 Cookie/JSON 文件，验证匿名拒绝及授权 Agent 链路后清理自己的项目；不会读取或删改现有部署卷。
+新库执行完整 `deployments/sql/init.sql`；已有库由数据库管理员检查并补齐分享相关表，禁止通过删除数据卷升级。`make smoke-agent` 现在要求 `SESSION_COOKIE_FILE` 指向已登录 Cookie jar，不能继续使用匿名读取。`make docker-smoke` 自动建立独立数据库、临时管理员和权限 0600 的 Cookie/JSON 文件，验证匿名拒绝及授权 Agent 链路后清理自己的项目；不会读取或删改现有部署卷。
 
 使用 Vite 代理做 HTTP 本地联调时，master 配置必须显式关闭 Secure，并把浏览器实际 Origin 加入允许列表，例如 `http://localhost:5173` 或 `http://127.0.0.1:5173`（两者是不同 Origin）。代理的目标 Host 不等于浏览器 Origin，不能靠可信转发头自动放行。生产应保留 Secure 并配置自己的准确 HTTPS Origin。
 

@@ -2,41 +2,35 @@
 
 ## 推荐方式：本机统一后端
 
-本地测试不使用 Docker。`master-api`、`ingest-gateway`、`core-worker`、`probe-worker` 在一个 Go 进程中运行，共享 PostgreSQL 连接池和 Redis 客户端。Agent 单独在宿主机运行，Vite 单独提供前端页面。
+本地仅 PostgreSQL 和 Redis 使用 Docker。`master-api`、`ingest-gateway`、`core-worker`、`probe-worker` 在一个 Go 进程中运行，共享 PostgreSQL 连接池和 Redis 客户端。Agent 单独在宿主机运行，Vite 单独提供前端页面。
 
-需要 Go（版本以 `go.mod` 为准）、Node/Yarn、PostgreSQL 服务端和 Redis。热更新另外需要 Air。原生依赖命令需要 `initdb`、`pg_ctl`、`postgres` 和 `redis-server`；仅安装 `psql` 客户端不够。PostgreSQL 会从 PATH、`pg_config --bindir` 和常见 Linux/Homebrew 安装目录中查找，也可指定 `PG_BIN_DIR`。
+需要 Go（版本以 `go.mod` 为准）、Node/Yarn 和 Docker Compose。PostgreSQL、Redis 使用 Docker 容器；四个业务后端合并成一个 Go 进程，在宿主机运行，前端使用本机 Vite。热更新另外需要 Air。
 
-## 1. 启动本机 PostgreSQL 和 Redis
-
-安装服务端后，一条命令准备项目自己的依赖：
+## 1. 启动 Docker PostgreSQL 和 Redis
 
 ```bash
 make deps-up
-make dev
 ```
 
-`deps-up` 自动运行 `dev-init`，仅在缺失时生成 `config/server.yml`，并为 PostgreSQL、Redis 生成不同的随机密码；已有配置不会被改写。它创建当前用户拥有的 PostgreSQL 集群、开发数据库和 Redis 实例，不连接或停止系统/其他项目的实例。需要以普通用户执行，不能用 sudo 运行 PostgreSQL。
+首次使用空库时，接下来通过数据库客户端执行 `deployments/sql/init.sql`，然后按第 2 节启动服务。
 
-监听端口取自配置里的 `postgres_dsn` 和 `redis_addr`，默认 5432、6379；监听全部网卡，并启用 PostgreSQL SCRAM 和 Redis 密码认证。已有配置中的地址必须是本机地址，且两项密码不能为空；`postgres_dsn` 须使用明确带用户名和密码的 `postgres://` URL，不复用环境变量中的数据库密码来初始化新集群。若已有服务占用端口，该命令会报错；修改配置中的端口后再试，不会抢占端口或停止原进程。
+`deps-up` 自动运行 `dev-init`，仅在缺失时生成 `config/server.yml` 和不同的随机 PostgreSQL/Redis 密码。已有配置不会被改写。容器端口、用户名、数据库名和密码均从该文件读取，默认 PostgreSQL 5432、Redis 6379，发布地址为 `0.0.0.0`。不需要安装 `initdb`、`pg_ctl` 或本机 Redis 服务端。
 
-数据、日志和私有状态放在 git 忽略的 `.local-data/`；PostgreSQL 数据持久保存，Redis 为缓存实例，重启不保留缓存。重复 `deps-up` 复用原集群，不重置数据。Ctrl-C 停止 `dev` 后，依赖仍运行；用下面的命令停止：
+该命令只启动 PostgreSQL、Redis 两个容器，使用由 `DEPS_DIR` 派生的独立 Compose 项目，不启动后端或前端容器，也不操作其他部署项目。等待健康检查通过后验证宿主机能连接数据库。端口冲突时修改 `postgres_dsn` / `redis_addr` 中的端口，使用 `127.0.0.1` 本机地址，然后重新启动（端口发布使用 IPv4，配置不能使用 `::1`）。
+
+密码通过 git 忽略的 `.local-data/` 内私有文件挂载到容器，配置和状态文件权限为 0600，目录权限须为 0700。PostgreSQL 使用持久 Docker 数据卷；Redis 是缓存实例，重启不保留缓存。`deps-up` 不重复初始化已有数据，修改已初始化的数据库凭据会被拒绝，避免容器环境变量与存量数据库密码不一致。
+
+停止依赖：
 
 ```bash
 make deps-down
 ```
 
-停止命令只通过项目数据目录控制 PostgreSQL，并通过私有 Unix socket 控制 Redis，保留数据。`make clean` 也会保留 `DEPS_DIR` 和已登记的 PostgreSQL 二进制目录，包括将它们自定义到构建目录内的情况。可用 `DEPS_DIR` 指定其他数据目录（应放在 git 忽略路径下，目录权限须为 0700），启动与停止时传入相同目录。
+只停止本项目的依赖容器并保留 PostgreSQL 卷；`make clean` 也不删除数据卷或依赖状态目录。启动失败时可执行 `deps-down` 再重试；容器和卷都不会因为失败被自动清空。可用 `DEPS_DIR` 指定另一个私有状态目录，启动和停止需使用同一个目录及 Docker context。
 
-```bash
-make deps-up PG_BIN_DIR=/path/to/postgresql/bin
-make deps-down
-```
+原本机 PostgreSQL 数据目录保留，不自动复制到 Docker 数据卷。若已有本机实例占用端口，先停止该实例或更改配置中的端口；不要删除旧数据库目录。旧依赖管理文件仍作为数据保留与清理保护依据。
 
-修改依赖端口前先执行 `deps-down`；修改已初始化集群的用户名、数据库名或密码会被拒绝，需恢复原配置或使用新的 `DEPS_DIR`，不能通过删除旧数据来掩盖配置不一致。命令不会自动安装系统软件。
-
-初始化或文件系统写入异常后，若出现没有完整管理状态的数据目录，命令会保留并拒绝自动接管该目录；应先检查日志和磁盘状态，或使用新的 `DEPS_DIR`。不会自动删除旧目录来重试。
-
-如果使用自己已经启动的本机数据库/Redis，无需执行 `deps-up`，可单独运行 `make dev-init` 后编辑配置，使凭据与已有实例匹配。网页登录账号与数据库账号独立；不会生成默认网页登录密码。
+如果使用自己已经启动的本机数据库或 Redis，可单独运行 `make dev-init` 后编辑配置，使凭据与已有实例匹配，并直接 `make dev`。网页登录账号与数据库账号独立，统一后端的空用户表自动初始化规则见下文。
 
 默认监听：
 
@@ -48,21 +42,21 @@ make deps-down
 
 ## 2. 启动本机服务
 
+首次启动前，连接 PostgreSQL 并在空库执行 `deployments/sql/init.sql`，见[数据库初始化](./database-setup.md)。
+
 ```bash
 make dev
 ```
 
-顺序安装前端依赖、迁移数据库、构建统一后端，再启动后端和 Vite。后端健康检查通过后启动前端；任一进程退出会停止本次联调进程。Ctrl-C 停止后端和前端，本机数据库与 Redis 继续运行，数据保留。后端日志在 `.tmp/local/logs/`。
+顺序安装前端依赖、构建统一后端，再启动后端和 Vite。后端健康检查通过后启动前端；任一进程退出会停止本次联调进程。Ctrl-C 停止后端和前端，本机数据库与 Redis 继续运行，数据保留。后端日志在 `.tmp/local/logs/`。
 
 页面：`http://127.0.0.1:5173/default`。
 
 热更新或只运行后端：
 
 ```bash
-make air                  # 自动迁移；统一后端 + Vite，需 Air
-make migrate              # 手动迁移统一后端数据库
-make backend              # 只运行统一后端，数据库须已迁移
-make schema-check         # 检查统一后端数据库版本
+make air                  # 统一后端 + Vite，需 Air
+make backend              # 只运行统一后端，数据库须已初始化
 ```
 
 端口冲突时：
@@ -76,20 +70,31 @@ make smoke HTTP_PORT=18080
 
 `SERVER_CONFIG` 可指向其他 YAML 文件，例如 `make dev SERVER_CONFIG=config/server-local.yml`。`make backend`、`make dev`、`make air` 显式使用端口变量；直接运行二进制时使用 YAML 中的监听地址，也可通过 `GAOMING_HTTP_ADDR`、`GAOMING_GRPC_ADDR` 覆盖。数据库与 Redis 的监听端口在 `config/server.yml` 中设置。
 
-## 3. 创建测试管理员
+## 3. 管理员登录
 
-没有默认网页登录账号。使用统一后端配置创建账号，密码至少 12 个字符。在 zsh 终端中：
+统一后端每次启动时检查整个 `users` 表。仅在没有任何用户时，自动创建用户名 `admin`、显示名称 `Administrator`、角色 `admin`、所属租户 `default` 的启用账号。密码优先读取环境变量 `GAOMING_ADMIN_PASSWORD`；变量未设置或为空时使用 `G@oming`。
 
-```zsh
-read -rs 'task_password?输入测试密码: '
-printf '\n'
-printf '%s\n' "$task_password" | go run ./services/master-api/cmd/admin \
-  -config config/server.yml -tenant default -username test-admin \
-  -display-name 'Test Admin' -password-stdin create-admin
-unset task_password
+```text
+页面：http://127.0.0.1:5173/default/login
+用户名：admin
+默认密码：G@oming
 ```
 
-已有同名用户时该命令拒绝重复创建，不重置密码。密码通过 stdin 提供，不进入命令行参数或历史。然后在 `/default/login` 使用 `test-admin` 和自己设置的密码登录。初始化引导和生产登录配置见[登录手册](./authentication.md)。
+首次启动前，可在 zsh 中隐藏输入初始化密码：
+
+```zsh
+read -rs 'GAOMING_ADMIN_PASSWORD?输入初始化管理员密码: '
+printf '\n'
+export GAOMING_ADMIN_PASSWORD
+make dev
+unset GAOMING_ADMIN_PASSWORD
+```
+
+初始化密码只用于首次写入账号，存储为 bcrypt 哈希，不写入日志。启动检查和创建在同一事务中加锁，多实例并发启动只创建一次；数据库已有任意租户的任意用户时，账号和密码均保持原状。修改环境变量后重启不会重置已有密码。若所有用户被删除，下次启动会重新初始化该账号，即使网页初始化标记已存在。
+
+启动初始化路径接受 1～72 字节密码，兼容上述短默认密码；网页初始化等普通创建账号流程仍要求 12～72 字节。强烈建议首次启动前通过环境变量设置至少 12 字节的独立强密码；已创建的默认账号不会因之后设置环境变量而改变密码。
+
+需要维护额外账号时，通过现有页面功能或数据库客户端操作；密码字段只能保存 bcrypt 哈希。更多配置见[登录手册](./authentication.md)。
 
 ## 4. 启动宿主机 Agent
 
@@ -139,7 +144,7 @@ Agent 上报后主机出现在看板中，`metric_batches` 持续增长；内置
 
 ## 6. 可选 Docker 部署
 
-本机开发只使用统一后端；独立服务二进制仍保留在 `services/*/cmd`。Docker 部署使用以下精简命令，不属于本机启动链路：
+本机与 Docker 均使用 `server/cmd/server`，不再保留独立模块服务入口。Docker 部署使用以下命令，不属于本机启动链路：
 
 ```bash
 make docker-up
@@ -150,14 +155,16 @@ make docker-down
 make docker-up DOCKER_PROFILES="--profile web --profile container-agent"
 ```
 
-`docker-up` 自动校验 Compose 配置。`make docker-smoke` 是独立临时 Docker 集成测试，完成后清理自身资源。验证已启动的 Docker 后端时，通过 `make smoke MASTER_URL=http://127.0.0.1:8080/master INGEST_URL=http://127.0.0.1:8090/ingest` 指定两个独立端口。
+`docker-up` 自动校验 Compose 配置。`make docker-smoke` 是独立临时 Docker 集成测试，完成后清理自身资源。验证已启动的 Docker 后端时，通过 `make smoke MASTER_URL=http://127.0.0.1:8080/master INGEST_URL=http://127.0.0.1:8080/ingest` 验证同一个 HTTP 端口。
 
-Compose 仍支持 `POSTGRES_PORT`、`REDIS_PORT`、`MASTER_PORT`、`INGEST_HTTP_PORT`、`INGEST_GRPC_PORT`、`WEB_PORT` 覆盖宿主机端口；容器内部仍使用 `postgres:5432` 和 `redis:6379`。网络启动失败留下残留容器时，执行 `docker-down` 后以同样参数重新 `docker-up`，不会删除数据库卷。
+Compose 仍支持 `POSTGRES_PORT`、`REDIS_PORT`、`HTTP_PORT`、`GRPC_PORT`、`WEB_PORT` 覆盖宿主机端口；容器内部仍使用 `postgres:5432` 和 `redis:6379`。网络启动失败留下残留容器时，执行 `docker-down` 后以同样参数重新 `docker-up`，不会删除数据库卷。
 
-`deployments/sql/init.sql` 是 Docker 新数据库初始化定义；本机集群通过 `make migrate` 使用同一套版本化迁移，不依赖容器初始化。依赖启动器只创建数据库，不建业务表；数据库结构没有改变。
+`deployments/sql/init.sql` 是完整的新库初始化定义。`make deps-up` 只创建空数据库，需要自行通过数据库客户端执行该文件；全栈 Compose 在新 PostgreSQL 数据卷首次启动时导入它。已有库由使用者自行维护，见[数据库初始化](./database-setup.md)。
 
-旧的 `up/down`、`agent`、`local-migrate/local-schema-check`、`docker-dev*`、`web-local` 等重复目标已移除。迁移统一使用 `migrate/schema-check` 和 `SERVER_CONFIG`；前端统一使用 `web-dev`，远程代理可通过 `WEB_PROXY_TARGET` 指定；类型检查由 `web-build` 覆盖，协议定义和生成代码校验统一由 `proto-check` 完成。
+旧的 `up/down`、`agent`、`local-migrate/local-schema-check`、`docker-dev*`、`web-local` 等重复目标已移除。数据库通过 PostgreSQL 客户端管理；统一后端使用 `SERVER_CONFIG`；前端统一使用 `web-dev`，远程代理可通过 `WEB_PROXY_TARGET` 指定；类型检查由 `web-build` 覆盖，协议定义和生成代码校验统一由 `proto-check` 完成。
 
 ## 安全
+
+统一 HTTP 端口同时提供 `/master/*` 和 `/ingest/*`。`/ingest/api/v1/events` 和 `/ingest/api/v1/probes` 沿用现有无认证接收行为；公开反向代理应限制这些接入路由，只向可信 Agent/探测端开放。
 
 开发模板使用 HTTP 和非 Secure Cookie，仅用于可信本机/局域网。端口监听 `0.0.0.0`，应通过防火墙限制访问；从其他设备访问时，在 `allowed_origins` 中明确添加 `http://<本机局域网 IP>:<Web 端口>`。生产使用 HTTPS 与 Secure Cookie，不设置已知默认网页登录密码。统一运行保留登录、CSRF、会话与租户隔离；Agent/worker 接入鉴权的既有限制仍见[登录手册](./authentication.md)。

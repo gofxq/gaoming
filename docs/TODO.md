@@ -1,5 +1,8 @@
 # Gaoming 按优先级 TODO
 
+> 当前数据库维护方式已调整：离线管理员命令、Go 迁移执行器及版本校验已移除，数据库由使用者直接管理。下方已完成项保留当时的历史验收记录。
+
+
 更新日期：2026-10-10。此清单记录当前工作区的实施进展；未勾选项尚未完成全部验收，不代表线上部署已核验。项目现状、阶段目标和模块代码入口见 [Roadmap](./roadmap.md)。
 
 ## 实施记录
@@ -9,16 +12,16 @@
 - [x] **基线核对（2026-10-10）**：`make test`、`make build`、`make proto-check`、`make web-typecheck`、`make web-build`、`make compose-config` 通过。现有构建有 Go 只读模块元数据缓存、Web 包体积警告。Docker 访问需沙箱自动审核；测试使用独立临时资源，不操作现有数据卷。
 - [x] **T01 / 迁移执行器（2026-10-10，P1-07 部分）**：新增 SQL 嵌入、连续版本与 checksum 校验、事务 advisory lock、原子回滚和只读版本检查；兼容空库、已有初始化库及旧指标列。真实 PostgreSQL 16 测试：`TEST_POSTGRES_DSN=<独立测试库> REQUIRE_POSTGRES_TESTS=1 go test ./pkg/migrations -v`，5 项通过，覆盖重复、并发、取消、失败重试、数据保留与版本篡改拒绝。旧库升级可能改变物理列顺序，比较按列名/类型/可空性进行。
 - [x] **T01 / 管理命令、启动检查与质量门禁（2026-10-10）**：`make migrate` / `make schema-check` 在独立数据库通过；master/ingest 启动拒绝未迁移 schema。新增全仓 CI（Go、race、真实 PG、proto 漂移、Compose smoke、Web 类型/单测/构建/浏览器），锁定测试工具。`make test build proto-check proto-generated-check web-typecheck web-test web-build compose-config` 通过；3 个前端单元回归、1 个 Chromium 浏览器回归通过。当前 Ubuntu 26.04 的浏览器测试使用 Ubuntu 24.04 兼容构建，尚无真实设备验收。
-- [x] **T01 / 独立 Docker 链路（2026-10-10）**：`make smoke-roadmap` 通过，独立空卷迁移→master/ingest 启动→真实 Agent 注册及指标增长，内含 `make migration-test` / `make smoke` / `make smoke-agent`；退出只清理测试 Compose 项目。生产 Dockerfile 修复不存在的 go.work 复制，打包 SQL 和管理员命令；常规 Compose 新增一次性迁移依赖，补齐 `docker-up/down` Make 别名。[迁移手册](./02-guides/database-migrations.md) 记录升级和回滚边界。
+- [x] **T01 / 独立 Docker 链路（2026-10-10）**：`make smoke-roadmap` 通过，独立空卷迁移→master/ingest 启动→真实 Agent 注册及指标增长，内含 `make migration-test` / `make smoke` / `make smoke-agent`；退出只清理测试 Compose 项目。生产 Dockerfile 修复不存在的 go.work 复制，打包 SQL 和管理员命令；常规 Compose 新增一次性迁移依赖，补齐 `docker-up/down` Make 别名。[迁移手册](./02-guides/database-setup.md) 记录升级和回滚边界。
   - 安全检查：独立代码审阅未发现本步骤新增凭据泄漏或用户数据删除路径。迁移需要管理员权限并可能锁表，升级前须备份并停止写入。现有匿名读取、租户授权和 Agent 鉴权风险仍待 T02～T04 修复；不能据此宣称适合公开多租户部署。P1-06 的关键业务回归及 P1-07 的备份恢复继续随后续任务验收，保持未勾选。
 - [x] **T02 / 密码身份与管理员引导（2026-10-10）**：003 迁移及 init.sql 同步；空间内唯一用户名、bcrypt cost 12、12～72 字节密码；随机引导凭据核验、事务锁与数据库持久一次性标记。真实 PG 回归 `TestSetupTokenSingleUse` / `TestLoginDisabledAndExpiredSession` 通过，错误账号统一拒绝，禁用用户、到期和退出使会话无效。`create-admin` 通过 stdin 使用随机测试密码创建管理员，重复账号拒绝；未写入真实秘密。
 - [x] **T02 / Cookie、Origin、CSRF 与登录资源边界（2026-10-10）**：默认 Secure/HttpOnly/SameSite=Lax，认证响应 no-store；登录替换浏览器原会话；会话写入校验 Origin 和 CSRF，登录/初始化校验 Origin 和 JSON 请求体上限。`TestLoginOriginAndPasswordBoundaries` / `TestLoginRateLimit` 通过；认证直接对端每分钟 20 次、4 并发、1024 身份上限。HTTP 本地联调须显式关闭 Secure，生产须配置准确 HTTPS Origin。
 - [x] **T02 / 登录、初始化与安全回跳界面（2026-10-10）**：完成登录/初始化表单、错误/忙碌/重试、字节长度提示；现有成员修改和退出携带 CSRF，旧会话请求不覆盖新的认证状态。14 个前端单元回归、4 个 Chromium 场景通过，覆盖失败保留用户名、外站回跳拒绝和初始化密码提示。新增 [登录手册](./02-guides/authentication.md)。
-- [x] **T02 / 联合验收与审阅（2026-10-10）**：全仓 Go/构建/proto、真实 PG、`go test -race ./services/master-api/internal/service ./services/master-api/internal/transport/http ./pkg/migrations`、Web 类型/构建、15 个单元回归、4 个 Chromium 场景与更新后的 `make smoke-roadmap` 均通过。截图：[桌面登录](./pics/login-desktop.png)、[移动初始化](./pics/setup-mobile.png)，无横向溢出，使用空白表单/模拟未登录响应，无真实账号数据；尚无真实移动设备验收。
+- [x] **T02 / 联合验收与审阅（2026-10-10）**：全仓 Go/构建/proto、真实 PG、`go test -race ./server/internal/master/service ./server/internal/master/transport/http ./pkg/migrations`、Web 类型/构建、15 个单元回归、4 个 Chromium 场景与更新后的 `make smoke-roadmap` 均通过。截图：[桌面登录](./pics/login-desktop.png)、[移动初始化](./pics/setup-mobile.png)，无横向溢出，使用空白表单/模拟未登录响应，无真实账号数据；尚无真实移动设备验收。
   - 安全审阅发现退出/换账号后成员缓存可能泄露给下一用户，已通过 RED→GREEN 修复：身份变更取消查询并清理缓存，成员缓存包含租户/用户，迟到请求和 mutation 不重建旧缓存。其他 T02 审阅未发现 Critical/Important 问题；已同步架构、接口和登录手册。无生产部署、真实外部通知或自动提交。
   - T02 完成不代表 M0 或整份 roadmap 完成；T03 的后续实现见下方记录，T04～T23 尚未完成；Agent/worker 鉴权、最后管理员保护与完整配额仍按后续任务推进。
 
-- [x] **T03 / 私有读取入口（2026-10-10）**：主机列表、详情、最新指标和 SSE 均要求有效会话，查询空间只来自已认证用户；匿名请求（含伪造 tenant）返回 401，登录用户指定其他空间返回 403，未提供 tenant 不再跨空间读取。`go test ./services/master-api/internal/transport/http` 通过，新增匿名/伪造空间回归，并把旧匿名成功用例改为认证契约。受限分享、演示、SSE 权限重验和运维边界尚在本步骤后续实现，P0-01 暂不整项勾选。
+- [x] **T03 / 私有读取入口（2026-10-10）**：主机列表、详情、最新指标和 SSE 均要求有效会话，查询空间只来自已认证用户；匿名请求（含伪造 tenant）返回 401，登录用户指定其他空间返回 403，未提供 tenant 不再跨空间读取。`go test ./server/internal/master/transport/http` 通过，新增匿名/伪造空间回归，并把旧匿名成功用例改为认证契约。受限分享、演示、SSE 权限重验和运维边界尚在本步骤后续实现，P0-01 暂不整项勾选。
 
 - [x] **T03 / 运维授权与审计（2026-10-10）**：公共仓储接收可信 `access.Principal`，维护窗只允许管理员，host/group/tenant 范围均验证归属；告警确认只接受自身租户实际存在的 ID。操作者由 UserID 生成，请求的 CreatedBy/AckedBy 不生效；角色/状态检查、写入与审计同事务。真实 PG `TestOpsUseSessionTenantAndActor` 通过，覆盖非默认空间、伪造操作者、跨空间引用、不存在告警及审计；窗口抑制行为仍属 T12。
 - [x] **T03 / 分享持久化与撤销（2026-10-10）**：004 迁移与 init.sql 同步，随机 token 仅保存 SHA-256；分享明确限制主机集合和 hostname/status/metrics 字段，最长 7 天；窄路径 HttpOnly/SameSite Cookie 不能授权私有 API。真实 PG 与 HTTP/SSE 回归通过，覆盖到期、撤销后旧 Cookie 拒绝、状态分享不暴露名称/IP/标签/指标，撤销后旧 SSE 在周期重验时关闭。管理/接收页面、额外故障边界及最终安全审阅仍在实现，暂不勾选完整 T03。

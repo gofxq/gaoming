@@ -167,4 +167,4 @@ net_tx_packets_ps
 
 - `StatusQueryService`：当前由 master-api HTTP/SSE 替代。
 - `OpsService`：当前由 master-api HTTP 运维接口替代。
-- `ProbeCoordinatorService`：当前 probe-worker 使用固定 YAML 配置，没有任务租约。
+- `ProbeCoordinatorService`：当前内置 probe 模块使用统一 YAML 配置，没有任务租约。

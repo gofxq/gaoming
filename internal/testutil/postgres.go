@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofxq/gaoming/pkg/migrations"
+	schemaSQL "github.com/gofxq/gaoming/deployments/sql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -50,7 +50,7 @@ func Postgres(t testing.TB) *sql.DB {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close(); _, _ = admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`); _ = admin.Close() })
-	if err := migrations.Run(context.Background(), db); err != nil {
+	if _, err := db.ExecContext(context.Background(), schemaSQL.InitSQL); err != nil {
 		t.Fatal(err)
 	}
 	return db

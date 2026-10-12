@@ -6,60 +6,24 @@
 
 ```mermaid
 flowchart LR
-    subgraph Sources[采集端]
-        direction TB
-        Agent["Agent<br/><small>主机指标采集</small>"]
-        Probe["probe-worker<br/><small>HTTP 主动探测</small>"]
-        Core["core-worker<br/><small>状态 / 告警 / 调度</small>"]
+    Agent[宿主机 Agent]
+    Web[React Web :5173]
+    subgraph Server["server：单一进程，共享连接池"]
+        Master["master HTTP/SSE :8080"]
+        Ingest["ingest HTTP :8080 / gRPC :8091"]
+        Probe[probe HTTP 探测]
+        Core[core 周期占位任务]
+        Probe --> Ingest
     end
-
-    subgraph Platform[Gaoming 平台]
-        direction LR
-        Ingest["ingest-gateway<br/><small>HTTP :8090 · gRPC :8091</small>"]
-        Master["master-api<br/><small>HTTP :8080</small>"]
-
-        subgraph Data[数据层]
-            direction TB
-            PG[("PostgreSQL<br/><small>当前快照与业务数据</small>")]
-            Metrics[("Redis Lists<br/><small>短期指标窗口</small>")]
-            Bus[("Redis Pub/Sub<br/><small>主机事件总线</small>")]
-        end
-    end
-
-    subgraph Experience[用户端]
-        direction TB
-        Web["React Web<br/><small>:5173</small>"]
-        User((用户))
-    end
-
-    Agent ==>|"gRPC 指标流"| Ingest
-    Probe -->|"HTTP 探测结果"| Ingest
-    Core -.->|"尚未消费数据"| Ingest
-
-    Ingest -->|"写入当前快照"| PG
-    Ingest -->|"写入短期指标"| Metrics
-    Ingest -->|"发布 host_upsert"| Bus
-
-    Master -->|"查询当前快照"| PG
-    Master -->|"读取指标窗口"| Metrics
-    Bus -->|"订阅主机事件"| Master
-    Master ==>|"SSE sync / host_upsert"| Web
-    Web -->|"HTTP 查询"| Master
-    User --- Web
-
-    classDef service fill:#e8f1ff,stroke:#2563eb,stroke-width:1.5px,color:#172554
-    classDef storage fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#064e3b
-    classDef client fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12
-    classDef pending fill:#f8fafc,stroke:#94a3b8,stroke-width:1.5px,stroke-dasharray:5 4,color:#475569
-    class Agent,Probe,Ingest,Master service
-    class PG,Metrics,Bus storage
-    class Web,User client
-    class Core pending
-
-    style Sources fill:#f8fafc,stroke:#cbd5e1,stroke-width:1px
-    style Platform fill:#f8fafc,stroke:#94a3b8,stroke-width:1px
-    style Data fill:#ffffff,stroke:#d1fae5,stroke-width:1px
-    style Experience fill:#fffaf5,stroke:#fed7aa,stroke-width:1px
+    PG[(PostgreSQL)]
+    Redis[(Redis)]
+    Agent --> Ingest
+    Ingest --> PG
+    Ingest --> Redis
+    Master --> PG
+    Master --> Redis
+    Master -->|SSE| Web
+    Web --> Master
 ```
 
 当前可靠闭环是：
@@ -76,12 +40,14 @@ Agent metric batch
 
 ## 运行单元
 
+唯一后端入口为 `server/cmd/server`。以下 master、ingest、probe、core 是内部模块，均在同一进程中运行。
+
 | 单元 | 默认端口/入口 | 职责 | 状态 |
 | --- | --- | --- | --- |
 | Web | `:5173` | 租户路由、主机展示、SSE 实时更新、用户管理 | 已实现 |
 | Agent | 主动连接 gRPC | 主机身份发现、系统采样、指标流上报 | 已实现 |
 | master-api | HTTP `:8080` | 查询、SSE、会话解析、用户与运维接口 | 已实现 |
-| ingest-gateway | HTTP `:8090`、gRPC `:8091` | Agent 接入、快照写入、指标窗口、离线判定 | 已实现 |
+| ingest-gateway | 共享 HTTP `:8080`、gRPC `:8091` | Agent 接入、快照写入、指标窗口、离线判定 | 已实现 |
 | probe-worker | 主动发起 HTTP | 固定目标探测与结果上报 | 部分实现 |
 | core-worker | 无监听 | 周期输出 pipeline 日志 | 占位 |
 | PostgreSQL | Compose 宿主 `:35432` | 租户、主机、当前状态、用户和运维数据 | 已实现 |
@@ -206,7 +172,7 @@ flowchart TB
     style Storage fill:#f0fdf4,stroke:#a7f3d0
 ```
 
-`services/master-api/internal/repository` 下还保留旧仓储实现，但当前 App 使用的是共享仓储层，不存在运行时双写。
+`server/internal/master/repository` 下还保留旧仓储实现，但当前 App 使用的是共享仓储层，不存在运行时双写。
 
 ## 数据职责
 
@@ -221,12 +187,14 @@ flowchart TB
 - `users`、`user_identities`、`user_sessions`：用户和已有会话解析。
 - `maintenance_windows`、`alert_events`：部分运维操作。
 
-新数据库结构见 `deployments/sql/init.sql`；部署和存量升级使用显式的 `make migrate` 管理命令，按顺序执行嵌入的 SQL、事务锁与 checksum 版本记录。Compose 一次性迁移服务完成后才启动 master/ingest；服务启动只检查版本。失败回滚与升级边界见[数据库迁移](../02-guides/database-migrations.md)。
+新数据库结构见 `deployments/sql/init.sql`；数据库结构由使用者直接连接 PostgreSQL 管理。Compose 仅在新数据卷首次启动时执行初始化 SQL；已有库需自行更新。服务不校验迁移版本，用户表为空时初始化管理员。操作说明见[数据库初始化](../02-guides/database-setup.md)。
 
 ### Redis
 
 - 指标窗口：`gaoming:metrics:<host_uid>:<metric_key>`，List 中保存时间和值。
 - 事件总线：`gaoming:master-api:host-events`，使用 Pub/Sub 传递 `host_upsert`/`host_delete`。
+
+设置 `redis_namespace` 时，指标键和事件频道分别为 `<namespace>:metrics:*` 和 `<namespace>:host-events`。
 
 当前 App 每项指标最多保留 60 个点，TTL 为 2 小时。Pub/Sub 不可重放，PostgreSQL 仍是当前状态的权威来源。
 
@@ -235,17 +203,17 @@ flowchart TB
 - 主机列表、详情、最新指标和 SSE 默认要求会话；租户只来自已认证用户，query 不能扩大范围。分享与演示使用独立公开 namespace 和主机/字段白名单，不借用私有会话。
 - 受保护接口通过 `gaoming_session` Cookie 查找会话。
 - 用户管理要求已登录且角色为 `admin`，并限制在会话租户内。
-- 已接通本地密码登录和一次性初始管理员引导，已有环境可通过本机管理命令创建管理员；暂无 OAuth 回调。Cookie 默认 Secure/HttpOnly/SameSite=Lax，写操作校验 Origin 和会话派生 CSRF；认证响应 no-store。详见[登录手册](../02-guides/authentication.md)。
+- 已接通本地密码登录和一次性初始管理员引导，已有环境通过页面或直接连接数据库维护账号；暂无 OAuth 回调。Cookie 默认 Secure/HttpOnly/SameSite=Lax，写操作校验 Origin 和会话派生 CSRF；认证响应 no-store。详见[登录手册](../02-guides/authentication.md)。
 - 维护窗和告警 ACK 从可信 principal 校验当前角色、租户和资源，忽略请求操作者，写入和审计同事务；分享支持到期/撤销及 SSE 重验。详见[访问与分享](../02-guides/access-and-sharing.md)。
 
 ## 部署形态
 
-`docker-compose.yml` 默认定义 PostgreSQL、Redis 和四个后端服务；`web` 与 `agent` 通过 profile 启用：
+`docker-compose.yml` 默认定义 PostgreSQL、Redis、一个 server 后端服务；`web` 与 `agent` 通过 profile 启用：
 
 - `make docker-up`：启用 `web` profile。
 - `make docker-up DOCKER_PROFILES="--profile web --profile container-agent"`：同时启用 `web` 和 `container-agent` profile。
 - 宿主机 Agent 使用根目录 `agent-config.yaml`。
-- 各后端进程固定读取 `config/<service>.yml`；Compose 挂载 `config/<service>.docker.yml`。
+- 后端默认读取 `config/server.yml`；Compose 将 `deployments/server-config.docker.yaml` 只读挂载到该路径。
 
 `config/` 被 `.gitignore` 排除，本地或部署环境必须自行准备配置，示例见[本地开发与验证](../02-guides/local-development.md)。
 
@@ -268,8 +236,8 @@ flowchart TB
 | JSON 契约 | `pkg/contracts/api.go` |
 | 主机快照与指标 | `pkg/state/state.go` |
 | 共享仓储接口 | `pkg/hostruntime/repository/repository.go` |
-| ingest 处理 | `services/ingest-gateway/internal/service/service.go` |
-| master HTTP/SSE | `services/master-api/internal/transport/http` |
+| ingest 处理 | `server/internal/ingest/service/service.go` |
+| master HTTP/SSE | `server/internal/master/transport/http` |
 | Web 路由 | `web/src/app/router.tsx` |
 | Web 实时数据 | `web/src/shared/features/hosts/useLiveHostsData.ts` |
 | 数据库 Schema | `deployments/sql/init.sql` |

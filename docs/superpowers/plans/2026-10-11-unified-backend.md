@@ -1,5 +1,8 @@
 # Unified Backend Implementation Plan
 
+> 历史记录：目录和独立入口保留策略已被 [2026-10-12 后端收拢设计](../specs/2026-10-12-server-consolidation.md) 替代；当前入口为 `server/cmd/server`。
+
+
 > **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Run all four business backends in one native process and make local development independent of Docker.

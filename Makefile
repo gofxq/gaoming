@@ -6,7 +6,6 @@ AIR ?= air
 DOCKER_COMPOSE ?= docker compose
 SERVER_CONFIG ?= config/server.yml
 DEPS_DIR ?= .local-data
-PG_BIN_DIR ?=
 HTTP_PORT ?= 8080
 GRPC_PORT ?= 8091
 WEB_PORT ?= 5173
@@ -16,13 +15,12 @@ MASTER_URL ?= http://127.0.0.1:$(HTTP_PORT)/master
 INGEST_URL ?= http://127.0.0.1:$(HTTP_PORT)/ingest
 DOCKER_PROFILES ?= --profile web
 
-LOCAL_DEPS = $(GO) run ./cmd/localdeps -config "$(SERVER_CONFIG)" -dir "$(DEPS_DIR)" -pg-bin-dir "$(PG_BIN_DIR)"
-ADMIN = $(GO) run ./services/master-api/cmd/admin -config "$(SERVER_CONFIG)"
+LOCAL_DEPS = $(GO) run ./cmd/localdeps -config "$(SERVER_CONFIG)" -dir "$(DEPS_DIR)" -docker-compose "$(DOCKER_COMPOSE)"
 export GO AIR SERVER_CONFIG HTTP_PORT GRPC_PORT WEB_PORT
 LOCAL_ENV = GAOMING_HTTP_ADDR="0.0.0.0:$(HTTP_PORT)" GAOMING_GRPC_ADDR="0.0.0.0:$(GRPC_PORT)"
 
-.PHONY: help dev-init deps-up deps-down migrate schema-check backend dev air run-agent
-.PHONY: fmt fmt-check build test test-all check clean migration-test
+.PHONY: help dev-init deps-up deps-down backend dev air run-agent
+.PHONY: fmt fmt-check build test test-all check clean
 .PHONY: web-install web-dev web-build web-test web-e2e web-preview
 .PHONY: proto-check proto-lint proto-generate
 .PHONY: compose-config docker-up docker-down docker-logs docker-ps docker-smoke
@@ -31,34 +29,26 @@ LOCAL_ENV = GAOMING_HTTP_ADDR="0.0.0.0:$(HTTP_PORT)" GAOMING_GRPC_ADDR="0.0.0.0:
 ##@ 本机开发
 help: ## 显示命令说明（默认目标）
 	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-28s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-	@printf '\n快速启动：make deps-up && make dev\n端口覆盖：make dev HTTP_PORT=18080 GRPC_PORT=18091 WEB_PORT=15173\n'
+	@printf '\n首次启动：make deps-up → 数据库客户端执行 deployments/sql/init.sql → make dev\n端口覆盖：make dev HTTP_PORT=18080 GRPC_PORT=18091 WEB_PORT=15173\n'
 
 dev-init: ## 生成缺失配置和随机数据库/Redis 密码，保留已有配置
 	$(LOCAL_DEPS) init
 
-deps-up: dev-init ## 初始化并启动项目自己的本机 PostgreSQL 和 Redis（需安装服务端）
+deps-up: dev-init ## 通过 Docker 启动 PostgreSQL 和 Redis（后端仍在本机运行）
 	$(LOCAL_DEPS) up
 
-deps-down: ## 停止项目自己的 PostgreSQL 和 Redis，保留数据
+deps-down: ## 停止依赖容器，保留 PostgreSQL 数据卷
 	$(LOCAL_DEPS) down
 
-migrate: ## 使用 SERVER_CONFIG 迁移数据库
-	$(ADMIN) migrate
-
-schema-check: ## 使用 SERVER_CONFIG 检查数据库版本
-	$(ADMIN) schema-check
-
 backend: ## 只运行统一后端（master + ingest + core + probe）
-	$(LOCAL_ENV) $(GO) run ./services/server/cmd/server -config "$(SERVER_CONFIG)"
+	$(LOCAL_ENV) $(GO) run ./server/cmd/server -config "$(SERVER_CONFIG)"
 
-dev: web-install ## 迁移数据库并启动统一后端和前端，Ctrl-C 停止
-	$(MAKE) migrate
+dev: web-install ## 启动统一后端和前端，Ctrl-C 停止
 	mkdir -p .tmp/local/bin
-	$(GO) build -o .tmp/local/bin/server ./services/server/cmd/server
+	$(GO) build -o .tmp/local/bin/server ./server/cmd/server
 	$(LOCAL_ENV) node ./scripts/dev-local.mjs
 
 air: web-install ## 热更新统一后端和前端（需安装 Air）
-	$(MAKE) migrate
 	$(LOCAL_ENV) sh ./scripts/dev-air.sh
 
 run-agent: ## 运行宿主机 Agent（读取 agent-config.yaml）
@@ -69,7 +59,7 @@ fmt: ## 格式化 Go 代码
 	$(GO) fmt ./...
 
 fmt-check: ## 检查 Go 格式，不修改文件
-	@test -z "$$(gofmt -l $$(git ls-files '*.go') $$(git ls-files --others --exclude-standard '*.go'))" || { echo 'Go files require gofmt'; exit 1; }
+	@test -z "$$(git ls-files --cached --others --exclude-standard '*.go' | while IFS= read -r file; do if [ -f "$$file" ]; then gofmt -l "$$file"; fi; done)" || { echo 'Go files require gofmt'; exit 1; }
 
 build: ## 构建全部 Go 包
 	$(GO) build ./...
@@ -81,10 +71,7 @@ test-all: test web-test ## 运行 Go 和前端单元测试（先 make web-instal
 
 check: fmt-check test-all build proto-check web-build ## 完整检查（需前端依赖、protoc 和生成插件）
 
-migration-test: ## 运行 PostgreSQL 迁移测试（需要 TEST_POSTGRES_DSN）
-	REQUIRE_POSTGRES_TESTS=1 $(GO) test ./pkg/migrations -count=1 -v
-
-clean: ## 清理构建产物，保留 DEPS_DIR 中的本机数据库
+clean: ## 清理构建产物，保留依赖状态目录和 PostgreSQL 数据卷
 	$(LOCAL_DEPS) clean
 
 ##@ 链路验证
@@ -123,7 +110,7 @@ proto-lint: ## 使用 buf 检查协议风格
 proto-generate: ## 生成 Go protobuf 和 gRPC 代码
 	protoc -I api/proto --go_out=api/gen/go --go_opt=paths=source_relative --go-grpc_out=api/gen/go --go-grpc_opt=paths=source_relative api/proto/monitor/v1/monitor.proto
 
-##@ Docker（可选部署，不用于本机开发）
+##@ Docker 全栈部署（与 deps-up 的依赖容器独立）
 compose-config: ## 校验 Compose 配置
 	$(DOCKER_COMPOSE) config >/dev/null
 

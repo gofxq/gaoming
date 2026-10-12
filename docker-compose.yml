@@ -13,7 +13,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./deployments/sql/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U gaoming -d gaoming" ]
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -U gaoming -d gaoming" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -30,102 +30,29 @@ services:
       timeout: 5s
       retries: 10
 
-  master-api:
+  server:
     build:
       context: .
       dockerfile: deployments/docker/Dockerfile
-      args:
-        SERVICE_PATH: ./services/master-api/cmd/server
-    container_name: gaoming-master-api
+    container_name: gaoming-server
     restart: unless-stopped
+    environment:
+      GAOMING_ADMIN_PASSWORD: ${GAOMING_ADMIN_PASSWORD:-}
     volumes:
-      - ./config/master-api.docker.yml:/app/config/master-api.yml:ro
+      - ./deployments/server-config.docker.yaml:/app/config/server.yml:ro
     ports:
-      - "0.0.0.0:${MASTER_PORT:-8080}:8080"
+      - "0.0.0.0:${HTTP_PORT:-8080}:8080"
+      - "0.0.0.0:${GRPC_PORT:-8091}:8091"
     depends_on:
-      migrate:
-        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8080/master/healthz >/dev/null" ]
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8080/master/healthz >/dev/null && wget -qO- http://127.0.0.1:8080/ingest/healthz >/dev/null" ]
       interval: 5s
       timeout: 5s
       retries: 10
-
-  ingest-gateway:
-    build:
-      context: .
-      dockerfile: deployments/docker/Dockerfile
-      args:
-        SERVICE_PATH: ./services/ingest-gateway/cmd/server
-    container_name: gaoming-ingest-gateway
-    restart: unless-stopped
-    volumes:
-      - ./config/ingest-gateway.docker.yml:/app/config/ingest-gateway.yml:ro
-    ports:
-      - "0.0.0.0:${INGEST_HTTP_PORT:-8090}:8090"
-      - "0.0.0.0:${INGEST_GRPC_PORT:-8091}:8091"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8090/ingest/healthz >/dev/null" ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  migrate:
-    build:
-      context: .
-      dockerfile: deployments/docker/Dockerfile
-      args:
-        SERVICE_PATH: ./services/master-api/cmd/admin
-    entrypoint: ["/app/admin", "migrate"]
-    volumes:
-      - ./config/master-api.docker.yml:/app/config/master-api.yml:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
-
-  core-worker:
-    build:
-      context: .
-      dockerfile: deployments/docker/Dockerfile
-      args:
-        SERVICE_PATH: ./services/core-worker/cmd/worker
-    container_name: gaoming-core-worker
-    restart: unless-stopped
-    volumes:
-      - ./config/core-worker.docker.yml:/app/config/core-worker.yml:ro
-    depends_on:
-      master-api:
-        condition: service_healthy
-      ingest-gateway:
-        condition: service_healthy
-
-  probe-worker:
-    build:
-      context: .
-      dockerfile: deployments/docker/Dockerfile
-      args:
-        SERVICE_PATH: ./services/probe-worker/cmd/worker
-    container_name: gaoming-probe-worker
-    restart: unless-stopped
-    volumes:
-      - ./config/probe-worker.docker.yml:/app/config/probe-worker.yml:ro
-    depends_on:
-      master-api:
-        condition: service_healthy
-      ingest-gateway:
-        condition: service_healthy
 
   agent:
     profiles:
@@ -140,9 +67,7 @@ services:
     volumes:
       - ./deployments/agent-config.docker.yaml:/app/agent-config.yaml:ro
     depends_on:
-      master-api:
-        condition: service_healthy
-      ingest-gateway:
+      server:
         condition: service_healthy
 
   web:
@@ -154,11 +79,11 @@ services:
     container_name: gaoming-web
     restart: unless-stopped
     environment:
-      VITE_PROXY_TARGET: http://master-api:8080
+      VITE_PROXY_TARGET: http://server:8080
     ports:
       - "0.0.0.0:${WEB_PORT:-5173}:5173"
     depends_on:
-      master-api:
+      server:
         condition: service_healthy
     healthcheck:
       test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:5173/ >/dev/null" ]

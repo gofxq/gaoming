@@ -21,7 +21,7 @@ exec ./.tmp/air/bin/server -config "$SERVER_CONFIG"
 RUN
 cat > .tmp/air/build-server.sh <<'BUILD'
 #!/usr/bin/env sh
-exec "$GO" build -o ./.tmp/air/bin/server ./services/server/cmd/server
+exec "$GO" build -o ./.tmp/air/bin/server ./server/cmd/server
 BUILD
 chmod +x .tmp/air/run-server.sh .tmp/air/build-server.sh
 cat > .tmp/air/config/server.toml <<EOF_CONFIG

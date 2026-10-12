@@ -1,5 +1,8 @@
 # 本机统一后端
 
+> 历史记录：目录和独立入口保留策略已被 [2026-10-12 后端收拢设计](../specs/2026-10-12-server-consolidation.md) 替代；当前入口为 `server/cmd/server`。
+
+
 用户选择：本地测试不使用 Docker，保留本机 PostgreSQL 和 Redis，先合并四个业务后端。
 
 新增 `services/server/cmd/server`，在一个 Go 进程中装配 master-api、ingest-gateway、core-worker、probe-worker。共享 PostgreSQL 连接池和 Redis 客户端，HTTP 保留 `/master/*` 与 `/ingest/*` 路由，同端口监听；gRPC 独立端口。四个原有可执行入口保留。通过各服务公开的 runtime 装配包复用内部实现，遵守 Go internal 可见性规则。Agent 仍是独立宿主机进程。
