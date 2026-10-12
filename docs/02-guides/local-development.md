@@ -70,17 +70,25 @@ make smoke HTTP_PORT=18080
 
 `SERVER_CONFIG` 可指向其他 YAML 文件，例如 `make dev SERVER_CONFIG=config/server-local.yml`。`make backend`、`make dev`、`make air` 显式使用端口变量；直接运行二进制时使用 YAML 中的监听地址，也可通过 `GAOMING_HTTP_ADDR`、`GAOMING_GRPC_ADDR` 覆盖。数据库与 Redis 的监听端口在 `config/server.yml` 中设置。
 
-## 3. 网页初始化与登录
+## 3. 管理员登录
 
-后端启动不会创建用户，没有默认管理员或默认密码。首次使用空库时，打开 `http://127.0.0.1:5173/default/setup`，输入引导凭据、用户名、显示名称和 12～72 字节密码，创建并登录管理员。
+`make dev`、`make air` 和 `make backend` 都运行 `server/cmd/server`。启动时，整个 `users` 表为空就自动创建 `default` 租户下的启用管理员，用户名 `admin`。密码优先读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空时使用 `G@oming`。
 
-`make dev-init` 为新配置生成独立随机 `setup_token`，存放在权限 0600 的 `config/server.yml` 中。已有配置保持不变：若缺少凭据，请自行添加至少 32 字节的随机 `setup_token`，或通过环境变量 `GAOMING_SETUP_TOKEN` 传入；环境变量优先。不要把凭据写入 URL、日志、截图或版本库。
+页面 `http://127.0.0.1:5173/default/login`；新空库默认使用 `admin` / `G@oming` 登录。
 
-网页 setup 只在整个数据库没有用户、且 `auth_bootstrap_state` 尚无完成记录时开放。并发请求只能成功一次。初始化成功后撤销引导凭据；重启或删除所有用户都不会重新开放初始化。
+已有任何租户的任何用户时跳过初始化，不修改原密码。所有用户删除后，下次启动重新初始化；并发启动通过事务锁确保只有一个账号。密码只存 bcrypt 哈希，日志仅记录用户名、租户和是否使用默认密码，不打印密码。
 
-已有用户直接访问 `/default/login`（或所属租户的登录页）。旧版本已经创建的管理员账号保持不变；本次更新不会删除或重置已有账号。账号丢失时由可信数据库管理员维护，密码必须保存为 bcrypt 哈希。
+需要强密码时，在首次启动前通过环境变量传入。例如 zsh：
 
-Docker 首次使用前通过部署环境提供 `GAOMING_SETUP_TOKEN`，再执行 `make docker-up`；已初始化部署无需该变量。更多配置见[登录手册](./authentication.md)。
+```zsh
+read -rs 'GAOMING_ADMIN_PASSWORD?输入管理员初始化密码: '
+printf '\n'
+export GAOMING_ADMIN_PASSWORD
+make air
+unset GAOMING_ADMIN_PASSWORD
+```
+
+修改环境变量不会重置已存在的账号。默认短密码只在启动初始化路径允许，普通网页创建仍保持 12～72 字节校验。初始化同时标记网页 setup 已完成。默认密码是公开弱密码，非本机测试应在首次启动前设置强密码并限制网络访问。
 
 ## 4. 启动宿主机 Agent
 
@@ -153,4 +161,4 @@ Compose 仍支持 `POSTGRES_PORT`、`REDIS_PORT`、`HTTP_PORT`、`GRPC_PORT`、`
 
 统一 HTTP 端口同时提供 `/master/*` 和 `/ingest/*`。`/ingest/api/v1/events` 和 `/ingest/api/v1/probes` 沿用现有无认证接收行为；公开反向代理应限制这些接入路由，只向可信 Agent/探测端开放。
 
-开发模板使用 HTTP 和非 Secure Cookie，仅用于可信本机/局域网。端口监听 `0.0.0.0`，应通过防火墙限制访问；从其他设备访问时，在 `allowed_origins` 中明确添加 `http://<本机局域网 IP>:<Web 端口>`。生产使用 HTTPS 与 Secure Cookie，不设置已知默认网页登录密码。统一运行保留登录、CSRF、会话与租户隔离；Agent/worker 接入鉴权的既有限制仍见[登录手册](./authentication.md)。
+开发模板使用 HTTP 和非 Secure Cookie，仅用于可信本机/局域网。端口监听 `0.0.0.0`，应通过防火墙限制访问；从其他设备访问时，在 `allowed_origins` 中明确添加 `http://<本机局域网 IP>:<Web 端口>`。生产使用 HTTPS 与 Secure Cookie，并在首次启动前设置独立的管理员强密码。统一运行保留登录、CSRF、会话与租户隔离；Agent/worker 接入鉴权的既有限制仍见[登录手册](./authentication.md)。

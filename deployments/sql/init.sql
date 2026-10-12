@@ -1,8 +1,10 @@
+-- Unified server initializes admin/default at startup only when users is empty.
+-- Administrator password comes from GAOMING_ADMIN_PASSWORD or the code fallback;
+-- SQL contains no plaintext administrator credential or fixed password hash.
 -- Fresh database schema. Run directly against an empty database, or mount
 -- into PostgreSQL docker-entrypoint-initdb.d for new Docker volumes.
 -- Existing databases must be updated explicitly by their operator.
--- Initial administrator is created only through authenticated web setup;
--- no credentials are seeded as plaintext or fixed hashes in SQL.
+-- No credentials are seeded as plaintext or fixed hashes in SQL.
 create table tenants (
     id                  bigserial primary key,
     tenant_code         varchar(64) not null unique,

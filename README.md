@@ -105,7 +105,7 @@ loop_interval_sec: 1
 make run-agent
 ```
 
-初始管理员只通过网页 setup 创建，没有默认账号或密码。新生成的 `config/server.yml` 包含随机 `setup_token`；已有配置需自行设置该字段，或通过 `GAOMING_SETUP_TOKEN` 传入至少 32 字节的随机引导凭据。打开 `/default/setup`，输入凭据并设置管理员账号，详见[本地初始化步骤](docs/02-guides/local-development.md#3-网页初始化与登录)。
+统一后端启动时，若整个 `users` 表为空，会自动创建 `default` 租户的管理员 `admin`。密码读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空则使用 `G@oming`；已有任何用户时不创建、不重置密码。详见[管理员登录](docs/02-guides/local-development.md#3-管理员登录)。
 
 常用命令：
 

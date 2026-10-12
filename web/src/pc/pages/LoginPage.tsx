@@ -38,7 +38,11 @@ export function LoginPage() {
       setPassword("");
       if (!await refreshSession()) setError("登录请求已完成，但无法读取会话。请检查 HTTPS/Cookie 配置后重试。");
     } catch (cause) {
-      setError(cause instanceof HttpError && cause.status === 401 ? "空间、用户名或密码不正确，或账号已被停用。" : "登录失败，请检查网络或联系管理员后重试。");
+      if (cause instanceof HttpError && cause.status === 403 && cause.message === "request origin is not allowed") {
+        setError(`当前访问地址 ${window.location.origin} 未获允许，请联系管理员将该地址加入登录允许列表。`);
+      } else {
+        setError(cause instanceof HttpError && cause.status === 401 ? "空间、用户名或密码不正确，或账号已被停用。" : "登录失败，请检查网络或联系管理员后重试。");
+      }
     } finally { setBusy(false); }
   }
 

@@ -68,6 +68,9 @@ func New(ctx context.Context, cfg config.Config) (_ *App, err error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := master.InitializeAdmin(initCtx, db, a.logger); err != nil {
+		return nil, fmt.Errorf("initialize startup administrator: %w", err)
+	}
 	metricPrefix, eventChannel := "", ""
 	if cfg.RedisNamespace != "" {
 		metricPrefix = cfg.RedisNamespace + ":metrics"
