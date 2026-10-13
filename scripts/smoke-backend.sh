@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-MASTER_URL="${MASTER_URL:-http://127.0.0.1:8080}"
-INGEST_URL="${INGEST_URL:-http://127.0.0.1:8090}"
+MASTER_URL="${MASTER_URL:-http://127.0.0.1:9090/master}"
+INGEST_URL="${INGEST_URL:-http://127.0.0.1:9090/ingest}"
 
 echo "waiting for master-api..."
 i=0

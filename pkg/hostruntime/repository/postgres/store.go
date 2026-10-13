@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -283,49 +282,6 @@ func (s *Store) ReconcileOffline(ctx context.Context, now time.Time) ([]state.Ho
 	}
 
 	return changed, nil
-}
-
-func (s *Store) CreateMaintenance(ctx context.Context, req contracts.CreateMaintenanceWindowRequest) (hostruntime.MaintenanceWindow, error) {
-	model := maintenanceWindowModel{
-		TenantID:  s.defaultTenantID,
-		Title:     req.Title,
-		ScopeType: req.ScopeType,
-		ScopeRef:  req.ScopeRef,
-		StartAt:   req.StartAt,
-		EndAt:     req.EndAt,
-		CreatedBy: req.CreatedBy,
-		Reason:    emptyStringPtr(req.Reason),
-		Enabled:   true,
-	}
-	if err := s.db.WithContext(ctx).Create(&model).Error; err != nil {
-		return hostruntime.MaintenanceWindow{}, err
-	}
-
-	return hostruntime.MaintenanceWindow{
-		ID:        strconv.FormatInt(model.ID, 10),
-		Title:     req.Title,
-		ScopeType: req.ScopeType,
-		ScopeRef:  req.ScopeRef,
-		StartAt:   req.StartAt,
-		EndAt:     req.EndAt,
-		CreatedBy: req.CreatedBy,
-		Reason:    req.Reason,
-	}, nil
-}
-
-func (s *Store) AckAlert(ctx context.Context, alertID string, ackedBy string, now time.Time) error {
-	query := s.db.WithContext(ctx).Model(&alertEventModel{}).Where(&alertEventModel{TenantID: s.defaultTenantID})
-	if id, err := strconv.ParseInt(alertID, 10, 64); err == nil {
-		return query.Where(&alertEventModel{ID: id}).Updates(map[string]any{
-			"acked_by": ackedBy,
-			"acked_at": now,
-		}).Error
-	}
-
-	return query.Where(&alertEventModel{Fingerprint: alertID}).Updates(map[string]any{
-		"acked_by": ackedBy,
-		"acked_at": now,
-	}).Error
 }
 
 func (s *Store) resolveTenantForRegister(ctx context.Context, db *gorm.DB, hostUID string, tenantCode string) (int64, string, error) {

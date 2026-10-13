@@ -4,35 +4,28 @@
 
 | 目录 | 职责 |
 | --- | --- |
-| `agent/daemon` | 宿主机 Agent |
+| `agent` | 宿主机 Agent |
 | `api/proto`、`api/gen` | gRPC Proto 与生成代码 |
 | `deployments` | Dockerfile、SQL、Agent 安装与服务脚本 |
 | `docs` | 当前架构、指南和参考文档 |
-| `pkg` | 跨服务共享模型、仓储和工具 |
+| `pkg` | 后端与 Agent 共用的模型、仓储和工具 |
 | `scripts` | smoke 与本地开发辅助脚本 |
-| `services` | 后端进程 |
+| `server` | 唯一后端服务 |
 | `web` | React + Vite 前端 |
 
 ## 后端服务
 
-各服务遵循相近结构：`cmd` 是进程入口，`internal/app` 负责装配，`internal/transport` 负责协议，`internal/service` 负责业务。
+- `server/main.go`：唯一在线后端入口。
+- `server/internal/app`：装配 HTTP/gRPC、后台任务及共享 PostgreSQL/Redis 连接，统一管理退出；可选静态目录提供生产 Web 页面。
+- `server/internal/config`：读取 `config/server.yml` 和端口环境变量。
+- `server/internal/master`：查询、认证、用户管理和 `/master/*` HTTP/SSE；含 auth、config、service、transport。
+- `server/internal/ingest`：Agent 注册、指标流、离线扫描及 `/ingest/*` HTTP/gRPC 接入。
+- `server/internal/probe`：固定目标 HTTP 探测与结果上报。
 
-- `services/master-api`
-  - `internal/app`：装配 PostgreSQL、Redis、认证仓储和 HTTP Server。
-  - `internal/auth`：用户、身份和会话模型/仓储。
-  - `internal/service`：查询、运维与认证业务。
-  - `internal/transport/http`：`/master/*` 路由和 SSE。
-- `services/ingest-gateway`
-  - `internal/app`：装配共享 PostgreSQL/Redis 仓储及离线任务。
-  - `internal/service`：注册、metric batch、事件和 probe 接收。
-  - `internal/transport/grpc`：Agent gRPC 接入。
-  - `internal/transport/http`：health、events、probes 和 counters。
-- `services/core-worker`：当前为周期占位 runner。
-- `services/probe-worker`：固定目标 HTTP 探测与结果上报。
-
+上述业务模块在同一进程运行，不提供独立启动入口。
 ## Agent
 
-- `agent/daemon/cmd/agent`：进程入口。
+- `agent/main.go`：进程入口。
 - `internal/config`：从 `agent-config.yaml` 或 `GAOMING_AGENT_CONFIG` 读取配置。
 - `internal/identity`：稳定主机 UID 和身份采集。
 - `internal/service`：gopsutil 采样、gRPC 流和 ACK 处理。
@@ -44,7 +37,6 @@
 - `pkg/hostruntime/repository`：当前 master/ingest 共用的仓储接口及实现。
 - `pkg/clock`、`pkg/httpx`、`pkg/ids`、`pkg/logx`：基础工具。
 
-`services/master-api/internal/repository` 是旧仓储实现，当前 `master-api/internal/app` 不使用它。
 
 ## Web
 

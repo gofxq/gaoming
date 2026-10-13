@@ -1,22 +1,39 @@
 ARG GO_VERSION=1.25.8
+ARG NODE_VERSION=24
+
+FROM node:${NODE_VERSION}-alpine AS web-build
+WORKDIR /web
+COPY web/package.json web/yarn.lock ./
+RUN yarn install --frozen-lockfile
+COPY web/ ./
+# API and SSE use the same origin as the served page.
+RUN VITE_API_ORIGIN= VITE_API_BASE_URL= VITE_STREAM_PATH= yarn build
 
 FROM golang:${GO_VERSION} AS build
-ARG SERVICE_PATH
+ARG SERVICE_PATH=./server
 WORKDIR /src
-ENV GOPROXY=https://goproxy.cn,direct
-
-COPY go.mod go.work Makefile buf.yaml buf.gen.yaml ./
+COPY go.mod go.sum ./
 COPY api ./api
 COPY pkg ./pkg
-COPY services ./services
+COPY server ./server
 COPY agent ./agent
+# Match this stage's architecture to the requested Docker target platform.
+ENV CGO_ENABLED=0 \
+    # GO111MODULE=on \
+    # GOPROXY=https://goproxy.cn,direct \
+    GOOS=linux
+RUN go build -trimpath -o /out/app ${SERVICE_PATH}
 
-RUN test -n "${SERVICE_PATH}"
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/app ${SERVICE_PATH}
-
-FROM alpine:3.20
+FROM alpine:3.20 AS runtime
 RUN adduser -D -u 10001 appuser && mkdir -p /app/logs && chown -R appuser:appuser /app
 WORKDIR /app
 COPY --from=build /out/app /app/app
 USER appuser
 ENTRYPOINT ["/app/app"]
+
+FROM runtime AS agent
+
+FROM runtime AS server
+COPY --from=web-build /web/dist /app/web
+ENV GAOMING_WEB_DIR=/app/web
+EXPOSE 9090 9091

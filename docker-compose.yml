@@ -8,12 +8,12 @@ services:
       POSTGRES_USER: gaoming
       POSTGRES_PASSWORD: gaoming
     ports:
-      - "35432:5432"
+      - "0.0.0.0:${POSTGRES_PORT:-35432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deployments/sql/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U gaoming -d gaoming" ]
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -U gaoming -d gaoming" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,91 +23,37 @@ services:
     container_name: gaoming-redis
     restart: unless-stopped
     ports:
-      - "36379:6379"
+      - "0.0.0.0:${REDIS_PORT:-36379}:6379"
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  master-api:
+  server:
     build:
       context: .
       dockerfile: deployments/docker/Dockerfile
-      args:
-        SERVICE_PATH: ./services/master-api/cmd/server
-    container_name: gaoming-master-api
+    container_name: gaoming-server
     restart: unless-stopped
+    environment:
+      GAOMING_SETUP_TOKEN: ${GAOMING_SETUP_TOKEN:-}
+      GAOMING_ADMIN_PASSWORD: ${GAOMING_ADMIN_PASSWORD:-}
     volumes:
-      - ./config/master-api.docker.yml:/app/config/master-api.yml:ro
+      - ./deployments/server-config.docker.yaml:/app/config/server.yml:ro
     ports:
-      - "8080:8080"
+      - "0.0.0.0:${HTTP_PORT:-9090}:9090"
+      - "0.0.0.0:${GRPC_PORT:-9091}:9091"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8080/master/healthz >/dev/null" ]
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:9090/master/healthz >/dev/null && wget -qO- http://127.0.0.1:9090/ingest/healthz >/dev/null && wget -qO- http://127.0.0.1:9090/ >/dev/null" ]
       interval: 5s
       timeout: 5s
       retries: 10
-
-  ingest-gateway:
-    build:
-      context: .
-      dockerfile: deployments/docker/Dockerfile
-      args:
-        SERVICE_PATH: ./services/ingest-gateway/cmd/server
-    container_name: gaoming-ingest-gateway
-    restart: unless-stopped
-    volumes:
-      - ./config/ingest-gateway.docker.yml:/app/config/ingest-gateway.yml:ro
-    ports:
-      - "8090:8090"
-      - "8091:8091"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8090/ingest/healthz >/dev/null" ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  core-worker:
-    build:
-      context: .
-      dockerfile: deployments/docker/Dockerfile
-      args:
-        SERVICE_PATH: ./services/core-worker/cmd/worker
-    container_name: gaoming-core-worker
-    restart: unless-stopped
-    volumes:
-      - ./config/core-worker.docker.yml:/app/config/core-worker.yml:ro
-    depends_on:
-      master-api:
-        condition: service_healthy
-      ingest-gateway:
-        condition: service_healthy
-
-  probe-worker:
-    build:
-      context: .
-      dockerfile: deployments/docker/Dockerfile
-      args:
-        SERVICE_PATH: ./services/probe-worker/cmd/worker
-    container_name: gaoming-probe-worker
-    restart: unless-stopped
-    volumes:
-      - ./config/probe-worker.docker.yml:/app/config/probe-worker.yml:ro
-    depends_on:
-      master-api:
-        condition: service_healthy
-      ingest-gateway:
-        condition: service_healthy
 
   agent:
     profiles:
@@ -116,37 +62,15 @@ services:
       context: .
       dockerfile: deployments/docker/Dockerfile
       args:
-        SERVICE_PATH: ./agent/daemon/cmd/agent
+        SERVICE_PATH: ./agent
+      target: agent
     container_name: gaoming-agent
     restart: unless-stopped
     volumes:
       - ./deployments/agent-config.docker.yaml:/app/agent-config.yaml:ro
     depends_on:
-      master-api:
+      server:
         condition: service_healthy
-      ingest-gateway:
-        condition: service_healthy
-
-  web:
-    profiles:
-      - web
-    build:
-      context: .
-      dockerfile: deployments/docker/web.Dockerfile
-    container_name: gaoming-web
-    restart: unless-stopped
-    environment:
-      VITE_PROXY_TARGET: http://master-api:8080
-    ports:
-      - "5173:5173"
-    depends_on:
-      master-api:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:5173/ >/dev/null" ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
 volumes:
   postgres_data:

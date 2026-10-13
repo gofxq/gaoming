@@ -1,22 +1,13 @@
-$ErrorActionPreference = 'Stop'
-$script:BootstrapLogPath = Join-Path ([System.IO.Path]::GetTempPath()) "gaoming-uninstall-agent.log"
-
+[CmdletBinding()]
 param(
-  [string]$InstallDir = "$env:LOCALAPPDATA\GaomingAgent",
-  [string]$TaskName = "GaomingAgent"
+  [string]$InstallDir = "$env:ProgramFiles\GaomingAgent",
+  [ValidatePattern('^[A-Za-z0-9._-]+$')][string]$TaskName = "GaomingAgent"
 )
 
-function Write-BootstrapLog {
-  param([string]$Message)
-
-  $line = "{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
-  try {
-    Add-Content -LiteralPath $script:BootstrapLogPath -Value $line -Encoding UTF8
-  }
-  catch {
-  }
-  Write-Host $line
-}
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+$script:InstallerPath = $PSCommandPath
+function Write-BootstrapLog { param([string]$Message) Write-Host $Message }
 
 function Test-IsAdministrator {
   $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -46,25 +37,32 @@ function ConvertTo-PowerShellLiteral {
 }
 
 function Get-ScriptRelaunchPath {
-  if (-not [string]::IsNullOrWhiteSpace($PSCommandPath)) {
-    Write-BootstrapLog ("using script path for elevation: " + $PSCommandPath)
-    return $PSCommandPath
+  if (-not [string]::IsNullOrWhiteSpace($script:InstallerPath)) {
+    return $script:InstallerPath
   }
+  throw "Download uninstall-agent.ps1 to a file and execute it; piping to iex does not support elevation"
+}
 
-  $definition = $MyInvocation.MyCommand.Definition
-  if ([string]::IsNullOrWhiteSpace($definition)) {
-    throw "cannot determine script content for elevation"
+function Get-ElevationCommand {
+  param([string]$ScriptPath, [hashtable]$BoundParameters)
+
+  $command = "& " + (ConvertTo-PowerShellLiteral -Value $ScriptPath)
+  foreach ($entry in $BoundParameters.GetEnumerator()) {
+    if ($entry.Key -notmatch '^[A-Za-z][A-Za-z0-9]*$') { throw "Invalid parameter name" }
+    if ($entry.Value -is [System.Management.Automation.SwitchParameter] -or $entry.Value -is [bool]) {
+      $command += " -" + $entry.Key + ":" + ('$' + ([bool]$entry.Value).ToString().ToLowerInvariant())
+    }
+    else {
+      $command += " -" + $entry.Key + " " + (ConvertTo-PowerShellLiteral -Value $entry.Value)
+    }
   }
-
-  $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) ("gaoming-uninstall-agent-elevated-" + [guid]::NewGuid().ToString("N") + ".ps1")
-  $encoding = New-Object System.Text.UTF8Encoding($false)
-  [System.IO.File]::WriteAllText($tempPath, $definition, $encoding)
-  Write-BootstrapLog ("materialized elevated script to: " + $tempPath)
-  return $tempPath
+  return [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
 }
 
 function Ensure-Elevated {
-  param([hashtable]$BoundParameters)
+  param(
+    [hashtable]$BoundParameters
+  )
 
   if (Test-IsAdministrator) {
     Write-BootstrapLog "running with administrator privileges"
@@ -72,50 +70,53 @@ function Ensure-Elevated {
   }
 
   $relaunchPath = Get-ScriptRelaunchPath
-  $args = @(
-    "-NoProfile",
-    "-ExecutionPolicy", "Bypass",
-    "-File", $relaunchPath
-  )
-
-  foreach ($entry in $BoundParameters.GetEnumerator()) {
-    $args += "-" + $entry.Key
-    $args += [string]$entry.Value
-  }
-
-  $argumentLine = ($args | ForEach-Object { ConvertTo-PowerShellLiteral -Value $_ }) -join " "
-  Write-BootstrapLog ("requesting UAC elevation; log file: " + $script:BootstrapLogPath)
-  Start-Process -FilePath (Get-CurrentPowerShellExe) -Verb RunAs -ArgumentList $argumentLine | Out-Null
-  exit 0
+  $encoded = Get-ElevationCommand -ScriptPath $relaunchPath -BoundParameters $BoundParameters
+  Write-BootstrapLog "requesting UAC elevation"
+  $child = Start-Process -FilePath (Get-CurrentPowerShellExe) -Verb RunAs -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encoded) -Wait -PassThru
+  if ($child.ExitCode -ne 0) { throw "Elevated uninstaller failed with exit code $($child.ExitCode)" }
+  exit $child.ExitCode
 }
 
 Ensure-Elevated -BoundParameters $PSBoundParameters
 
-function Get-ServiceWrapperExePath {
-  param([string]$InstallDir)
 
-  return Join-Path $InstallDir "gaoming-agent-service.exe"
+function Assert-SafeInstallDir {
+  param([string]$Path)
+
+  $full = [System.IO.Path]::GetFullPath($Path)
+  $root = [System.IO.Path]::GetPathRoot($full)
+  if ([string]::Equals($full.TrimEnd('\'), $root.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "unsafe InstallDir: $full"
+  }
+  $programFiles = [System.IO.Path]::GetFullPath($env:ProgramFiles).TrimEnd('\') + '\'
+  if ([string]::Equals($full.TrimEnd('\'), $programFiles.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase) -or -not $full.StartsWith($programFiles, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "InstallDir must be a dedicated directory under Program Files: $full"
+  }
+  $itemPath = $full
+  while ($itemPath) {
+    if ((Test-Path -LiteralPath $itemPath) -and ((Get-Item -LiteralPath $itemPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+      throw "InstallDir must not contain junctions or symbolic links: $itemPath"
+    }
+    $itemPath = Split-Path -Parent $itemPath
+  }
+
+  return $full
 }
 
-$wrapperPath = Get-ServiceWrapperExePath -InstallDir $InstallDir
-
-if (Get-Service -Name $TaskName -ErrorAction SilentlyContinue) {
-  if (Test-Path -LiteralPath $wrapperPath) {
-    & $wrapperPath stop | Out-Null
-    & $wrapperPath uninstall | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-      throw "failed to uninstall Windows service via WinSW: $TaskName"
-    }
-  }
-  else {
-    Stop-Service -Name $TaskName -Force -ErrorAction SilentlyContinue
-    & sc.exe delete $TaskName | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-      throw "failed to delete Windows service: $TaskName"
-    }
-  }
+$full = Assert-SafeInstallDir -Path $InstallDir
+if ((Test-Path -LiteralPath $full) -and (Get-ChildItem -LiteralPath $full -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })) {
+  throw "Installed files must not contain junctions or symbolic links"
 }
-
+$service = Get-Service -Name $TaskName -ErrorAction SilentlyContinue
+if ($null -ne $service) {
+  if ($service.Status -ne [ServiceProcess.ServiceControllerStatus]::Stopped) {
+    Stop-Service -Name $TaskName -Force
+    $service.WaitForStatus([ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(30))
+  }
+  & sc.exe delete $TaskName | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Failed to delete service: $TaskName" }
+  $service.Dispose()
+}
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force $InstallDir -ErrorAction SilentlyContinue
+if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Recurse -Force }
 Write-Host "uninstalled $TaskName"

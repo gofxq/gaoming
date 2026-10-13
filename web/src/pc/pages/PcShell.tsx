@@ -26,14 +26,16 @@ export type PcShellOutletContext = ReturnType<typeof useLiveHostsData> & {
 export function PcShell() {
   const { config } = useAppConfig();
   const { tenantCode } = useTenant();
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshSession } = useAuth();
   const navigate = useNavigate();
   const [selectedWindowSec, setSelectedWindowSec] = useState(300);
   const [expandedHostUID, setExpandedHostUID] = useState("");
+  const [signOutError, setSignOutError] = useState("");
   const hostData = useLiveHostsData({
     apiBaseUrl: config.apiBaseUrl,
     streamPath: config.streamPath,
     tenantCode,
+    onAccessCheck: refreshSession,
   });
 
   const outletContext: PcShellOutletContext = {
@@ -69,8 +71,13 @@ export function PcShell() {
   }, [expandedHostUID, hostData.sortedHosts]);
 
   async function handleSignOut() {
-    await signOut();
-    navigate(`/${tenantCode}/login`, { replace: true });
+    setSignOutError("");
+    try {
+      await signOut();
+      navigate(`/${tenantCode}/login`, { replace: true });
+    } catch {
+      setSignOutError("退出失败，请检查网络后重试。当前会话尚未确认失效。");
+    }
   }
 
   return (
@@ -96,6 +103,7 @@ export function PcShell() {
                   <span>用户</span>
                 </NavLink>
               ) : null}
+              {user?.role === "admin" ? <NavLink to={`/${tenantCode}/shares`}>分享</NavLink> : null}
             </nav>
 
             <div className="topbar-context">
@@ -182,6 +190,7 @@ export function PcShell() {
       </header>
 
       <main className="content">
+        {signOutError ? <div className="auth-error" role="alert">{signOutError}</div> : null}
         <Outlet context={outletContext} />
       </main>
     </div>

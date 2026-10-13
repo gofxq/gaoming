@@ -1,5 +1,6 @@
 .git
 .gitignore
+.superpowers
 .editorconfig
 .gitattributes
 .env
@@ -15,3 +16,11 @@ coverage
 docker-compose.yml
 docker-compose.override.yml
 docs
+
+# Keep host dependencies and build output out of the production image context.
+web/node_modules
+web/dist
+web/.env
+web/.env.*
+config
+.local-data

@@ -1,0 +1,42 @@
+package app
+
+import (
+	"context"
+	"time"
+
+	"github.com/gofxq/gaoming/agent/internal/config"
+	"github.com/gofxq/gaoming/agent/internal/identity"
+	"github.com/gofxq/gaoming/agent/internal/service"
+	"github.com/gofxq/gaoming/pkg/logx"
+)
+
+type App struct {
+	agent *service.Agent
+}
+
+func New() (*App, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	logger := logx.New("agent")
+	host := identity.Discover(cfg.Region, cfg.Env, cfg.Role)
+	host = identity.WithHostname(host, cfg.Hostname)
+	host.TenantCode = cfg.TenantCode
+
+	agent := service.New(service.Config{
+		IngestGatewayGRPCAddr: cfg.IngestGatewayGRPCAddr,
+		LoopInterval:          time.Duration(cfg.LoopIntervalSec) * time.Second,
+		Host:                  host,
+		PersistTenant: func(tenantCode string) error {
+			return config.SaveTenant(cfg.ConfigPath, tenantCode)
+		},
+	}, logger)
+
+	return &App{agent: agent}, nil
+}
+
+func (a *App) Run(ctx context.Context) error {
+	defer a.agent.Close()
+	return a.agent.Run(ctx)
+}

@@ -12,10 +12,6 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 
 安装完成后展示：
 ```bash
-web-url [https://gm-metric.gofxq.com/]:
-ingest-grpc-addr [gm-rpc.gofxq.com:443]:
-tenant [<auto>]:
-loop-interval-sec [5]: 1
 [+] downloading gaoming-agent_linux_amd64.tar.gz
 [+] installed gaoming-agent to /opt/gaoming-agent
 [+] config: /opt/gaoming-agent/agent-config.yaml
@@ -50,210 +46,113 @@ loop-interval-sec [5]: 1
 
 ```mermaid
 flowchart LR
-    %% ===== External =====
-    Agent["Agent"]
-    UI["Web UI / Dashboard"]
-
-    %% ===== Control Plane =====
-    subgraph ControlPlane["master-api (控制 + 状态)"]
-        Master["Master API - 主机状态查询 - SSE 推送"]
+    Agent["宿主机 Agent"]
+    UI["Web Dashboard"]
+    subgraph Server["server：单一 Go 后端进程"]
+        Master["master：查询 / SSE / 认证"]
+        Ingest["ingest：HTTP / gRPC 接入"]
+        Probe["probe：HTTP 探测"]
     end
-
-    %% ===== Ingest Layer =====
-    subgraph IngestLayer["ingest-gateway (数据接入)"]
-        Ingest["Ingest Gateway - 注册 - metrics stream - 状态写入 - ack"]
-    end
-
-    %% ===== Compute Layer =====
-    subgraph ComputeLayer["core-worker (后台计算)"]
-        Core["Core Worker - 状态计算 - 告警 - 调度"]
-    end
-
-    %% ===== Probe =====
-    subgraph ProbeLayer["probe-worker (主动探测)"]
-        Probe["Probe Worker - HTTP 探测 - 延迟/可用性"]
-    end
-
-    %% ===== Flows =====
-    Agent -->|gRPC 注册/指标流| Ingest
+    PG[(PostgreSQL)]
+    Redis[(Redis)]
+    Agent -->|gRPC :9091| Ingest
+    UI -->|HTTP :9090| Master
     Master -->|SSE| UI
-    Probe -->|探测结果| Ingest
-    Ingest -->|数据流| Core
-    Ingest -->|状态数据| Master
-    Master -->|状态数据| Core
-    Core -->|计算结果| Master
-
-    %% ===== Styles =====
-    classDef control fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#0d47a1;
-    classDef ingest fill:#e8f5e9,stroke:#43a047,stroke-width:2px,color:#1b5e20;
-    classDef compute fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px,color:#4a148c;
-    classDef probe fill:#fff3e0,stroke:#fb8c00,stroke-width:2px,color:#e65100;
-    classDef external fill:#eeeeee,stroke:#757575,stroke-width:1px,color:#212121;
-
-    class Master control;
-    class Ingest ingest;
-    class Core compute;
-    class Probe probe;
-    class Agent,UI external;
+    Probe -->|探测报告| Ingest
+    Ingest --> PG
+    Ingest --> Redis
+    Master --> PG
+    Master --> Redis
 ```
 
 
 ## ⚡️ 快速开始
 
-推荐本地开发模式：
+推荐本地开发：PostgreSQL 和 Redis 使用 Docker，后端 `server` 是一个 Go 服务并在宿主机运行；Agent 单独运行，采集宿主机数据。
 
-- 后端服务走 Docker
-- Agent 直接运行在宿主机，采集真实宿主机数据
-
-后端服务配置统一放在仓库根目录的 `config/` 下：
-
-- `config/master-api.yml`
-- `config/ingest-gateway.yml`
-- `config/core-worker.yml`
-- `config/probe-worker.yml`
-
-如果需要示例模板或 Docker 联调配置，可直接使用同目录下的 `*.demo.yml` 和 `*.docker.yml`。
-
-启动：
+首次准备依赖与配置，详见[本地开发与验证](docs/02-guides/local-development.md)：
 
 ```bash
-make docker-up
-make run-agent
+make deps-up       # 通过 Docker 启动 PostgreSQL / Redis，首次生成随机凭据
 ```
 
-`docker-compose.yml` 已配置 `restart: unless-stopped`，宿主机关机重启后，Docker daemon 恢复时会自动拉起这些服务；如果你手工 `docker compose stop`，则不会强制重启。
-
-如果要从宿主机验证标准 gRPC 上报，先准备当前目录下的 `agent-config.yaml`：
+首次使用空库时，先通过 PostgreSQL 客户端执行 `deployments/sql/init.sql`，见[数据库初始化](docs/02-guides/database-setup.md)。完成后启动服务：
 
 ```bash
-cat > agent-config.yaml <<'EOF'
-master_api_url: "http://127.0.0.1:8080"
-ingest_gateway_grpc_addr: "127.0.0.1:8091"
-region: "local"
-env: "dev"
-role: "node"
-tenant_code: "default"
+make dev           # 启动统一后端与前端；Ctrl-C 停止
+make deps-down     # 停止依赖容器，保留数据库卷
+```
+
+页面地址：`http://127.0.0.1:5173/default`。统一 HTTP 端口 9090 同时提供 `/master/*` 和 `/ingest/*`，gRPC 端口 9091 提供 Agent 接入；端口均监听 `0.0.0.0`。
+
+另一终端准备 `agent-config.yaml` 并运行：
+
+```yaml
+master_api_url: "http://127.0.0.1:9090"
+ingest_gateway_grpc_addr: "127.0.0.1:9091"
+region: local
+env: dev
+role: node
+tenant_code: default
 loop_interval_sec: 1
-EOF
+```
 
+```bash
 make run-agent
 ```
 
-打开：
-
-```text
-http://127.0.0.1:8080/default
-```
+统一后端启动时，若整个 `users` 表为空，会自动创建 `default` 租户的管理员 `admin`。密码读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空则使用 `G@oming`；已有任何用户时不创建、不重置密码。详见[管理员登录](docs/02-guides/local-development.md#3-管理员登录)。
 
 常用命令：
 
 ```bash
-make smoke
-make smoke-agent
-make docker-logs
-make docker-down
-make check
+make backend       # 只运行统一后端
+make air           # 热更新统一后端 + 前端
+make smoke         # 验证统一后端健康及接入计数器
+make test          # Go 测试
+make web-install   # 首次安装前端依赖
+make test-all      # Go + 前端测试
+make help          # 分组命令说明
 ```
 
-宿主机 gRPC 模式可这样验：
+端口冲突时用 `make dev HTTP_PORT=18080 GRPC_PORT=18091 WEB_PORT=15173`，同步更新 Agent 地址和配置里的 `allowed_origins`。数据库端口在 `config/server.yml` 中设置。
 
-```bash
-TENANT=<agent-config.yaml 里的 tenant_code> \
-MASTER_URL=http://127.0.0.1:8080 \
-INGEST_URL=http://127.0.0.1:8090 \
-make smoke-agent
-```
+依赖需要 Docker Compose，PostgreSQL 数据保存在持久数据卷，`.local-data/` 保存私有配置和管理状态，`make clean` 会保留。使用已有本机实例时可执行 `make dev-init` 并修改配置中的凭据。
 
-如果你想连 Agent 也跑在容器里：
-
-```bash
-make docker-up-full
-```
-
-这会把前端也跑在 Docker 里，但 `web` 容器内部直接启动 `yarn dev`，并通过 Vite 代理访问 Compose 网络中的 `master-api`。
+Docker 将 Go 后端和生产 Web 静态文件打包在同一个容器中：执行 `make docker-up` 后访问 `http://127.0.0.1:9090/default`，页面与 API 共用 HTTP 端口。默认 Compose 只有 server、PostgreSQL、Redis；容器 Agent 通过 `DOCKER_PROFILES="--profile container-agent"` 按需启动。本机开发仍使用 `make dev` / `make web-dev` 的 Vite 热更新。
 
 ## 📦 安装 Agent
 
-mac/ linux 一行安装命令：
+Linux / macOS（x64、ARM64）：
 
-```bash
+```sh
 curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/install-agent.sh | sudo sh
 ```
 
-安装脚本会交互式提示以下参数，直接回车就用默认值：
-
-- `web-url`: `https://gm-metric.gofxq.com/`
-- `ingest-grpc-addr`: `gm-rpc.gofxq.com:443`
-- `tenant`: 留空则由安装脚本调用 `master-api` 申请，失败则本地生成
-- `loop-interval-sec`: `5`
-
-如果安装目录里已经存在 `agent-config.yaml`，脚本会给出两个选项：
-
-- `update binary only`: 仅更新二进制，保留当前配置
-- `reinstall`: 重装并重写配置；现有配置值会作为默认值回填到提示里
-
-安装完成后，脚本会输出：
-
-- `tenant_code`
-- 带 tenant 的 Dashboard 地址
-- 带 tenant 参数的 Hosts API 地址
-
-平台行为：
-
-- Linux 注册为 `systemd` 服务
-- macOS 注册为 `launchd` 服务
-- Windows 使用 PowerShell 安装脚本，通过 `WinSW` 注册为 Windows Service，默认安装到 `%LOCALAPPDATA%\GaomingAgent`，脚本会自动弹出 UAC 提权
-
-Windows 安装：
+Windows（x64、ARM64），在 PowerShell 中执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.ps1 -UseBasicParsing | iex"
+$p=Join-Path $env:TEMP ('gaoming-install-'+[guid]::NewGuid()+'.ps1'); try { iwr https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/install-agent.ps1 -UseBasicParsing -OutFile $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p; if ($LASTEXITCODE -ne 0) { throw 'Agent installation failed' } } finally { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
 ```
 
-Windows 卸载：
+脚本自动识别架构、下载最新 Release、校验 SHA256、写入配置并启动开机自启服务，无需逐项回车。Windows 会弹出 UAC 授权。重复运行同一命令会更新程序并保留现有配置。
 
-```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/uninstall-agent.ps1 -UseBasicParsing | iex"
-```
+Linux 使用 systemd，macOS 使用 launchd，Windows 使用 Windows Service。默认连接 `https://gm-metric.gofxq.com/` 和 `gm-rpc.gofxq.com:443`，采集间隔为 5 秒。安装完成后输出 tenant 和 Dashboard 地址。
 
-Linux / macOS 卸载：
+安装命令会以管理员权限运行远程脚本，请确认仓库来源可信。自建服务、指定版本、交互安装、卸载和平台要求见[Agent 安装指南](docs/02-guides/agent-installation.md)。
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/uninstall-agent.sh | sudo sh
-```
+本地源码安装：
 
-如果需要指定版本：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.sh | sudo VERSION=v0.1.0 sh
-```
-
-如果你已经在目标机器拉了仓库代码，想用本地最新代码覆盖安装服务：
-
-```bash
+```sh
 make install-agent-local-service
 ```
 
-直接运行本地安装脚本时，会优先查找仓库内的 `.tmp/gaoming-agent`；如果没有显式传 `--bin`，脚本也会尝试自动执行：
-
-```bash
-go build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
-```
-
-相关脚本：
-
-- [deployments/install-agent.sh](deployments/install-agent.sh)
-- [deployments/install-agent-local.sh](deployments/install-agent-local.sh)
-- [deployments/install-agent.ps1](deployments/install-agent.ps1)
-
 ## 🧩 服务组成
 
-- `master-api`: 主机状态查询、SSE 推送
-- `ingest-gateway`: Agent 注册、指标流、事件、探测数据接入
-- `core-worker`: 后台计算与聚合
-- `probe-worker`: 主动探测
-- `agent`: 主机侧采集与上报
+- `server`: 唯一后端服务，源码位于 `server/`；内部包含 master 查询/认证、ingest 接入、probe 探测模块。
+- `agent`: 独立宿主机采集与上报进程。
 
+Docker 与本机均使用 `server/main.go` 统一后端；Docker 额外提供 Web 静态页面，HTTP 9090 同时提供 `/master/*`、`/ingest/*`，gRPC 9091 用于 Agent。Docker 示例配置为 `deployments/server-config.docker.yaml`。
 ## 📚 文档
 
 - [中文文档概要与索引](docs/README_cn.md)

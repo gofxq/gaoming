@@ -31,6 +31,7 @@ AGENT_LOOP_INTERVAL_SEC="${AGENT_LOOP_INTERVAL_SEC:-5}"
 
 INSTALL_DIR="${INSTALL_DIR:-}"
 INSTALL_MODE="${INSTALL_MODE:-auto}"
+INTERACTIVE="${INTERACTIVE:-0}"
 
 if [ -n "$MASTER_API_URL_EXPLICIT" ] && [ -z "$WEB_BASE_URL_EXPLICIT" ]; then
   WEB_BASE_URL_EXPLICIT=1
@@ -40,6 +41,7 @@ OS=""
 ARCH=""
 ASSET=""
 TMP_DIR=""
+UPGRADE_IN_PROGRESS=0
 
 # ---------- ui ----------
 usage() {
@@ -62,6 +64,7 @@ Options:
   --role <name>                  Default: node
   --update-binary                Keep current config and update binary only
   --reinstall                    Replace binary and rewrite config
+  --interactive                  Prompt for config and install mode (default: no prompts)
   --help, -h                     Show this help
 EOF
 }
@@ -98,6 +101,7 @@ prompt_with_default() {
 }
 
 prompt_install_inputs() {
+  [ "$INTERACTIVE" = 1 ] || return 0
   if ! has_tty_prompt; then
     return 0
   fi
@@ -119,7 +123,7 @@ prompt_install_inputs() {
 prompt_install_mode() {
   config_path="$1"
 
-  if ! has_tty_prompt; then
+  if [ "$INTERACTIVE" != 1 ] || ! has_tty_prompt; then
     INSTALL_MODE="update-binary"
     return 0
   fi
@@ -230,7 +234,7 @@ choose_install_mode() {
     die "cannot update binary only; installed config not found: ${config_path}"
   fi
 
-  if [ "$INSTALL_MODE" = "reinstall" ]; then
+  if [ "$INSTALL_MODE" = "reinstall" ] || [ "$INSTALL_MODE" = "update-binary" ]; then
     return 0
   fi
 
@@ -279,6 +283,8 @@ validate_positive_int() {
 
 validate_abs_path() {
   case "$1" in
+    /|/opt|/usr|/usr/local|/tmp|/etc|/var|/home|*//*|*/../*|*/..|*/./*|*/.|*/|*[!A-Za-z0-9/._-]*)
+      die "$2 must be a dedicated directory using letters, numbers, /, ., _, or -" ;;
     /*) : ;;
     *) die "$2 must be an absolute path: $1" ;;
   esac
@@ -290,6 +296,14 @@ validate_common_inputs() {
   validate_name "$SERVICE_USER" "service-user"
   validate_name "$SERVICE_GROUP" "service-group"
   validate_abs_path "$INSTALL_DIR" "install-dir"
+  check_path="$INSTALL_DIR"
+  while [ "$check_path" != / ]; do
+    [ ! -L "$check_path" ] || die "install-dir must not contain symbolic links: $check_path"
+    check_path="$(dirname "$check_path")"
+  done
+  for check_name in gaoming-agent .gaoming-agent.new .gaoming-agent.rollback agent-config.yaml logs; do
+    [ ! -L "${INSTALL_DIR}/${check_name}" ] || die "installed files must not be symbolic links: $check_name"
+  done
 }
 
 validate_config_inputs() {
@@ -318,6 +332,8 @@ parse_args() {
       --role)                [ "$#" -ge 2 ] || die "missing value for --role"; AGENT_ROLE="$2"; AGENT_ROLE_EXPLICIT=1; shift 2 ;;
       --update-binary)       INSTALL_MODE="update-binary"; shift ;;
       --reinstall)           INSTALL_MODE="reinstall"; shift ;;
+      --interactive)         INTERACTIVE=1; shift ;;
+      --no-prompt)           INTERACTIVE=0; shift ;;
       --help|-h)             usage; exit 0 ;;
       *)                     usage >&2; die "unknown argument: $1" ;;
     esac
@@ -363,7 +379,31 @@ require_root() {
 
 # ---------- temp / download ----------
 cleanup() {
-  [ -n "${TMP_DIR:-}" ] && rm -rf "$TMP_DIR"
+  status="${1:-0}"
+  if [ "$status" -ne 0 ] && [ "$UPGRADE_IN_PROGRESS" = 1 ]; then
+    warn "upgrade failed; restoring previous binary and config"
+    cp -p "${TMP_DIR}/previous/gaoming-agent" "${INSTALL_DIR}/.gaoming-agent.rollback" && mv -f "${INSTALL_DIR}/.gaoming-agent.rollback" "${INSTALL_DIR}/gaoming-agent" || warn "failed to restore previous binary"
+    cp -p "${TMP_DIR}/previous/agent-config.yaml" "${INSTALL_DIR}/agent-config.yaml" || warn "failed to restore previous config"
+    chmod 0755 "$INSTALL_DIR"
+    case "$OS" in
+      linux)
+        if [ -f "${TMP_DIR}/previous/service.definition" ]; then
+          cp -p "${TMP_DIR}/previous/service.definition" "/etc/systemd/system/${SERVICE_NAME}.service" || warn "failed to restore previous service definition"
+          systemctl daemon-reload || warn "failed to reload previous service definition"
+        fi
+        systemctl restart "$SERVICE_NAME" || warn "failed to restart previous service"
+        ;;
+      darwin)
+        rollback_plist="/Library/LaunchDaemons/com.gofxq.${SERVICE_NAME}.plist"
+        launchctl bootout system "$rollback_plist" >/dev/null 2>&1 || true
+        if [ -f "${TMP_DIR}/previous/service.definition" ]; then
+          cp -p "${TMP_DIR}/previous/service.definition" "$rollback_plist" || warn "failed to restore previous service definition"
+        fi
+        launchctl bootstrap system "$rollback_plist" || warn "failed to restore previous service"
+        ;;
+    esac
+  fi
+  if [ -n "${TMP_DIR:-}" ]; then rm -rf "$TMP_DIR"; fi
 }
 
 make_tmpdir() {
@@ -374,7 +414,8 @@ make_tmpdir() {
   else
     die "failed to create temporary directory"
   fi
-  trap cleanup EXIT INT TERM HUP
+  trap 'cleanup "$?"' EXIT
+  trap 'exit 1' INT TERM HUP
 }
 
 release_base_url() {
@@ -387,8 +428,8 @@ release_base_url() {
 download_assets() {
   base_url="$(release_base_url)"
   log "downloading ${ASSET}"
-  curl -fsSL "${base_url}/${ASSET}" -o "${TMP_DIR}/${ASSET}"
-  curl -fsSL "${base_url}/checksums.txt" -o "${TMP_DIR}/checksums.txt"
+  curl -fsSL --connect-timeout 15 --max-time 300 --retry 3 "${base_url}/${ASSET}" -o "${TMP_DIR}/${ASSET}"
+  curl -fsSL --connect-timeout 15 --max-time 60 --retry 3 "${base_url}/checksums.txt" -o "${TMP_DIR}/checksums.txt"
 }
 
 verify_checksum() {
@@ -430,7 +471,7 @@ verify_checksum() {
 
 # ---------- file rendering ----------
 yaml_escape() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  printf '%s' "$1" | awk 'BEGIN { ORS="" } { if (NR > 1) printf "\\n"; gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\r/, "\\r"); gsub(/\t/, "\\t"); printf "%s", $0 }'
 }
 
 write_file() {
@@ -516,7 +557,7 @@ generate_local_tenant_code() {
 
 request_tenant_code_from_master() {
   api_base="$(normalize_master_api_base "$MASTER_API_URL")"
-  body="$(curl -fsS -X POST "${api_base}/install/tenant" 2>/dev/null || true)"
+  body="$(curl -fsS --connect-timeout 5 --max-time 15 -X POST "${api_base}/install/tenant" 2>/dev/null || true)"
   [ -n "$body" ] || return 1
 
   tenant_code="$(printf '%s\n' "$body" | extract_json_string "tenant_code")"
@@ -651,13 +692,17 @@ ensure_linux_identity() {
   die "unable to create user: $SERVICE_USER"
 }
 
+extract_binary() {
+  tar -xzf "${TMP_DIR}/${ASSET}" -C "$TMP_DIR" gaoming-agent
+  [ -f "${TMP_DIR}/gaoming-agent" ] && [ ! -L "${TMP_DIR}/gaoming-agent" ] || die "gaoming-agent not found in archive or is a symbolic link"
+}
+
 install_files() {
   mkdir -p "$INSTALL_DIR"
-  tar -xzf "${TMP_DIR}/${ASSET}" -C "$TMP_DIR"
-  [ -f "${TMP_DIR}/gaoming-agent" ] || die "gaoming-agent not found in archive"
-  install -m 0755 "${TMP_DIR}/gaoming-agent" "${INSTALL_DIR}/gaoming-agent"
+  install -m 0755 "${TMP_DIR}/gaoming-agent" "${INSTALL_DIR}/.gaoming-agent.new"
+  mv -f "${INSTALL_DIR}/.gaoming-agent.new" "${INSTALL_DIR}/gaoming-agent"
   if [ "$INSTALL_MODE" = "reinstall" ]; then
-    render_config | write_file "${INSTALL_DIR}/agent-config.yaml" 0644
+    render_config | write_file "${INSTALL_DIR}/agent-config.yaml" 0600
     return 0
   fi
 
@@ -667,10 +712,17 @@ install_files() {
 install_linux_service() {
   need_cmd systemctl
   ensure_linux_identity
-  chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "$INSTALL_DIR"
+  chown root:"${SERVICE_GROUP}" "$INSTALL_DIR" "$INSTALL_DIR/gaoming-agent"
+  chmod 0750 "$INSTALL_DIR"
+  chown "${SERVICE_USER}:${SERVICE_GROUP}" "${INSTALL_DIR}/agent-config.yaml"
+  chmod 0600 "${INSTALL_DIR}/agent-config.yaml"
+  mkdir -p "${INSTALL_DIR}/logs"
+  chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${INSTALL_DIR}/logs"
   render_systemd_unit | write_file "/etc/systemd/system/${SERVICE_NAME}.service" 0644 root root
   systemctl daemon-reload
-  systemctl enable --now "$SERVICE_NAME"
+  systemctl enable "$SERVICE_NAME"
+  systemctl restart "$SERVICE_NAME"
+  systemctl is-active --quiet "$SERVICE_NAME" || die "service failed to start: $SERVICE_NAME"
 }
 
 install_darwin_service() {
@@ -680,8 +732,9 @@ install_darwin_service() {
   render_launchd_plist | write_file "$plist" 0644 root wheel
   launchctl bootout system "$plist" >/dev/null 2>&1 || true
   launchctl bootstrap system "$plist"
-  launchctl enable "system/com.gofxq.${SERVICE_NAME}" >/dev/null 2>&1 || true
-  launchctl kickstart -k "system/com.gofxq.${SERVICE_NAME}" >/dev/null 2>&1 || true
+  chmod 0600 "${INSTALL_DIR}/agent-config.yaml"
+  launchctl enable "system/com.gofxq.${SERVICE_NAME}"
+  launchctl kickstart -k "system/com.gofxq.${SERVICE_NAME}"
 }
 
 install_service() {
@@ -731,6 +784,19 @@ print_summary() {
 main() {
   parse_args "$@"
   prepare_platform
+  require_root
+  need_cmd curl
+  need_cmd tar
+  need_cmd awk
+  need_cmd sed
+  need_cmd grep
+  need_cmd install
+  need_cmd mktemp
+  case "$OS" in
+    linux) need_cmd systemctl; [ -d /run/systemd/system ] || die "Linux requires a running systemd service manager" ;;
+    darwin) need_cmd launchctl ;;
+  esac
+  validate_common_inputs
   load_existing_config_defaults
   choose_install_mode
   if [ "$INSTALL_MODE" = "reinstall" ]; then
@@ -744,21 +810,34 @@ main() {
     validate_config_inputs
     resolve_agent_tenant
   fi
-  require_root
-
-  need_cmd curl
-  need_cmd tar
-  need_cmd awk
-  need_cmd sed
-  need_cmd grep
-  need_cmd install
-  need_cmd mktemp
-
   make_tmpdir
   download_assets
   verify_checksum
+  extract_binary
+  # Older installations allowed the service user to write the install directory.
+  # Lock it before staging files, then recheck entries under that locked parent.
+  mkdir -p "$INSTALL_DIR"
+  chown root "$INSTALL_DIR"
+  chmod 0755 "$INSTALL_DIR"
+  validate_common_inputs
+  if [ -f "${INSTALL_DIR}/gaoming-agent" ] && [ -f "${INSTALL_DIR}/agent-config.yaml" ]; then
+    mkdir "${TMP_DIR}/previous"
+    cp -p "${INSTALL_DIR}/gaoming-agent" "${TMP_DIR}/previous/gaoming-agent"
+    cp -p "${INSTALL_DIR}/agent-config.yaml" "${TMP_DIR}/previous/agent-config.yaml"
+    case "$OS" in
+      linux) previous_definition="/etc/systemd/system/${SERVICE_NAME}.service" ;;
+      darwin) previous_definition="/Library/LaunchDaemons/com.gofxq.${SERVICE_NAME}.plist" ;;
+    esac
+    if [ -f "$previous_definition" ]; then cp -p "$previous_definition" "${TMP_DIR}/previous/service.definition"; fi
+    UPGRADE_IN_PROGRESS=1
+  fi
+  case "$OS" in
+    linux) if systemctl cat "$SERVICE_NAME" >/dev/null 2>&1; then systemctl stop "$SERVICE_NAME"; fi ;;
+    darwin) if launchctl print "system/com.gofxq.${SERVICE_NAME}" >/dev/null 2>&1; then launchctl bootout system "/Library/LaunchDaemons/com.gofxq.${SERVICE_NAME}.plist"; fi ;;
+  esac
   install_files
   install_service
+  UPGRADE_IN_PROGRESS=0
   print_summary
 }
 

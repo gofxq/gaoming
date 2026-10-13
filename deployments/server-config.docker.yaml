@@ -1,0 +1,16 @@
+# Docker 联调示例；生产部署请替换数据库凭据并使用 HTTPS/Secure Cookie。
+http_addr: "0.0.0.0:9090"
+grpc_addr: "0.0.0.0:9091"
+runtime_backend: pg_redis
+postgres_dsn: "postgres://gaoming:gaoming@postgres:5432/gaoming?sslmode=disable"
+redis_addr: "redis:6379"
+redis_namespace: gaoming-docker
+tenant_code: default
+tenant_name: Default Tenant
+allow_custom_tenant_code: true
+session_cookie_name: gaoming_session
+session_ttl_hours: 168
+# 首次网页 setup 前，通过部署环境设置随机 GAOMING_SETUP_TOKEN（至少 32 字节）。
+session_cookie_secure: false
+allowed_origins:
+probe_interval_sec: 15

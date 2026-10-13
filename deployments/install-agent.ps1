@@ -2,24 +2,28 @@
 param(
   [ValidateNotNullOrEmpty()][string]$Repo = "gofxq/gaoming",
   [ValidateNotNullOrEmpty()][string]$Version = "latest",
-  [ValidateNotNullOrEmpty()][string]$InstallDir = "$env:LOCALAPPDATA\GaomingAgent",
-  [ValidateNotNullOrEmpty()][string]$TaskName = "GaomingAgent",
-  [ValidateNotNullOrEmpty()][string]$IngestGatewayGrpcAddr = "gm-rpc.gofxq.com",
+  [ValidateNotNullOrEmpty()][string]$InstallDir = "$env:ProgramFiles\GaomingAgent",
+  [ValidatePattern('^[A-Za-z0-9._-]+$')][string]$TaskName = "GaomingAgent",
+  [Alias("MasterApiUrl")][ValidateNotNullOrEmpty()][string]$WebBaseUrl = "https://gm-metric.gofxq.com/",
+  [ValidateNotNullOrEmpty()][string]$IngestGatewayGrpcAddr = "gm-rpc.gofxq.com:443",
   [string]$TenantCode = "",
-  [ValidateRange(1, 3600)][int]$LoopIntervalSec = 1,
+  [ValidateRange(1, 3600)][int]$LoopIntervalSec = 5,
   [ValidateNotNullOrEmpty()][string]$Region = "local",
   [ValidateNotNullOrEmpty()][string]$EnvName = "prod",
   [ValidateNotNullOrEmpty()][string]$Role = "node",
   [switch]$UpdateBinary,
   [switch]$Reinstall,
+  [switch]$Interactive,
   [switch]$NoPrompt
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $script:WebParams = @{ TimeoutSec = 60 }
 $script:WinSWVersion = "v2.12.0"
+$script:InstallerPath = $PSCommandPath
 $script:BootstrapLogPath = Join-Path ([System.IO.Path]::GetTempPath()) "gaoming-install-agent.log"
 if ($PSVersionTable.PSVersion.Major -lt 6) {
   $script:WebParams.UseBasicParsing = $true
@@ -65,27 +69,31 @@ function ConvertTo-PowerShellLiteral {
 }
 
 function Get-ScriptRelaunchPath {
-  if (-not [string]::IsNullOrWhiteSpace($PSCommandPath)) {
-    Write-BootstrapLog ("using script path for elevation: " + $PSCommandPath)
-    return $PSCommandPath
+  if (-not [string]::IsNullOrWhiteSpace($script:InstallerPath)) {
+    return $script:InstallerPath
   }
+  throw "Download install-agent.ps1 to a file and execute it; piping to iex does not support elevation"
+}
 
-  $definition = $MyInvocation.MyCommand.Definition
-  if ([string]::IsNullOrWhiteSpace($definition)) {
-    throw "cannot determine script content for elevation"
+function Get-ElevationCommand {
+  param([string]$ScriptPath, [hashtable]$BoundParameters)
+
+  $command = "& " + (ConvertTo-PowerShellLiteral -Value $ScriptPath)
+  foreach ($entry in $BoundParameters.GetEnumerator()) {
+    if ($entry.Key -notmatch '^[A-Za-z][A-Za-z0-9]*$') { throw "Invalid parameter name" }
+    if ($entry.Value -is [System.Management.Automation.SwitchParameter] -or $entry.Value -is [bool]) {
+      $command += " -" + $entry.Key + ":" + ('$' + ([bool]$entry.Value).ToString().ToLowerInvariant())
+    }
+    else {
+      $command += " -" + $entry.Key + " " + (ConvertTo-PowerShellLiteral -Value $entry.Value)
+    }
   }
-
-  $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) ("gaoming-install-agent-elevated-" + [guid]::NewGuid().ToString("N") + ".ps1")
-  $encoding = New-Object System.Text.UTF8Encoding($false)
-  [System.IO.File]::WriteAllText($tempPath, $definition, $encoding)
-  Write-BootstrapLog ("materialized elevated script to: " + $tempPath)
-  return $tempPath
+  return [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
 }
 
 function Ensure-Elevated {
   param(
-    [hashtable]$BoundParameters,
-    [string[]]$SwitchParameters
+    [hashtable]$BoundParameters
   )
 
   if (Test-IsAdministrator) {
@@ -94,31 +102,14 @@ function Ensure-Elevated {
   }
 
   $relaunchPath = Get-ScriptRelaunchPath
-  $args = @(
-    "-NoProfile",
-    "-ExecutionPolicy", "Bypass",
-    "-File", $relaunchPath
-  )
-
-  foreach ($entry in $BoundParameters.GetEnumerator()) {
-    if ($SwitchParameters -contains $entry.Key) {
-      if ([bool]$entry.Value) {
-        $args += "-" + $entry.Key
-      }
-      continue
-    }
-
-    $args += "-" + $entry.Key
-    $args += [string]$entry.Value
-  }
-
-  $argumentLine = ($args | ForEach-Object { ConvertTo-PowerShellLiteral -Value $_ }) -join " "
+  $encoded = Get-ElevationCommand -ScriptPath $relaunchPath -BoundParameters $BoundParameters
   Write-BootstrapLog ("requesting UAC elevation; log file: " + $script:BootstrapLogPath)
-  Start-Process -FilePath (Get-CurrentPowerShellExe) -Verb RunAs -ArgumentList $argumentLine | Out-Null
-  exit 0
+  $child = Start-Process -FilePath (Get-CurrentPowerShellExe) -Verb RunAs -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encoded) -Wait -PassThru
+  if ($child.ExitCode -ne 0) { throw "Elevated installer failed with exit code $($child.ExitCode)" }
+  exit $child.ExitCode
 }
 
-Ensure-Elevated -BoundParameters $PSBoundParameters -SwitchParameters @("UpdateBinary", "Reinstall", "NoPrompt")
+Ensure-Elevated -BoundParameters $PSBoundParameters
 
 function Write-Info {
   param([string]$Message)
@@ -141,7 +132,7 @@ function Read-ValueWithDefault {
     [string]$DisplayDefault
   )
 
-  if ($NoPrompt -or -not (Test-CanPrompt)) {
+  if (-not $Interactive -or $NoPrompt -or -not (Test-CanPrompt)) {
     return $CurrentValue
   }
 
@@ -201,8 +192,63 @@ function Assert-SafeInstallDir {
   if ([string]::Equals($full.TrimEnd('\'), $root.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "unsafe InstallDir: $full"
   }
+  $programFiles = [System.IO.Path]::GetFullPath($env:ProgramFiles).TrimEnd('\') + '\'
+  if ([string]::Equals($full.TrimEnd('\'), $programFiles.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase) -or -not $full.StartsWith($programFiles, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "InstallDir must be a dedicated directory under Program Files: $full"
+  }
+  $itemPath = $full
+  while ($itemPath) {
+    if ((Test-Path -LiteralPath $itemPath) -and ((Get-Item -LiteralPath $itemPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+      throw "InstallDir must not contain junctions or symbolic links: $itemPath"
+    }
+    $itemPath = Split-Path -Parent $itemPath
+  }
 
   return $full
+}
+
+function Set-InstallDirectoryPermissions {
+  param([string]$Path)
+  if (Get-ChildItem -LiteralPath $Path -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) {
+    throw "Installed files must not contain junctions or symbolic links"
+  }
+  $acl = New-Object Security.AccessControl.DirectorySecurity
+  $acl.SetAccessRuleProtection($true, $false)
+  foreach ($sid in @("S-1-5-18", "S-1-5-32-544")) {
+    $identity = New-Object Security.Principal.SecurityIdentifier($sid)
+    $rule = New-Object Security.AccessControl.FileSystemAccessRule($identity, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+    $acl.AddAccessRule($rule)
+  }
+  $acl.SetOwner((New-Object Security.Principal.SecurityIdentifier("S-1-5-32-544")))
+  Set-Acl -LiteralPath $Path -AclObject $acl
+  & icacls.exe $Path /setowner '*S-1-5-32-544' /T /Q | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Failed to secure installed file ownership" }
+  # Remove any explicit grants retained from older installations.
+  foreach ($child in Get-ChildItem -LiteralPath $Path -Force) {
+    & icacls.exe $child.FullName /reset /T /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Failed to secure installed files" }
+  }
+}
+
+function Copy-ExistingConfig {
+  param([string]$SourcePath, [string]$DestinationPath)
+  if (-not (Test-Path -LiteralPath $DestinationPath) -and (Test-Path -LiteralPath $SourcePath)) {
+    Install-FileAtomically -SourcePath $SourcePath -DestinationPath $DestinationPath
+  }
+}
+
+function Resolve-TenantCode {
+  param([string]$WebBaseUrl, [string]$TenantCode)
+  if (-not [string]::IsNullOrWhiteSpace($TenantCode)) { return $TenantCode }
+  $base = $WebBaseUrl.TrimEnd('/')
+  if ($base.EndsWith('/master')) { $base += '/api/v1' }
+  elseif (-not $base.EndsWith('/master/api/v1')) { $base += '/master/api/v1' }
+  try {
+    $response = Invoke-RestMethod -Method Post -Uri "$base/install/tenant" -TimeoutSec 15
+    if (-not [string]::IsNullOrWhiteSpace($response.tenant_code)) { return [string]$response.tenant_code }
+  }
+  catch { Write-Warning "Could not allocate a tenant from the server; generating a local tenant" }
+  return "tenant-local-" + [guid]::NewGuid().ToString("N")
 }
 
 function Resolve-Arch {
@@ -246,6 +292,18 @@ function Get-WinSWAssetName {
   }
 }
 
+function Assert-WinSWChecksum {
+  param([string]$Path, [string]$Asset)
+  # SHA256 of the official v2.12.0 release assets, checked before execution.
+  $hashes = @{
+    "WinSW-x64.exe" = "05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da"
+    "WinSW.NET461.exe" = "b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f"
+  }
+  if (-not $hashes.ContainsKey($Asset) -or (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant() -ne $hashes[$Asset]) {
+    throw "WinSW checksum mismatch: $Asset"
+  }
+}
+
 function Get-ReleaseBaseUrl {
   param(
     [string]$Repo,
@@ -266,14 +324,7 @@ function Get-ExistingTenantCode {
     return ""
   }
 
-  $match = Select-String -Path $ConfigPath -Pattern '^\s*tenant_code:\s*"?(?<tenant>[^"\r\n]+)"?\s*$' |
-           Select-Object -First 1
-
-  if ($match) {
-    return $match.Matches[0].Groups['tenant'].Value
-  }
-
-  return ""
+  return Get-ConfigValue -ConfigPath $ConfigPath -Key "tenant_code"
 }
 
 function Get-ConfigValue {
@@ -287,10 +338,14 @@ function Get-ConfigValue {
   }
 
   $escapedKey = [regex]::Escape($Key)
-  $pattern = '^\s*' + $escapedKey + ':\s*"?(?<value>[^"\r\n]+)"?\s*$'
+  $pattern = '^\s*' + $escapedKey + ':\s*(?<value>.*?)\s*$'
   $match = Select-String -Path $ConfigPath -Pattern $pattern | Select-Object -First 1
   if ($match) {
-    return $match.Matches[0].Groups['value'].Value.Trim()
+    $value = $match.Matches[0].Groups['value'].Value.Trim()
+    if ($value.StartsWith('"') -and $value.EndsWith('"')) {
+      try { return ConvertFrom-Json -InputObject $value } catch { return $value.Trim('"') }
+    }
+    return $value.Trim("'")
   }
 
   return ""
@@ -408,6 +463,7 @@ function Render-ServiceWrapperConfig {
   <executable>%BASE%\gaoming-agent.exe</executable>
   <workingdirectory>%BASE%</workingdirectory>
   <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="5 sec" />
   <logpath>%BASE%\logs</logpath>
   <log mode="roll-by-size">
     <sizeThreshold>10485760</sizeThreshold>
@@ -429,12 +485,12 @@ function Render-AgentConfig {
   )
 
   return @"
-master_api_url: "$MasterApiUrl"
-ingest_gateway_grpc_addr: "$IngestGatewayGrpcAddr"
-region: "$Region"
-env: "$EnvName"
-role: "$Role"
-tenant_code: "$TenantCode"
+master_api_url: $(ConvertTo-Json -InputObject $MasterApiUrl -Compress)
+ingest_gateway_grpc_addr: $(ConvertTo-Json -InputObject $IngestGatewayGrpcAddr -Compress)
+region: $(ConvertTo-Json -InputObject $Region -Compress)
+env: $(ConvertTo-Json -InputObject $EnvName -Compress)
+role: $(ConvertTo-Json -InputObject $Role -Compress)
+tenant_code: $(ConvertTo-Json -InputObject $TenantCode -Compress)
 loop_interval_sec: $LoopIntervalSec
 "@
 }
@@ -445,8 +501,26 @@ function Set-Utf8NoBomContent {
     [string]$Content
   )
 
-  $encoding = New-Object System.Text.UTF8Encoding($false)
-  [System.IO.File]::WriteAllText($Path, $Content, $encoding)
+  $temporary = $Path + ".text-" + [guid]::NewGuid().ToString("N")
+  try {
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($temporary, $Content, $encoding)
+    Install-FileAtomically -SourcePath $temporary -DestinationPath $Path
+  }
+  finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force } }
+}
+
+function Install-FileAtomically {
+  param([string]$SourcePath, [string]$DestinationPath)
+  $staged = $DestinationPath + ".new-" + [guid]::NewGuid().ToString("N")
+  try {
+    Copy-Item -LiteralPath $SourcePath -Destination $staged
+    if (Test-Path -LiteralPath $DestinationPath) {
+      [IO.File]::Replace($staged, $DestinationPath, [System.Management.Automation.Language.NullString]::Value)
+    }
+    else { [IO.File]::Move($staged, $DestinationPath) }
+  }
+  finally { if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged -Force } }
 }
 
 function Test-ServiceExists {
@@ -506,17 +580,23 @@ function Remove-ServiceRegistration {
     return
   }
 
-  Stop-ServiceRegistration -TaskName $TaskName -WrapperPath $WrapperPath
-
-  if (Test-Path -LiteralPath $WrapperPath) {
-    Invoke-WinSWCommand -WrapperPath $WrapperPath -Arguments @("uninstall")
-    return
+  # Use the SCM directly when replacing a legacy service; do not execute its
+  # wrapper from the old user-writable installation directory as administrator.
+  $service = Get-Service -Name $TaskName
+  if ($service.Status -ne [System.ServiceProcess.ServiceControllerStatus]::Stopped) {
+    Stop-Service -Name $TaskName -Force
+    $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(30))
   }
-
   & sc.exe delete $TaskName | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw "failed to delete Windows service: $TaskName"
   }
+  $service.Dispose()
+  for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    if (-not (Test-ServiceExists -TaskName $TaskName)) { return }
+    Start-Sleep -Seconds 1
+  }
+  throw "Timed out deleting Windows service: $TaskName"
 }
 
 function Build-DashboardUrl {
@@ -561,30 +641,36 @@ $roleExplicit = $PSBoundParameters.ContainsKey("Role")
 
 $InstallDir = Assert-SafeInstallDir -Path $InstallDir
 $configPath = Join-Path $InstallDir "agent-config.yaml"
-$canPrompt = -not $NoPrompt -and (Test-CanPrompt)
-$configExists = Test-Path -LiteralPath $configPath
+$configSourcePath = $configPath
+$legacyConfigPath = Join-Path $env:LOCALAPPDATA "GaomingAgent\agent-config.yaml"
+if (-not $PSBoundParameters.ContainsKey("InstallDir") -and -not (Test-Path -LiteralPath $configPath) -and (Test-Path -LiteralPath $legacyConfigPath)) {
+  $configSourcePath = $legacyConfigPath
+  Write-Info "Migrating legacy configuration to Program Files"
+}
+$canPrompt = $Interactive -and -not $NoPrompt -and (Test-CanPrompt)
+$configExists = Test-Path -LiteralPath $configSourcePath
 
 if ($configExists) {
   if (-not $webBaseExplicit) {
-    $existingMasterApiUrl = Get-ConfigValue -ConfigPath $configPath -Key "master_api_url"
+    $existingMasterApiUrl = Get-ConfigValue -ConfigPath $configSourcePath -Key "master_api_url"
     if (-not [string]::IsNullOrWhiteSpace($existingMasterApiUrl)) {
       $WebBaseUrl = $existingMasterApiUrl
     }
   }
 
   if (-not $ingestGrpcExplicit) {
-    $existingIngestGatewayGrpcAddr = Get-ConfigValue -ConfigPath $configPath -Key "ingest_gateway_grpc_addr"
+    $existingIngestGatewayGrpcAddr = Get-ConfigValue -ConfigPath $configSourcePath -Key "ingest_gateway_grpc_addr"
     if (-not [string]::IsNullOrWhiteSpace($existingIngestGatewayGrpcAddr)) {
       $IngestGatewayGrpcAddr = $existingIngestGatewayGrpcAddr
     }
   }
 
   if (-not $tenantExplicit -and [string]::IsNullOrWhiteSpace($TenantCode)) {
-    $TenantCode = Get-ConfigValue -ConfigPath $configPath -Key "tenant_code"
+    $TenantCode = Get-ConfigValue -ConfigPath $configSourcePath -Key "tenant_code"
   }
 
   if (-not $loopIntervalExplicit) {
-    $existingLoopIntervalSec = Get-ConfigValue -ConfigPath $configPath -Key "loop_interval_sec"
+    $existingLoopIntervalSec = Get-ConfigValue -ConfigPath $configSourcePath -Key "loop_interval_sec"
     if (-not [string]::IsNullOrWhiteSpace($existingLoopIntervalSec)) {
       $parsedExistingLoopInterval = 0
       if ([int]::TryParse($existingLoopIntervalSec, [ref]$parsedExistingLoopInterval)) {
@@ -594,28 +680,28 @@ if ($configExists) {
   }
 
   if (-not $regionExplicit) {
-    $existingRegion = Get-ConfigValue -ConfigPath $configPath -Key "region"
+    $existingRegion = Get-ConfigValue -ConfigPath $configSourcePath -Key "region"
     if (-not [string]::IsNullOrWhiteSpace($existingRegion)) {
       $Region = $existingRegion
     }
   }
 
   if (-not $envExplicit) {
-    $existingEnvName = Get-ConfigValue -ConfigPath $configPath -Key "env"
+    $existingEnvName = Get-ConfigValue -ConfigPath $configSourcePath -Key "env"
     if (-not [string]::IsNullOrWhiteSpace($existingEnvName)) {
       $EnvName = $existingEnvName
     }
   }
 
   if (-not $roleExplicit) {
-    $existingRole = Get-ConfigValue -ConfigPath $configPath -Key "role"
+    $existingRole = Get-ConfigValue -ConfigPath $configSourcePath -Key "role"
     if (-not [string]::IsNullOrWhiteSpace($existingRole)) {
       $Role = $existingRole
     }
   }
 }
 
-$installMode = Get-InstallMode -ConfigPath $configPath -CanPrompt $canPrompt -UpdateBinary $UpdateBinary.IsPresent -Reinstall $Reinstall.IsPresent
+$installMode = Get-InstallMode -ConfigPath $configSourcePath -CanPrompt $canPrompt -UpdateBinary $UpdateBinary.IsPresent -Reinstall $Reinstall.IsPresent
 
 if ($installMode -eq "reinstall") {
   if (-not $webBaseExplicit) {
@@ -646,6 +732,7 @@ if ($installMode -eq "reinstall") {
   Assert-HttpUrl -Value $WebBaseUrl -Name "web-url"
   Assert-NonEmpty -Value $IngestGatewayGrpcAddr -Name "ingest-grpc-addr"
   Assert-PositiveInt -Value $LoopIntervalSec -Name "loop-interval-sec"
+  $TenantCode = Resolve-TenantCode -WebBaseUrl $WebBaseUrl -TenantCode $TenantCode
 }
 
 $arch = Resolve-Arch
@@ -655,6 +742,9 @@ $releaseBaseUrl = Get-ReleaseBaseUrl -Repo $Repo -Version $Version
 $winswDownloadUrl = "https://github.com/winsw/winsw/releases/download/$script:WinSWVersion/$winswAsset"
 $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("gaoming-agent-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+$mutationStarted = $false
+$previousFiles = @{}
+$previousServicePath = ""
 
 try {
   $zipPath = Join-Path $tmpDir $asset
@@ -676,6 +766,28 @@ try {
   if ($expected -ne $actual) {
     throw "checksum mismatch for $asset"
   }
+  Assert-WinSWChecksum -Path $winswPath -Asset $winswAsset
+
+  New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+  Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDir -Force
+  $downloadedExePath = Join-Path $extractDir "gaoming-agent.exe"
+  if (-not (Test-Path -LiteralPath $downloadedExePath)) {
+    throw "gaoming-agent.exe not found in $extractDir"
+  }
+  New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+  Set-InstallDirectoryPermissions -Path $InstallDir
+  foreach ($name in @("gaoming-agent.exe", "gaoming-agent-service.exe", "gaoming-agent-service.xml", "agent-config.yaml")) {
+    $installedPath = Join-Path $InstallDir $name
+    if (Test-Path -LiteralPath $installedPath) {
+      $backupPath = Join-Path $tmpDir ("previous-" + $name)
+      Copy-Item -LiteralPath $installedPath -Destination $backupPath
+      $previousFiles[$installedPath] = $backupPath
+    }
+  }
+  if ($serviceExists) {
+    $previousServicePath = (Get-CimInstance -ClassName Win32_Service -Filter "Name='$TaskName'").PathName
+  }
+  $mutationStarted = $true
 
   if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
@@ -688,7 +800,7 @@ try {
       Remove-ServiceRegistration -TaskName $TaskName -WrapperPath $wrapperPath
     }
     else {
-      if (Test-Path -LiteralPath $wrapperPath) {
+      if ((Test-Path -LiteralPath $wrapperPath) -and ($previousServicePath.Trim('"') -eq $wrapperPath)) {
         Stop-ServiceRegistration -TaskName $TaskName -WrapperPath $wrapperPath
         $serviceAction = "refresh"
       }
@@ -698,22 +810,10 @@ try {
     }
   }
 
-  if ($installMode -eq "reinstall" -and (Test-Path -LiteralPath $InstallDir)) {
-    Remove-Item -LiteralPath $InstallDir -Recurse -Force
-  }
-
-  New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-  New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-  Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
-
   $exePath = Join-Path $InstallDir "gaoming-agent.exe"
-  $downloadedExePath = Join-Path $extractDir "gaoming-agent.exe"
-  if (-not (Test-Path -LiteralPath $downloadedExePath)) {
-    throw "gaoming-agent.exe not found in $extractDir"
-  }
 
-  Copy-Item -LiteralPath $downloadedExePath -Destination $exePath -Force
-  Copy-Item -LiteralPath $winswPath -Destination $wrapperPath -Force
+  Install-FileAtomically -SourcePath $downloadedExePath -DestinationPath $exePath
+  Install-FileAtomically -SourcePath $winswPath -DestinationPath $wrapperPath
   New-Item -ItemType Directory -Path (Join-Path $InstallDir "logs") -Force | Out-Null
 
   if ($installMode -eq "reinstall") {
@@ -727,8 +827,9 @@ try {
       -LoopIntervalSec $LoopIntervalSec
     Set-Utf8NoBomContent -Path $configPath -Content $configBody
   }
-  elseif (-not (Test-Path -LiteralPath $configPath)) {
-    throw "installed config not found: $configPath"
+  else {
+    Copy-ExistingConfig -SourcePath $configSourcePath -DestinationPath $configPath
+    if (-not (Test-Path -LiteralPath $configPath)) { throw "installed config not found: $configPath" }
   }
 
   $wrapperConfigBody = Render-ServiceWrapperConfig -TaskName $TaskName
@@ -741,6 +842,9 @@ try {
     Invoke-WinSWCommand -WrapperPath $wrapperPath -Arguments @("install")
   }
   Invoke-WinSWCommand -WrapperPath $wrapperPath -Arguments @("start")
+  $service = Get-Service -Name $TaskName
+  $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Running, [TimeSpan]::FromSeconds(30))
+  $mutationStarted = $false
 
   $effectiveWebBaseUrl = Get-ConfigValue -ConfigPath $configPath -Key "master_api_url"
   if ([string]::IsNullOrWhiteSpace($effectiveWebBaseUrl)) {
@@ -772,6 +876,27 @@ try {
     Write-Output "tenant_code: <pending>"
     Write-Output "tenant_code will be requested from master-api at runtime; if that fails, agent will generate one locally"
   }
+}
+catch {
+  $failure = $_
+  if ($mutationStarted -and -not [string]::IsNullOrWhiteSpace($previousServicePath)) {
+    Write-Warning "Installation failed; restoring previous files and service"
+    try {
+      Remove-ServiceRegistration -TaskName $TaskName -WrapperPath $wrapperPath
+      foreach ($installedPath in $previousFiles.Keys) {
+        Install-FileAtomically -SourcePath $previousFiles[$installedPath] -DestinationPath $installedPath
+      }
+      $restored = Invoke-CimMethod -ClassName Win32_Service -MethodName Create -Arguments @{
+        Name = $TaskName; DisplayName = $TaskName; PathName = $previousServicePath
+        ServiceType = [uint32]16; ErrorControl = [uint32]1; StartMode = "Automatic"
+        StartName = "LocalSystem"
+      }
+      if ($restored.ReturnValue -ne 0) { throw "Could not restore service registration" }
+      Start-Service -Name $TaskName
+    }
+    catch { Write-Warning "Rollback failed: $_" }
+  }
+  throw $failure
 }
 finally {
   Remove-Item -Path $tmpDir -Recurse -Force -ErrorAction SilentlyContinue

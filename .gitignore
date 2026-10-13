@@ -38,11 +38,10 @@ h5/vite.config.d.ts
 h5/.env
 h5/.env.local
 h5/.env.*.local
-AGENTS.md
 
 config/
-!web/src/shared/features/config/
-!web/src/shared/features/config/AppConfigProvider.tsx
 .codex
-docs/roadmap.md
-docs/TODO.md
+.superpowers/
+web/test-results/
+web/playwright-report/
+AGENTS.md

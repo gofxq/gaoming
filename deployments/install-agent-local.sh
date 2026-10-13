@@ -38,7 +38,7 @@ build_local_binary_if_needed() {
   echo "building local agent binary: ${BIN_PATH}"
   (
     cd "$REPO_ROOT"
-    go build -o "$BIN_PATH" ./agent/daemon/cmd/agent
+    go build -o "$BIN_PATH" ./agent
   )
 }
 

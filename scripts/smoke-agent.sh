@@ -1,12 +1,22 @@
 #!/usr/bin/env sh
 set -eu
 
-MASTER_URL="${MASTER_URL:-http://127.0.0.1:8080}"
-INGEST_URL="${INGEST_URL:-http://127.0.0.1:8090}"
+MASTER_URL="${MASTER_URL:-http://127.0.0.1:9090}"
+INGEST_URL="${INGEST_URL:-http://127.0.0.1:9090}"
 TENANT="${TENANT:-}"
 EXPECT_METRICS="${EXPECT_METRICS:-1}"
 RETRIES="${RETRIES:-30}"
 SLEEP_SEC="${SLEEP_SEC:-2}"
+SESSION_COOKIE_FILE="${SESSION_COOKIE_FILE:-}"
+[ -n "$SESSION_COOKIE_FILE" ] && [ -r "$SESSION_COOKIE_FILE" ] || { echo 'Set SESSION_COOKIE_FILE to a readable authenticated cookie jar before running smoke-agent.' >&2; exit 1; }
+
+read_hosts() {
+  if [ -z "$SESSION_COOKIE_FILE" ]; then
+    echo 'SESSION_COOKIE_FILE must point to a readable session cookie jar; private host reads require login.' >&2
+    return 1
+  fi
+  curl -fsS --cookie "$SESSION_COOKIE_FILE" "$HOSTS_URL"
+}
 
 normalize_master_base() {
   base="${1%/}"
@@ -54,11 +64,11 @@ fi
 
 echo "waiting for host agent registration..."
 i=0
-until hosts_body="$(curl -fsS "$HOSTS_URL")" && printf '%s' "$hosts_body" | grep -q '"host_uid"'; do
+until hosts_body="$(read_hosts)" && printf '%s' "$hosts_body" | grep -q '"host_uid"'; do
   i=$((i + 1))
   if [ "$i" -ge "$RETRIES" ]; then
     echo "no host agent registered in time" >&2
-    curl -fsS "$HOSTS_URL" || true
+    read_hosts || true
     exit 1
   fi
   sleep "$SLEEP_SEC"

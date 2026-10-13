@@ -5,12 +5,14 @@ import (
 	"errors"
 	"time"
 
+	"github.com/gofxq/gaoming/pkg/access"
 	"github.com/gofxq/gaoming/pkg/contracts"
 	"github.com/gofxq/gaoming/pkg/state"
 )
 
 var ErrHostNotFound = errors.New("host not found")
 var ErrTenantNotFound = errors.New("tenant not found")
+var ErrResourceNotFound = access.ErrNotFound
 
 type MaintenanceWindow struct {
 	ID        string    `json:"id"`
@@ -61,8 +63,8 @@ type EventBus interface {
 }
 
 type OperationsStore interface {
-	CreateMaintenance(ctx context.Context, req contracts.CreateMaintenanceWindowRequest) (MaintenanceWindow, error)
-	AckAlert(ctx context.Context, alertID string, ackedBy string, now time.Time) error
+	CreateMaintenance(ctx context.Context, principal access.Principal, req contracts.CreateMaintenanceWindowRequest) (MaintenanceWindow, error)
+	AckAlert(ctx context.Context, principal access.Principal, alertID string, now time.Time) error
 }
 
 func DigestMetricValues(digest contracts.AgentDigest) map[state.MetricKey]float64 {

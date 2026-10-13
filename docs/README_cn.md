@@ -32,7 +32,6 @@ Agent 采集主机指标
 当前尚未闭环：
 
 - `probe-worker` 的探测结果只被接收和计数，尚未写入主机状态。
-- `core-worker` 仍是占位任务，尚未执行状态计算或告警计算。
 - 维护窗和告警表已有部分接口，但没有完整的状态/告警生产链路。
 - 仓库内可以解析已有会话，但没有完整的登录和创建会话入口。
 
@@ -62,32 +61,37 @@ Agent 采集主机指标
 
 ## 快速开始
 
-本地推荐组合是：后端和依赖运行在 Docker，Agent 运行在宿主机，Web 由 Compose 中的 Vite 容器提供。
+本地推荐使用 Docker PostgreSQL/Redis、本机统一后端和 Vite，Agent 独立运行在宿主机。先安装 Docker Compose，详见[本地开发与验证](./02-guides/local-development.md)。
 
 ```bash
-make up
-make smoke
+make deps-up
+```
+
+首次使用空库时，通过 PostgreSQL 客户端执行 `deployments/sql/init.sql`，见[数据库初始化](./02-guides/database-setup.md)。完成后：
+
+```bash
+make dev
 ```
 
 另开一个终端运行 Agent：
 
 ```bash
-make agent
+make run-agent
 ```
 
 再从第三个终端验证上报链路：
 
 ```bash
-TENANT=default make smoke-agent
+TENANT=default SESSION_COOKIE_FILE=/path/to/login-cookies.txt make smoke-agent
 ```
 
 启动前需要准备被 `.gitignore` 排除的 `config/*.yml` 和根目录 `agent-config.yaml`。完整示例及验证方法见[本地开发与验证](./02-guides/local-development.md)。
 
 常用入口：
 
-- Web：`http://127.0.0.1:5173/default`
-- master-api：`http://127.0.0.1:8080/master/healthz`
-- ingest-gateway：`http://127.0.0.1:8090/ingest/healthz`
+- Web：本机开发 `http://127.0.0.1:5173/default`；Docker `http://127.0.0.1:9090/default`
+- master-api：`http://127.0.0.1:9090/master/healthz`
+- ingest-gateway：`http://127.0.0.1:9090/ingest/healthz`
 
 ## 文档维护约定
 
@@ -97,3 +101,13 @@ TENANT=default make smoke-agent
 - 临时实施计划放在 Issue/PR；完成后不长期保留在 `docs/`。
 - 命令以 [`Makefile`](../Makefile) 中真实存在的 target 为准。
 - 配置字段以各服务的 `internal/config/config.go` 为准。
+
+## Agent 一行安装
+
+Linux / macOS：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/install-agent.sh | sudo sh
+```
+
+Windows PowerShell 的一行命令及自建服务配置见[Agent 安装指南](02-guides/agent-installation.md)。支持三个平台的 x64/ARM64，默认自动安装并启用开机自启，重复安装保留配置。
