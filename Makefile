@@ -22,7 +22,7 @@ LOCAL_ENV = GAOMING_HTTP_ADDR="0.0.0.0:$(HTTP_PORT)" GAOMING_GRPC_ADDR="0.0.0.0:
 .PHONY: web-install web-dev web-build web-test web-e2e web-preview
 .PHONY: proto-check proto-lint proto-generate
 .PHONY: compose-config docker-up docker-down docker-logs docker-ps docker-smoke
-.PHONY: smoke smoke-agent install-agent-local-service
+.PHONY: smoke smoke-agent install-agent-local-service test-agent-installers
 
 dev-init: ## 生成缺失配置和随机数据库/Redis 密码与 setup 凭据，保留已有配置
 	$(LOCAL_DEPS) init
@@ -123,6 +123,11 @@ docker-smoke: ## 独立 Docker 集成验证，结束后清理临时资源
 	sh ./scripts/smoke-roadmap.sh
 
 ##@ Agent 服务安装
+test-agent-installers: ## 验证 Unix 安装脚本；PowerShell 测试由 CI 在 Windows 执行
+	python3 -m unittest discover -s deployments/tests -p '*_test.py'
+	sh -n deployments/install-agent.sh
+	sh -n deployments/uninstall-agent.sh
+
 install-agent-local-service: ## 构建并安装本机 Agent 服务
 	mkdir -p .tmp
 	$(GO) build -o .tmp/gaoming-agent ./agent

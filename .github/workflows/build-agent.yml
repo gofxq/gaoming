@@ -3,7 +3,7 @@ name: build-agent
 on:
   push:
     branches:
-      - main
+      - master
     tags:
       - "v*"
   pull_request:
@@ -11,6 +11,9 @@ on:
       - ".github/workflows/build-agent.yml"
       - "agent/**"
       - "pkg/**"
+      - "deployments/install-agent*"
+      - "deployments/uninstall-agent*"
+      - "deployments/tests/**"
       - "go.mod"
       - "go.sum"
   workflow_dispatch:
@@ -19,7 +22,31 @@ permissions:
   contents: write
 
 jobs:
+  test-installers:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Test Unix installer
+        if: runner.os != 'Windows'
+        run: make test-agent-installers
+      - name: Test Windows PowerShell 5.1 installer
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./deployments/tests/install-agent.Tests.ps1
+      - name: Test PowerShell 7 installer
+        shell: pwsh
+        run: ./deployments/tests/install-agent.Tests.ps1
+
   build-agent:
+    needs: test-installers
     runs-on: ubuntu-latest
 
     steps:
@@ -74,7 +101,8 @@ jobs:
           build_zip windows amd64
           build_zip windows arm64
 
-          sha256sum dist/gaoming-agent_* > dist/checksums.txt
+          cp deployments/install-agent.sh deployments/install-agent.ps1 deployments/uninstall-agent.sh deployments/uninstall-agent.ps1 dist/
+          sha256sum dist/gaoming-agent_* dist/install-agent.* dist/uninstall-agent.* > dist/checksums.txt
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -93,5 +121,9 @@ jobs:
             dist/gaoming-agent_darwin_arm64.tar.gz
             dist/gaoming-agent_windows_amd64.zip
             dist/gaoming-agent_windows_arm64.zip
+            dist/install-agent.sh
+            dist/install-agent.ps1
+            dist/uninstall-agent.sh
+            dist/uninstall-agent.ps1
             dist/checksums.txt
           generate_release_notes: true

@@ -101,3 +101,13 @@ TENANT=default SESSION_COOKIE_FILE=/path/to/login-cookies.txt make smoke-agent
 - 临时实施计划放在 Issue/PR；完成后不长期保留在 `docs/`。
 - 命令以 [`Makefile`](../Makefile) 中真实存在的 target 为准。
 - 配置字段以各服务的 `internal/config/config.go` 为准。
+
+## Agent 一行安装
+
+Linux / macOS：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/install-agent.sh | sudo sh
+```
+
+Windows PowerShell 的一行命令及自建服务配置见[Agent 安装指南](02-guides/agent-installation.md)。支持三个平台的 x64/ARM64，默认自动安装并启用开机自启，重复安装保留配置。

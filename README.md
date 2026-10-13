@@ -12,10 +12,6 @@ curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/in
 
 安装完成后展示：
 ```bash
-web-url [https://gm-metric.gofxq.com/]:
-ingest-grpc-addr [gm-rpc.gofxq.com:443]:
-tenant [<auto>]:
-loop-interval-sec [5]: 1
 [+] downloading gaoming-agent_linux_amd64.tar.gz
 [+] installed gaoming-agent to /opt/gaoming-agent
 [+] config: /opt/gaoming-agent/agent-config.yaml
@@ -127,77 +123,29 @@ Docker 将 Go 后端和生产 Web 静态文件打包在同一个容器中：执�
 
 ## 📦 安装 Agent
 
-mac/ linux 一行安装命令：
+Linux / macOS（x64、ARM64）：
 
-```bash
+```sh
 curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/install-agent.sh | sudo sh
 ```
 
-安装脚本会交互式提示以下参数，直接回车就用默认值：
-
-- `web-url`: `https://gm-metric.gofxq.com/`
-- `ingest-grpc-addr`: `gm-rpc.gofxq.com:443`
-- `tenant`: 留空则由安装脚本调用 `master-api` 申请，失败则本地生成
-- `loop-interval-sec`: `5`
-
-如果安装目录里已经存在 `agent-config.yaml`，脚本会给出两个选项：
-
-- `update binary only`: 仅更新二进制，保留当前配置
-- `reinstall`: 重装并重写配置；现有配置值会作为默认值回填到提示里
-
-安装完成后，脚本会输出：
-
-- `tenant_code`
-- 带 tenant 的 Dashboard 地址
-- 带 tenant 参数的 Hosts API 地址
-
-平台行为：
-
-- Linux 注册为 `systemd` 服务
-- macOS 注册为 `launchd` 服务
-- Windows 使用 PowerShell 安装脚本，通过 `WinSW` 注册为 Windows Service，默认安装到 `%LOCALAPPDATA%\GaomingAgent`，脚本会自动弹出 UAC 提权
-
-Windows 安装：
+Windows（x64、ARM64），在 PowerShell 中执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.ps1 -UseBasicParsing | iex"
+$p=Join-Path $env:TEMP ('gaoming-install-'+[guid]::NewGuid()+'.ps1'); try { iwr https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/install-agent.ps1 -UseBasicParsing -OutFile $p; powershell -NoProfile -ExecutionPolicy Bypass -File $p; if ($LASTEXITCODE -ne 0) { throw 'Agent installation failed' } } finally { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
 ```
 
-Windows 卸载：
+脚本自动识别架构、下载最新 Release、校验 SHA256、写入配置并启动开机自启服务，无需逐项回车。Windows 会弹出 UAC 授权。重复运行同一命令会更新程序并保留现有配置。
 
-```powershell
-powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/uninstall-agent.ps1 -UseBasicParsing | iex"
-```
+Linux 使用 systemd，macOS 使用 launchd，Windows 使用 Windows Service。默认连接 `https://gm-metric.gofxq.com/` 和 `gm-rpc.gofxq.com:443`，采集间隔为 5 秒。安装完成后输出 tenant 和 Dashboard 地址。
 
-Linux / macOS 卸载：
+安装命令会以管理员权限运行远程脚本，请确认仓库来源可信。自建服务、指定版本、交互安装、卸载和平台要求见[Agent 安装指南](docs/02-guides/agent-installation.md)。
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/uninstall-agent.sh | sudo sh
-```
+本地源码安装：
 
-如果需要指定版本：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/main/deployments/install-agent.sh | sudo VERSION=v0.1.0 sh
-```
-
-如果你已经在目标机器拉了仓库代码，想用本地最新代码覆盖安装服务：
-
-```bash
+```sh
 make install-agent-local-service
 ```
-
-直接运行本地安装脚本时，会优先查找仓库内的 `.tmp/gaoming-agent`；如果没有显式传 `--bin`，脚本也会尝试自动执行：
-
-```bash
-go build -o .tmp/gaoming-agent ./agent
-```
-
-相关脚本：
-
-- [deployments/install-agent.sh](deployments/install-agent.sh)
-- [deployments/install-agent-local.sh](deployments/install-agent-local.sh)
-- [deployments/install-agent.ps1](deployments/install-agent.ps1)
 
 ## 🧩 服务组成
 
