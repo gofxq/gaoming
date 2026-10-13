@@ -38,7 +38,7 @@ Linux / macOS 在命令末尾传递参数：
 curl -fsSL https://raw.githubusercontent.com/gofxq/gaoming/master/deployments/install-agent.sh | sudo sh -s -- --web-url https://monitor.example.com --ingest-grpc-addr monitor.example.com:443 --tenant team
 ```
 
-Windows 在上述一行的 `-File $p` 后增加 `-WebBaseUrl https://monitor.example.com -IngestGatewayGrpcAddr monitor.example.com:443 -TenantCode team`。内网直连可使用 `服务器地址:8091`。自建服务优先显式指定自己的 tenant。
+Windows 在上述一行的 `-File $p` 后增加 `-WebBaseUrl https://monitor.example.com -IngestGatewayGrpcAddr monitor.example.com:443 -TenantCode team`。内网直连可使用 `服务器地址:9091`。自建服务优先显式指定自己的 tenant。
 
 | 用途 | Unix 参数 | PowerShell 参数 |
 | --- | --- | --- |

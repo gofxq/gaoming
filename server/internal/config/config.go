@@ -31,7 +31,7 @@ func Load(path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	cfg := Config{Master: master, GRPCAddr: "0.0.0.0:8091", ProbeIntervalSec: 15}
+	cfg := Config{Master: master, GRPCAddr: "0.0.0.0:9091", ProbeIntervalSec: 15}
 	// Unlike legacy wildcard defaults, the unified defaults explicitly bind IPv4.
 	var listen struct {
 		HTTPAddr string `yaml:"http_addr"`
@@ -40,7 +40,7 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("parse server config: %w", err)
 	}
 	if listen.HTTPAddr == "" {
-		cfg.Master.HTTPAddr = "0.0.0.0:8080"
+		cfg.Master.HTTPAddr = "0.0.0.0:9090"
 	}
 	if err := yaml.Unmarshal(raw, &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse server config: %w", err)

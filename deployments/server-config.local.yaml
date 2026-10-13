@@ -1,6 +1,6 @@
 # 本机开发模板；make dev-init 首次复制时替换为随机数据库和 Redis 密码。
-http_addr: "0.0.0.0:8080"
-grpc_addr: "0.0.0.0:8091"
+http_addr: "0.0.0.0:9090"
+grpc_addr: "0.0.0.0:9091"
 runtime_backend: pg_redis
 postgres_dsn: "postgres://gaoming:gaoming@127.0.0.1:5432/gaoming?sslmode=disable"
 redis_addr: "127.0.0.1:6379"
@@ -20,7 +20,7 @@ session_cookie_secure: false
 allowed_origins:
   - http://127.0.0.1:5173
   - http://localhost:5173
-  - http://127.0.0.1:8080
-  - http://localhost:8080
+  - http://127.0.0.1:9090
+  - http://localhost:9090
 probe_interval_sec: 15
 # 省略 probe_target_url 时探测统一后端自己的 /master/healthz。

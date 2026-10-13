@@ -64,7 +64,7 @@ func TestLoadFromFileAppliesDefaults(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 
-	if cfg.HTTPAddr != ":8080" {
+	if cfg.HTTPAddr != ":9090" {
 		t.Fatalf("unexpected default http addr: %q", cfg.HTTPAddr)
 	}
 	if cfg.RedisAddr != "127.0.0.1:6379" {

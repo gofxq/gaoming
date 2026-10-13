@@ -55,8 +55,8 @@ flowchart LR
     end
     PG[(PostgreSQL)]
     Redis[(Redis)]
-    Agent -->|gRPC :8091| Ingest
-    UI -->|HTTP :8080| Master
+    Agent -->|gRPC :9091| Ingest
+    UI -->|HTTP :9090| Master
     Master -->|SSE| UI
     Probe -->|探测报告| Ingest
     Ingest --> PG
@@ -83,13 +83,13 @@ make dev           # 启动统一后端与前端；Ctrl-C 停止
 make deps-down     # 停止依赖容器，保留数据库卷
 ```
 
-页面地址：`http://127.0.0.1:5173/default`。统一 HTTP 端口 8080 同时提供 `/master/*` 和 `/ingest/*`，gRPC 端口 8091 提供 Agent 接入；端口均监听 `0.0.0.0`。
+页面地址：`http://127.0.0.1:5173/default`。统一 HTTP 端口 9090 同时提供 `/master/*` 和 `/ingest/*`，gRPC 端口 9091 提供 Agent 接入；端口均监听 `0.0.0.0`。
 
 另一终端准备 `agent-config.yaml` 并运行：
 
 ```yaml
-master_api_url: "http://127.0.0.1:8080"
-ingest_gateway_grpc_addr: "127.0.0.1:8091"
+master_api_url: "http://127.0.0.1:9090"
+ingest_gateway_grpc_addr: "127.0.0.1:9091"
 region: local
 env: dev
 role: node
@@ -119,7 +119,7 @@ make help          # 分组命令说明
 
 依赖需要 Docker Compose，PostgreSQL 数据保存在持久数据卷，`.local-data/` 保存私有配置和管理状态，`make clean` 会保留。使用已有本机实例时可执行 `make dev-init` 并修改配置中的凭据。
 
-Docker 将 Go 后端和生产 Web 静态文件打包在同一个容器中：执行 `make docker-up` 后访问 `http://127.0.0.1:8080/default`，页面与 API 共用 HTTP 端口。默认 Compose 只有 server、PostgreSQL、Redis；容器 Agent 通过 `DOCKER_PROFILES="--profile container-agent"` 按需启动。本机开发仍使用 `make dev` / `make web-dev` 的 Vite 热更新。
+Docker 将 Go 后端和生产 Web 静态文件打包在同一个容器中：执行 `make docker-up` 后访问 `http://127.0.0.1:9090/default`，页面与 API 共用 HTTP 端口。默认 Compose 只有 server、PostgreSQL、Redis；容器 Agent 通过 `DOCKER_PROFILES="--profile container-agent"` 按需启动。本机开发仍使用 `make dev` / `make web-dev` 的 Vite 热更新。
 
 ## 📦 安装 Agent
 
@@ -152,7 +152,7 @@ make install-agent-local-service
 - `server`: 唯一后端服务，源码位于 `server/`；内部包含 master 查询/认证、ingest 接入、probe 探测模块。
 - `agent`: 独立宿主机采集与上报进程。
 
-Docker 与本机均使用 `server/main.go` 统一后端；Docker 额外提供 Web 静态页面，HTTP 8080 同时提供 `/master/*`、`/ingest/*`，gRPC 8091 用于 Agent。Docker 示例配置为 `deployments/server-config.docker.yaml`。
+Docker 与本机均使用 `server/main.go` 统一后端；Docker 额外提供 Web 静态页面，HTTP 9090 同时提供 `/master/*`、`/ingest/*`，gRPC 9091 用于 Agent。Docker 示例配置为 `deployments/server-config.docker.yaml`。
 ## 📚 文档
 
 - [中文文档概要与索引](docs/README_cn.md)

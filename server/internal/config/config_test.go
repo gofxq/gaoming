@@ -15,7 +15,7 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Master.HTTPAddr != "0.0.0.0:8080" || cfg.GRPCAddr != "0.0.0.0:8091" || cfg.ProbeIntervalSec != 15 {
+	if cfg.Master.HTTPAddr != "0.0.0.0:9090" || cfg.GRPCAddr != "0.0.0.0:9091" || cfg.ProbeIntervalSec != 15 {
 		t.Fatalf("unexpected defaults: http=%s grpc=%s probe=%d", cfg.Master.HTTPAddr, cfg.GRPCAddr, cfg.ProbeIntervalSec)
 	}
 	if cfg.Master.SessionCookieSecure {

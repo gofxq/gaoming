@@ -17,7 +17,8 @@ COPY api ./api
 COPY pkg ./pkg
 COPY server ./server
 COPY agent ./agent
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/app ${SERVICE_PATH}
+# Match this stage's architecture to the requested Docker target platform.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/app ${SERVICE_PATH}
 
 FROM alpine:3.20 AS runtime
 RUN adduser -D -u 10001 appuser && mkdir -p /app/logs && chown -R appuser:appuser /app
@@ -31,4 +32,4 @@ FROM runtime AS agent
 FROM runtime AS server
 COPY --from=web-build /web/dist /app/web
 ENV GAOMING_WEB_DIR=/app/web
-EXPOSE 8080 8091
+EXPOSE 9090 9091

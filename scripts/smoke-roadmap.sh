@@ -19,8 +19,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 cat > "$task_dir/server.yml" <<'EOF'
-http_addr: "0.0.0.0:8080"
-grpc_addr: "0.0.0.0:8091"
+http_addr: "0.0.0.0:9090"
+grpc_addr: "0.0.0.0:9091"
 probe_interval_sec: 1
 redis_namespace: gaoming-smoke
 postgres_dsn: "postgres://gaoming:smoke-only-password@postgres:5432/gaoming?sslmode=disable"
@@ -29,8 +29,8 @@ tenant_code: "default"
 session_cookie_secure: false
 EOF
 cat > "$task_dir/agent.yml" <<'EOF'
-master_api_url: "http://server:8080"
-ingest_gateway_grpc_addr: "server:8091"
+master_api_url: "http://server:9090"
+ingest_gateway_grpc_addr: "server:9091"
 tenant_code: "default"
 region: "smoke"
 loop_interval_sec: 1
@@ -68,12 +68,12 @@ services:
       dockerfile: deployments/docker/Dockerfile
       args: {SERVICE_PATH: ./server}
     volumes: ["$task_dir/server.yml:/app/config/server.yml:ro"]
-    ports: ["127.0.0.1::8080"]
+    ports: ["127.0.0.1::9090"]
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/master/healthz >/dev/null"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/master/healthz >/dev/null"]
       interval: 1s
       timeout: 3s
       retries: 30
@@ -91,7 +91,7 @@ volumes:
 EOF
 compose config >/dev/null
 compose up --build -d --wait --wait-timeout 90 postgres redis server agent
-task_master_port=$(compose port server 8080 | sed 's/.*://')
+task_master_port=$(compose port server 9090 | sed 's/.*://')
 cd "$task_repo"
 umask 077
 # Private login bodies keep the startup password out of arguments and logs.

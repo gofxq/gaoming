@@ -8,7 +8,7 @@
 
 ## 本地开发
 
-默认测试接口指向 `http://localhost:8080/`。
+默认测试接口指向 `http://localhost:9090/`。
 
 开发模式默认通过 Vite 代理把 `/master/*` 转发到这个地址，因此浏览器侧仍然走同源请求，不需要远端额外放开 CORS。即使直接运行 `yarn dev`，也会默认代理到这个地址；如果要切到本地或其他环境，再覆盖代理目标。
 
@@ -20,7 +20,7 @@ make web-dev
 如果要切换到其他接口地址，可以覆盖 `WEB_API_ORIGIN`：
 
 ```bash
-make web-dev WEB_API_ORIGIN=http://127.0.0.1:8080
+make web-dev WEB_API_ORIGIN=http://127.0.0.1:9090
 ```
 
 当前默认包管理器为 `yarn`。

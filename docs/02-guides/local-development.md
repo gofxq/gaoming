@@ -34,8 +34,8 @@ make deps-down
 
 默认监听：
 
-- 统一 HTTP：`0.0.0.0:8080`，包含 `/master/*`、`/ingest/*`。
-- Agent gRPC：`0.0.0.0:8091`。
+- 统一 HTTP：`0.0.0.0:9090`，包含 `/master/*`、`/ingest/*`。
+- Agent gRPC：`0.0.0.0:9091`。
 - 前端：`0.0.0.0:5173`。
 
 `probe_interval_sec` 控制探测任务周期。省略 `probe_target_url` 时，probe-worker 探测本进程的 `/master/healthz` 并向同一 HTTP 端口提交报告。
@@ -95,8 +95,8 @@ unset GAOMING_ADMIN_PASSWORD
 创建 git 忽略的 `agent-config.yaml`：
 
 ```yaml
-master_api_url: "http://127.0.0.1:8080"
-ingest_gateway_grpc_addr: "127.0.0.1:8091"
+master_api_url: "http://127.0.0.1:9090"
+ingest_gateway_grpc_addr: "127.0.0.1:9091"
 region: local
 env: dev
 role: node
@@ -128,10 +128,10 @@ make help
 `smoke-agent` 必须使用已登录的 Cookie jar，验证 Agent 注册及指标 batch 增长；可通过 `MASTER_URL`、`INGEST_URL` 覆盖远程地址，或 `HTTP_PORT` 覆盖本机统一端口。`EXPECT_METRICS=0` 只验证注册。Go 集成测试可配置 `TEST_POSTGRES_DSN`，统一后端集成测试还需 `TEST_REDIS_ADDR`（可选 `TEST_REDIS_PASSWORD`）。请使用独立测试依赖；PostgreSQL 测试自行创建并清理临时 schema，统一后端集成测试同时隔离并清理 Redis 命名空间。
 
 ```bash
-curl http://127.0.0.1:8080/master/healthz
-curl http://127.0.0.1:8080/ingest/healthz
-curl http://127.0.0.1:8080/ingest/debug/counters
-curl --cookie /path/to/login-cookies.txt http://127.0.0.1:8080/master/api/v1/hosts
+curl http://127.0.0.1:9090/master/healthz
+curl http://127.0.0.1:9090/ingest/healthz
+curl http://127.0.0.1:9090/ingest/debug/counters
+curl --cookie /path/to/login-cookies.txt http://127.0.0.1:9090/master/api/v1/hosts
 ```
 
 Agent 上报后主机出现在看板中，`metric_batches` 持续增长；内置 probe-worker 的 `probe_reports` 持续增长。
@@ -149,9 +149,9 @@ make docker-down
 make docker-up DOCKER_PROFILES="--profile container-agent"
 ```
 
-Docker 构建时执行前端生产构建，将 `web/dist` 放入同一 server 镜像，由 Go 进程在 8080 提供页面和 API。页面地址为 `http://127.0.0.1:8080/default`；不再启动独立 Web 容器，也不发布 Docker 前端 5173 端口。前端使用同源 `/master/*`，无需 Vite 代理。
+Docker 构建时执行前端生产构建，将 `web/dist` 放入同一 server 镜像，由 Go 进程在 9090 提供页面和 API。页面地址为 `http://127.0.0.1:9090/default`；不再启动独立 Web 容器，也不发布 Docker 前端 5173 端口。前端使用同源 `/master/*`，无需 Vite 代理。
 
-`docker-up` 自动校验 Compose 配置。`make docker-smoke` 是独立临时 Docker 集成测试，完成后清理自身资源。验证已启动的 Docker 后端时，通过 `make smoke MASTER_URL=http://127.0.0.1:8080/master INGEST_URL=http://127.0.0.1:8080/ingest` 验证同一个 HTTP 端口。
+`docker-up` 自动校验 Compose 配置。`make docker-smoke` 是独立临时 Docker 集成测试，完成后清理自身资源。验证已启动的 Docker 后端时，通过 `make smoke MASTER_URL=http://127.0.0.1:9090/master INGEST_URL=http://127.0.0.1:9090/ingest` 验证同一个 HTTP 端口。
 
 修改 Docker 的 `HTTP_PORT` 时，需在 Docker 配置的 `allowed_origins` 中加入浏览器实际 Origin；HTTPS 反向代理则填写对应 HTTPS Origin。
 

@@ -61,7 +61,7 @@ func LoadFromFile(path string) (Config, error) {
 
 func defaultConfig() Config {
 	return Config{
-		HTTPAddr:              ":8080",
+		HTTPAddr:              ":9090",
 		RuntimeBackend:        "pg_redis",
 		PostgresDSN:           "postgres://gaoming:gaoming@127.0.0.1:5432/gaoming?sslmode=disable",
 		RedisAddr:             "127.0.0.1:6379",

@@ -60,7 +60,7 @@ function start(name, command, args, options = {}) {
 process.on("SIGINT", () => stop(0));
 process.on("SIGTERM", () => stop(0));
 
-const httpPort = env.HTTP_PORT || "8080";
+const httpPort = env.HTTP_PORT || "9090";
 const webPort = env.WEB_PORT || "5173";
 const base = `http://127.0.0.1:${httpPort}`;
 start("backend", env.DEV_BACKEND || "./.tmp/local/bin/server", env.AIR_CONFIG ? ["-c", env.AIR_CONFIG] : ["-config", env.SERVER_CONFIG || "config/server.yml"], {
@@ -90,7 +90,7 @@ async function launchFrontend() {
     env: { ...env, VITE_PROXY_TARGET: base },
   });
   console.log(`Local backend: ${base}; frontend: http://127.0.0.1:${webPort}/default`);
-  console.log(`Agent: make run-agent (gRPC: 127.0.0.1:${env.GRPC_PORT || "8091"}). Ctrl-C stops backend and frontend.`);
+  console.log(`Agent: make run-agent (gRPC: 127.0.0.1:${env.GRPC_PORT || "9091"}). Ctrl-C stops backend and frontend.`);
 }
 
 launchFrontend().catch((error) => { console.error(error.message); stop(1); });

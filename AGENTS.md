@@ -21,7 +21,7 @@
 - `make docker-up` / `make docker-down`：启动或停止 Server/Web 合并容器及数据依赖。
 - `make run-agent`：在当前机器运行 Agent。
 - `make smoke`、`make smoke-agent`：验证后端链路和 Agent 上报链路。
-- `make web-dev WEB_PROXY_TARGET=http://127.0.0.1:8080`：启动前端开发环境，并通过 Vite 代理本地 API。
+- `make web-dev WEB_PROXY_TARGET=http://127.0.0.1:9090`：启动前端开发环境，并通过 Vite 代理本地 API。
 - `make web-build`：构建前端产物。
 
 ## 代码风格与命名约定
@@ -38,6 +38,6 @@ Go 测试文件与实现文件相邻放置，文件名使用标准 `_test.go` �
 
 ## 安全与配置提示
 
-不要提交密钥或机器本地专用配置。数据库由使用者直接连接 PostgreSQL 管理，空库执行 `deployments/sql/init.sql`；后端不提供离线管理员命令、自动迁移或迁移版本校验。`config/` 是被忽略的本机配置目录；Docker 示例配置位于 `deployments/server-config.docker.yaml`。统一 HTTP 8080 同时提供生产 Web 静态文件、`/master/*` 和 `/ingest/*`，gRPC 8091 提供 Agent 接入。首次网页 setup 前配置随机 `GAOMING_SETUP_TOKEN`（至少 32 字节），生产使用 HTTPS/Secure Cookie 并限制数据库与 Redis 访问。若变更影响数据库初始化或启动流程，请同步更新 `deployments/sql/init.sql` 及相关文档。
+不要提交密钥或机器本地专用配置。数据库由使用者直接连接 PostgreSQL 管理，空库执行 `deployments/sql/init.sql`；后端不提供离线管理员命令、自动迁移或迁移版本校验。`config/` 是被忽略的本机配置目录；Docker 示例配置位于 `deployments/server-config.docker.yaml`。统一 HTTP 9090 同时提供生产 Web 静态文件、`/master/*` 和 `/ingest/*`，gRPC 9091 提供 Agent 接入。首次网页 setup 前配置随机 `GAOMING_SETUP_TOKEN`（至少 32 字节），生产使用 HTTPS/Secure Cookie 并限制数据库与 Redis 访问。若变更影响数据库初始化或启动流程，请同步更新 `deployments/sql/init.sql` 及相关文档。
 
 ## 执行给出一个合适的git message
