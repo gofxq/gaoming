@@ -3,5 +3,6 @@ ingest_gateway_grpc_addr: "server:9091"
 region: "local-docker"
 env: "docker"
 role: "node"
+hostname: "local-docker-agent"
 tenant_code: "default"
 loop_interval_sec: 1
