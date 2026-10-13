@@ -45,7 +45,7 @@ air: web-install ## 热更新统一后端和前端（需安装 Air）
 	$(LOCAL_ENV) sh ./scripts/dev-air.sh
 
 run-agent: ## 运行宿主机 Agent（读取 agent-config.yaml）
-	$(GO) run ./agent/daemon/cmd/agent
+	$(GO) run ./agent
 
 ##@ 测试与构建
 fmt: ## 格式化 Go 代码
