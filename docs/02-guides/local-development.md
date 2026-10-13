@@ -72,7 +72,7 @@ make smoke HTTP_PORT=18080
 
 ## 3. 管理员登录
 
-`make dev`、`make air` 和 `make backend` 都运行 `server/cmd/server`。启动时，整个 `users` 表为空就自动创建 `default` 租户下的启用管理员，用户名 `admin`。密码优先读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空时使用 `G@oming`。
+`make dev`、`make air` 和 `make backend` 都运行 `server/main.go`。启动时，整个 `users` 表为空就自动创建 `default` 租户下的启用管理员，用户名 `admin`。密码优先读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空时使用 `G@oming`。
 
 页面 `http://127.0.0.1:5173/default/login`；新空库默认使用 `admin` / `G@oming` 登录。
 
@@ -138,7 +138,7 @@ Agent 上报后主机出现在看板中，`metric_batches` 持续增长；内置
 
 ## 6. 可选 Docker 部署
 
-本机与 Docker 均使用 `server/cmd/server`，不再保留独立模块服务入口。Docker 部署使用以下命令，不属于本机启动链路：
+本机与 Docker 均使用 `server/main.go`，不再保留独立模块服务入口。Docker 部署使用以下命令，不属于本机启动链路：
 
 ```bash
 make docker-up
@@ -146,12 +146,16 @@ make docker-logs
 make docker-ps
 make docker-down
 # 连容器 Agent 也启动时显式开启 profile：
-make docker-up DOCKER_PROFILES="--profile web --profile container-agent"
+make docker-up DOCKER_PROFILES="--profile container-agent"
 ```
+
+Docker 构建时执行前端生产构建，将 `web/dist` 放入同一 server 镜像，由 Go 进程在 8080 提供页面和 API。页面地址为 `http://127.0.0.1:8080/default`；不再启动独立 Web 容器，也不发布 Docker 前端 5173 端口。前端使用同源 `/master/*`，无需 Vite 代理。
 
 `docker-up` 自动校验 Compose 配置。`make docker-smoke` 是独立临时 Docker 集成测试，完成后清理自身资源。验证已启动的 Docker 后端时，通过 `make smoke MASTER_URL=http://127.0.0.1:8080/master INGEST_URL=http://127.0.0.1:8080/ingest` 验证同一个 HTTP 端口。
 
-Compose 仍支持 `POSTGRES_PORT`、`REDIS_PORT`、`HTTP_PORT`、`GRPC_PORT`、`WEB_PORT` 覆盖宿主机端口；容器内部仍使用 `postgres:5432` 和 `redis:6379`。网络启动失败留下残留容器时，执行 `docker-down` 后以同样参数重新 `docker-up`，不会删除数据库卷。
+修改 Docker 的 `HTTP_PORT` 时，需在 Docker 配置的 `allowed_origins` 中加入浏览器实际 Origin；HTTPS 反向代理则填写对应 HTTPS Origin。
+
+Compose 仍支持 `POSTGRES_PORT`、`REDIS_PORT`、`HTTP_PORT`、`GRPC_PORT` 覆盖宿主机端口（`WEB_PORT` 仅用于本机 Vite）；容器内部仍使用 `postgres:5432` 和 `redis:6379`。网络启动失败留下残留容器时，执行 `docker-down` 后以同样参数重新 `docker-up`，不会删除数据库卷。
 
 `deployments/sql/init.sql` 是完整的新库初始化定义。`make deps-up` 只创建空数据库，需要自行通过数据库客户端执行该文件；全栈 Compose 在新 PostgreSQL 数据卷首次启动时导入它。已有库由使用者自行维护，见[数据库初始化](./database-setup.md)。
 
@@ -162,3 +166,7 @@ Compose 仍支持 `POSTGRES_PORT`、`REDIS_PORT`、`HTTP_PORT`、`GRPC_PORT`、`
 统一 HTTP 端口同时提供 `/master/*` 和 `/ingest/*`。`/ingest/api/v1/events` 和 `/ingest/api/v1/probes` 沿用现有无认证接收行为；公开反向代理应限制这些接入路由，只向可信 Agent/探测端开放。
 
 开发模板使用 HTTP 和非 Secure Cookie，仅用于可信本机/局域网。端口监听 `0.0.0.0`，应通过防火墙限制访问；从其他设备访问时，在 `allowed_origins` 中明确添加 `http://<本机局域网 IP>:<Web 端口>`。生产使用 HTTPS 与 Secure Cookie，并在首次启动前设置独立的管理员强密码。统一运行保留登录、CSRF、会话与租户隔离；Agent/worker 接入鉴权的既有限制仍见[登录手册](./authentication.md)。
+
+## 本机预览合并产物
+
+默认本机开发保留独立 Vite 热更新。需要通过 Go 服务预览生产前端时执行 `make web-build WEB_API_ORIGIN=`，然后设置 `GAOMING_WEB_DIR=web/dist make backend`；也可在 YAML 中设置 `web_dir`。目录必须包含构建后的 `index.html`，不要将源码或配置目录作为静态目录。

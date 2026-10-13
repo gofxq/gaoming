@@ -52,3 +52,19 @@ func TestLoadNamespaceAndListenerOverrides(t *testing.T) {
 		t.Fatal("namespace or listener overrides ignored")
 	}
 }
+
+func TestWebDirectoryEnvironmentOverridesYAML(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.yml")
+	if err := os.WriteFile(path, []byte("web_dir: yaml-web\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil || cfg.WebDir != "yaml-web" {
+		t.Fatal("web_dir YAML ignored", err)
+	}
+	t.Setenv("GAOMING_WEB_DIR", "container-web")
+	cfg, err = Load(path)
+	if err != nil || cfg.WebDir != "container-web" {
+		t.Fatal("container Web directory ignored", err)
+	}
+}

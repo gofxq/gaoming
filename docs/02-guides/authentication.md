@@ -6,7 +6,7 @@
 
 ## 启动初始化
 
-统一入口 `server/cmd/server` 在开始监听前检查整个用户表。若为空，创建用户名 `admin`、角色 `admin`、租户 `default` 的账号；密码读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空时使用 `G@oming`。日志不打印密码，数据库只存 bcrypt 哈希。
+统一入口 `server/main.go` 在开始监听前检查整个用户表。若为空，创建用户名 `admin`、角色 `admin`、租户 `default` 的账号；密码读取 `GAOMING_ADMIN_PASSWORD`，未设置或为空时使用 `G@oming`。日志不打印密码，数据库只存 bcrypt 哈希。
 
 已有任意用户时不创建、不重置账号；并发启动只创建一次。删除所有用户后，下次启动会重新初始化，即使网页 setup 完成记录仍存在。启动初始化单独允许 1～72 字节密码以兼容指定的短默认值；普通网页创建的 12～72 字节规则保持不变。
 

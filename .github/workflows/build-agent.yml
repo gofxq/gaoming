@@ -47,7 +47,7 @@ jobs:
               -trimpath \
               -ldflags="-s -w" \
               -o "${out_dir}/gaoming-agent" \
-              ./agent/daemon/cmd/agent
+              ./agent
             tar -C "${out_dir}" -czf "dist/${name}.tar.gz" gaoming-agent
             rm -rf "${out_dir}"
           }
@@ -62,7 +62,7 @@ jobs:
               -trimpath \
               -ldflags="-s -w" \
               -o "${out_dir}/gaoming-agent.exe" \
-              ./agent/daemon/cmd/agent
+              ./agent
             (cd "${out_dir}" && zip -q "../${name}.zip" "gaoming-agent.exe")
             rm -rf "${out_dir}"
           }

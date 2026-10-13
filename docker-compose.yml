@@ -38,6 +38,7 @@ services:
     restart: unless-stopped
     environment:
       GAOMING_SETUP_TOKEN: ${GAOMING_SETUP_TOKEN:-}
+      GAOMING_ADMIN_PASSWORD: ${GAOMING_ADMIN_PASSWORD:-}
     volumes:
       - ./deployments/server-config.docker.yaml:/app/config/server.yml:ro
     ports:
@@ -49,7 +50,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8080/master/healthz >/dev/null && wget -qO- http://127.0.0.1:8080/ingest/healthz >/dev/null" ]
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8080/master/healthz >/dev/null && wget -qO- http://127.0.0.1:8080/ingest/healthz >/dev/null && wget -qO- http://127.0.0.1:8080/ >/dev/null" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -61,7 +62,8 @@ services:
       context: .
       dockerfile: deployments/docker/Dockerfile
       args:
-        SERVICE_PATH: ./agent/daemon/cmd/agent
+        SERVICE_PATH: ./agent
+      target: agent
     container_name: gaoming-agent
     restart: unless-stopped
     volumes:
@@ -69,27 +71,6 @@ services:
     depends_on:
       server:
         condition: service_healthy
-
-  web:
-    profiles:
-      - web
-    build:
-      context: .
-      dockerfile: deployments/docker/web.Dockerfile
-    container_name: gaoming-web
-    restart: unless-stopped
-    environment:
-      VITE_PROXY_TARGET: http://server:8080
-    ports:
-      - "0.0.0.0:${WEB_PORT:-5173}:5173"
-    depends_on:
-      server:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:5173/ >/dev/null" ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
 volumes:
   postgres_data:

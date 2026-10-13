@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 
 // App owns all listeners, background workers and shared storage connections.
 type App struct {
+	webRoot     *os.Root
 	httpServer  *http.Server
 	grpcServer  *grpc.Server
 	grpcAddr    string
@@ -83,6 +85,14 @@ func New(ctx context.Context, cfg config.Config) (_ *App, err error) {
 	mux := http.NewServeMux()
 	mux.Handle("/master/", masterHandler)
 	mux.Handle("/ingest/", ingest.HTTP)
+	if cfg.WebDir != "" {
+		handler, root, err := newWebHandler(cfg.WebDir)
+		if err != nil {
+			return nil, err
+		}
+		a.webRoot = root
+		mux.Handle("/", handler)
+	}
 	a.httpServer = &http.Server{Addr: cfg.Master.HTTPAddr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	a.grpcServer = ingest.GRPC
 	a.reconciler = ingest.RunReconciler
@@ -92,6 +102,9 @@ func New(ctx context.Context, cfg config.Config) (_ *App, err error) {
 // Close releases storage only; Run stops active transports before calling Close.
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
+		if a.webRoot != nil {
+			_ = a.webRoot.Close()
+		}
 		if a.redisClient != nil {
 			_ = a.redisClient.Close()
 		}

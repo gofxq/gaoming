@@ -11,7 +11,7 @@ WEB_PROXY_TARGET ?= http://127.0.0.1:$(HTTP_PORT)
 WEB_API_ORIGIN ?= https://gm-metric.gofxq.com
 MASTER_URL ?= http://127.0.0.1:$(HTTP_PORT)/master
 INGEST_URL ?= http://127.0.0.1:$(HTTP_PORT)/ingest
-DOCKER_PROFILES ?= --profile web
+DOCKER_PROFILES ?=
 
 LOCAL_DEPS = $(GO) run ./cmd/localdeps -config "$(SERVER_CONFIG)" -dir "$(DEPS_DIR)" -docker-compose "$(DOCKER_COMPOSE)"
 export GO AIR SERVER_CONFIG HTTP_PORT GRPC_PORT WEB_PORT
@@ -34,11 +34,11 @@ deps-down: ## 停止依赖容器，保留 PostgreSQL 数据卷
 	$(LOCAL_DEPS) down
 
 backend: ## 只运行统一后端（master + ingest + probe）
-	$(LOCAL_ENV) $(GO) run ./server/cmd/server -config "$(SERVER_CONFIG)"
+	$(LOCAL_ENV) $(GO) run ./server -config "$(SERVER_CONFIG)"
 
 dev: web-install ## 启动统一后端和前端，Ctrl-C 停止
 	mkdir -p .tmp/local/bin
-	$(GO) build -o .tmp/local/bin/server ./server/cmd/server
+	$(GO) build -o .tmp/local/bin/server ./server
 	$(LOCAL_ENV) node ./scripts/dev-local.mjs
 
 air: web-install ## 热更新统一后端和前端（需安装 Air）
@@ -107,7 +107,7 @@ proto-generate: ## 生成 Go protobuf 和 gRPC 代码
 compose-config: ## 校验 Compose 配置
 	$(DOCKER_COMPOSE) config >/dev/null
 
-docker-up: compose-config ## 启动容器；DOCKER_PROFILES 可增加 container-agent profile
+docker-up: compose-config ## 启动合并的 Server/Web 容器；可增加 container-agent profile
 	$(DOCKER_COMPOSE) $(DOCKER_PROFILES) up -d --build
 
 docker-down: ## 停止所有 profile 容器，保留数据库卷
@@ -125,5 +125,5 @@ docker-smoke: ## 独立 Docker 集成验证，结束后清理临时资源
 ##@ Agent 服务安装
 install-agent-local-service: ## 构建并安装本机 Agent 服务
 	mkdir -p .tmp
-	$(GO) build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
+	$(GO) build -o .tmp/gaoming-agent ./agent
 	sh ./deployments/install-agent-local.sh --bin ./.tmp/gaoming-agent

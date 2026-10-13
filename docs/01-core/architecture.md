@@ -7,7 +7,7 @@
 ```mermaid
 flowchart LR
     Agent[宿主机 Agent]
-    Web[React Web :5173]
+    Web[React Web：Docker :8080 / 开发 :5173]
     subgraph Server["server：单一进程，共享连接池"]
         Master["master HTTP/SSE :8080"]
         Ingest["ingest HTTP :8080 / gRPC :8091"]
@@ -39,11 +39,11 @@ Agent metric batch
 
 ## 运行单元
 
-唯一后端入口为 `server/cmd/server`。以下 master、ingest、probe 是内部模块，均在同一进程中运行。
+唯一后端入口为 `server/main.go`。以下 master、ingest、probe 是内部模块，均在同一进程中运行。
 
 | 单元 | 默认端口/入口 | 职责 | 状态 |
 | --- | --- | --- | --- |
-| Web | `:5173` | 租户路由、主机展示、SSE 实时更新、用户管理 | 已实现 |
+| Web | Docker `:8080` / 开发 `:5173` | 租户路由、主机展示、SSE 实时更新、用户管理 | 已实现 |
 | Agent | 主动连接 gRPC | 主机身份发现、系统采样、指标流上报 | 已实现 |
 | master-api | HTTP `:8080` | 查询、SSE、会话解析、用户与运维接口 | 已实现 |
 | ingest-gateway | 共享 HTTP `:8080`、gRPC `:8091` | Agent 接入、快照写入、指标窗口、离线判定 | 已实现 |
@@ -205,10 +205,10 @@ flowchart TB
 
 ## 部署形态
 
-`docker-compose.yml` 默认定义 PostgreSQL、Redis、一个 server 后端服务；`web` 与 `agent` 通过 profile 启用：
+`docker-compose.yml` 默认定义 PostgreSQL、Redis、一个 server 后端服务；Web 静态资源由 server 同一 Go 进程提供；容器 `agent` 通过 profile 启用：
 
-- `make docker-up`：启用 `web` profile。
-- `make docker-up DOCKER_PROFILES="--profile web --profile container-agent"`：同时启用 `web` 和 `container-agent` profile。
+- `make docker-up`：构建并启动一个 Server/Web 容器和 PostgreSQL、Redis，Web 与 API 共用 8080。
+- `make docker-up DOCKER_PROFILES="--profile container-agent"`：额外启用 `container-agent` profile。
 - 宿主机 Agent 使用根目录 `agent-config.yaml`。
 - 后端默认读取 `config/server.yml`；Compose 将 `deployments/server-config.docker.yaml` 只读挂载到该路径。
 
@@ -227,8 +227,8 @@ flowchart TB
 
 | 主题 | 位置 |
 | --- | --- |
-| Agent 主循环 | `agent/daemon/internal/service/agent.go` |
-| Agent 身份 | `agent/daemon/internal/identity/hostinfo.go` |
+| Agent 主循环 | `agent/internal/service/agent.go` |
+| Agent 身份 | `agent/internal/identity/hostinfo.go` |
 | Proto | `api/proto/monitor/v1/*.proto` |
 | JSON 契约 | `pkg/contracts/api.go` |
 | 主机快照与指标 | `pkg/state/state.go` |

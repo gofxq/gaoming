@@ -158,7 +158,7 @@
 默认 9 组和整轮基准：
 
 ```bash
-go test ./agent/daemon/internal/service \
+go test ./agent/internal/service \
   -run '^$' \
   -bench '^BenchmarkSystemMetricCollectors/' \
   -benchtime=50x -count=3 -benchmem -timeout=3m
@@ -167,7 +167,7 @@ go test ./agent/daemon/internal/service \
 完整批次编码：
 
 ```bash
-go test ./agent/daemon/internal/service \
+go test ./agent/internal/service \
   -run '^$' \
   -bench '^BenchmarkSystemMetricBatchEncoding$' \
   -benchtime=100x -count=3 -benchmem
@@ -176,7 +176,7 @@ go test ./agent/daemon/internal/service \
 Linux 非默认能力筛查：
 
 ```bash
-go test ./agent/daemon/internal/service \
+go test ./agent/internal/service \
   -run '^$' \
   -bench '^BenchmarkGopsutilOptionalGroups/' \
   -benchtime=1x -count=1 -benchmem -timeout=3m

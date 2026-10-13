@@ -89,7 +89,7 @@ TENANT=default SESSION_COOKIE_FILE=/path/to/login-cookies.txt make smoke-agent
 
 常用入口：
 
-- Web：`http://127.0.0.1:5173/default`
+- Web：本机开发 `http://127.0.0.1:5173/default`；Docker `http://127.0.0.1:8080/default`
 - master-api：`http://127.0.0.1:8080/master/healthz`
 - ingest-gateway：`http://127.0.0.1:8080/ingest/healthz`
 

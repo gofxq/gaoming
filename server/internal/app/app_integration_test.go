@@ -51,6 +51,10 @@ func TestUnifiedBackendNativeIntegration(t *testing.T) {
 	}
 	t.Setenv("GAOMING_LOG_DIR", t.TempDir())
 	t.Setenv("GAOMING_ADMIN_PASSWORD", "integration-test-password")
+	cfg.WebDir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg.WebDir, "index.html"), []byte("<html>combined-web</html>"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	a, err := New(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -121,6 +125,17 @@ func TestUnifiedBackendNativeIntegration(t *testing.T) {
 		resp.Body.Close()
 		if resp.StatusCode != 200 {
 			t.Fatalf("health %s: %d", path, resp.StatusCode)
+		}
+	}
+	for _, route := range []string{"/", "/default/login"} {
+		resp, err := client.Get(base + route)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil || resp.StatusCode != 200 || !bytes.Contains(body, []byte("combined-web")) {
+			t.Fatal("combined Web route unavailable", err)
 		}
 	}
 	resp, err := client.Get(base + "/master/api/v1/hosts")

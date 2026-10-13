@@ -123,7 +123,7 @@ make help          # 分组命令说明
 
 依赖需要 Docker Compose，PostgreSQL 数据保存在持久数据卷，`.local-data/` 保存私有配置和管理状态，`make clean` 会保留。使用已有本机实例时可执行 `make dev-init` 并修改配置中的凭据。
 
-Docker 配置仍保留，容器方式显式执行 `make docker-up` / `make docker-down`；前端独立启动使用 `make web-dev`。
+Docker 将 Go 后端和生产 Web 静态文件打包在同一个容器中：执行 `make docker-up` 后访问 `http://127.0.0.1:8080/default`，页面与 API 共用 HTTP 端口。默认 Compose 只有 server、PostgreSQL、Redis；容器 Agent 通过 `DOCKER_PROFILES="--profile container-agent"` 按需启动。本机开发仍使用 `make dev` / `make web-dev` 的 Vite 热更新。
 
 ## 📦 安装 Agent
 
@@ -190,7 +190,7 @@ make install-agent-local-service
 直接运行本地安装脚本时，会优先查找仓库内的 `.tmp/gaoming-agent`；如果没有显式传 `--bin`，脚本也会尝试自动执行：
 
 ```bash
-go build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
+go build -o .tmp/gaoming-agent ./agent
 ```
 
 相关脚本：
@@ -204,7 +204,7 @@ go build -o .tmp/gaoming-agent ./agent/daemon/cmd/agent
 - `server`: 唯一后端服务，源码位于 `server/`；内部包含 master 查询/认证、ingest 接入、probe 探测模块。
 - `agent`: 独立宿主机采集与上报进程。
 
-Docker 与本机均使用统一后端，HTTP 8080 同时提供 `/master/*`、`/ingest/*`，gRPC 8091 用于 Agent。Docker 示例配置为 `deployments/server-config.docker.yaml`。
+Docker 与本机均使用 `server/main.go` 统一后端；Docker 额外提供 Web 静态页面，HTTP 8080 同时提供 `/master/*`、`/ingest/*`，gRPC 8091 用于 Agent。Docker 示例配置为 `deployments/server-config.docker.yaml`。
 ## 📚 文档
 
 - [中文文档概要与索引](docs/README_cn.md)

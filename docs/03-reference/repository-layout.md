@@ -4,7 +4,7 @@
 
 | 目录 | 职责 |
 | --- | --- |
-| `agent/daemon` | 宿主机 Agent |
+| `agent` | 宿主机 Agent |
 | `api/proto`、`api/gen` | gRPC Proto 与生成代码 |
 | `deployments` | Dockerfile、SQL、Agent 安装与服务脚本 |
 | `docs` | 当前架构、指南和参考文档 |
@@ -15,8 +15,8 @@
 
 ## 后端服务
 
-- `server/cmd/server`：唯一在线后端入口。
-- `server/internal/app`：装配 HTTP/gRPC、后台任务及共享 PostgreSQL/Redis 连接，统一管理退出。
+- `server/main.go`：唯一在线后端入口。
+- `server/internal/app`：装配 HTTP/gRPC、后台任务及共享 PostgreSQL/Redis 连接，统一管理退出；可选静态目录提供生产 Web 页面。
 - `server/internal/config`：读取 `config/server.yml` 和端口环境变量。
 - `server/internal/master`：查询、认证、用户管理和 `/master/*` HTTP/SSE；含 auth、config、service、transport。
 - `server/internal/ingest`：Agent 注册、指标流、离线扫描及 `/ingest/*` HTTP/gRPC 接入。
@@ -25,7 +25,7 @@
 上述业务模块在同一进程运行，不提供独立启动入口。
 ## Agent
 
-- `agent/daemon/cmd/agent`：进程入口。
+- `agent/main.go`：进程入口。
 - `internal/config`：从 `agent-config.yaml` 或 `GAOMING_AGENT_CONFIG` 读取配置。
 - `internal/identity`：稳定主机 UID 和身份采集。
 - `internal/service`：gopsutil 采样、gRPC 流和 ACK 处理。

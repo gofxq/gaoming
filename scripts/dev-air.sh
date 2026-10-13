@@ -12,7 +12,7 @@ if ! command -v "$AIR" >/dev/null 2>&1; then
     exit 127
   fi
 fi
-[ -f "$SERVER_CONFIG" ] || { echo 'Run make dev-init and configure native PostgreSQL/Redis first.' >&2; exit 1; }
+[ -f "$SERVER_CONFIG" ] || { echo 'Run make dev-init and configure PostgreSQL/Redis first.' >&2; exit 1; }
 mkdir -p .tmp/air/bin .tmp/air/config .tmp/local/logs
 # Keep generated TOML valid; tool and config paths are passed via a shell script.
 cat > .tmp/air/run-server.sh <<'RUN'
@@ -21,7 +21,7 @@ exec ./.tmp/air/bin/server -config "$SERVER_CONFIG"
 RUN
 cat > .tmp/air/build-server.sh <<'BUILD'
 #!/usr/bin/env sh
-exec "$GO" build -o ./.tmp/air/bin/server ./server/cmd/server
+exec "$GO" build -o ./.tmp/air/bin/server ./server
 BUILD
 chmod +x .tmp/air/run-server.sh .tmp/air/build-server.sh
 cat > .tmp/air/config/server.toml <<EOF_CONFIG

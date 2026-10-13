@@ -14,6 +14,7 @@ import (
 const DefaultConfigFile = "config/server.yml"
 
 type Config struct {
+	WebDir           string              `yaml:"web_dir"`
 	Master           masterconfig.Config `yaml:"-"`
 	GRPCAddr         string              `yaml:"grpc_addr"`
 	ProbeIntervalSec int                 `yaml:"probe_interval_sec"`
@@ -49,6 +50,9 @@ func Load(path string) (Config, error) {
 	}
 	if addr := os.Getenv("GAOMING_GRPC_ADDR"); addr != "" {
 		cfg.GRPCAddr = addr
+	}
+	if dir := os.Getenv("GAOMING_WEB_DIR"); dir != "" {
+		cfg.WebDir = dir
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
