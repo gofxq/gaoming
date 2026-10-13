@@ -18,7 +18,11 @@ COPY pkg ./pkg
 COPY server ./server
 COPY agent ./agent
 # Match this stage's architecture to the requested Docker target platform.
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/app ${SERVICE_PATH}
+ENV CGO_ENABLED=0 \
+    # GO111MODULE=on \
+    # GOPROXY=https://goproxy.cn,direct \
+    GOOS=linux
+RUN go build -trimpath -o /out/app ${SERVICE_PATH}
 
 FROM alpine:3.20 AS runtime
 RUN adduser -D -u 10001 appuser && mkdir -p /app/logs && chown -R appuser:appuser /app

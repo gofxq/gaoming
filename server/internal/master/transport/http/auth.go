@@ -22,11 +22,8 @@ func (s *Server) requireAllowedOrigin() gin.HandlerFunc {
 		origin := c.GetHeader("Origin")
 		origins := s.svc.AllowedOrigins()
 		if len(origins) == 0 {
-			scheme := "http"
-			if c.Request.TLS != nil {
-				scheme = "https"
-			}
-			origins = []string{scheme + "://" + c.Request.Host}
+			c.Next()
+			return
 		}
 		for _, allowed := range origins {
 			if origin == allowed {
