@@ -39,7 +39,7 @@ h5/.env
 h5/.env.local
 h5/.env.*.local
 
-config/
+/config/
 .codex
 .superpowers/
 web/test-results/
