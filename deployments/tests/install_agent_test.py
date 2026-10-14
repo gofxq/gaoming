@@ -13,10 +13,13 @@ class InstallerTest(unittest.TestCase):
     def run_shell(self, body, **env):
         source = SCRIPT.read_text().rsplit('main "$@"', 1)[0]
         with tempfile.TemporaryDirectory(prefix="gaoming-install-test-") as tmp:
+            # macOS temporary paths can start with /var -> /private/var.
+            # Use the physical path so installer symlink checks stay enabled.
+            test_dir = str(Path(tmp).resolve())
             process = subprocess.run(
                 ["sh"], input=source + "\n" + body, text=True,
                 capture_output=True,
-                env={**os.environ, "TEST_DIR": tmp, **env},
+                env={**os.environ, "TEST_DIR": test_dir, **env},
             )
         return process
 
